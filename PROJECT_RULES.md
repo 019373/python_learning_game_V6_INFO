@@ -902,6 +902,7 @@ L’exercice doit rester réalisable uniquement avec les notions enseignées aup
 - le moteur doit vérifier le résultat obtenu, pas imposer une seule manière exacte d’écrire le code.
 
 Une fois l’exercice difficile réussi, le jeu considère que l’élève a terminé le parcours principal.
+
 # Capacités de Pyt
 
 ## Déplacement
@@ -957,3 +958,4 @@ pick_up()
 clean()
 drop()
 open_door()
+
