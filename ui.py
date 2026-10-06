@@ -1,16 +1,8 @@
 """
 ui.py
-Jeu éducatif Python - Pyt
+Interface graphique du jeu éducatif PYT.
 
-Interface graphique du jeu.
-
-Technologies :
-- Tkinter
-- Canvas
-
-Ce fichier gère uniquement l'affichage et les interactions
-avec l'utilisateur.
-
+L'interface utilise uniquement Tkinter et Canvas.
 La logique du jeu reste dans game.py.
 """
 
@@ -18,7 +10,7 @@ import tkinter as tk
 from tkinter import messagebox
 
 from runner import Runner
-from levels import get_next_level
+from levels import get_level, get_course
 
 
 # ============================================================
@@ -40,6 +32,7 @@ PINK = "#dc4d9b"
 CYAN = "#42d6d1"
 YELLOW = "#f4d75e"
 ORANGE = "#ee9147"
+GREEN = "#58d68d"
 
 WALL_COLOR = "#765081"
 DOOR_COLOR = "#b84f72"
@@ -49,8 +42,11 @@ BUTTON_COLOR = "#49a8bd"
 CHARGER_COLOR = "#55d69a"
 
 
+# ============================================================
+# INTERFACE
+# ============================================================
+
 class GameUI:
-    """Interface principale du jeu Pyt."""
 
     def __init__(
         self,
@@ -66,31 +62,53 @@ class GameUI:
             self.game
         )
 
+        # Progression du chapitre.
+        # Au début, seul l'exercice 1 est accessible.
+        self.unlocked_exercise = 1
+
+        self.completed_exercises = set()
+
+        self.course_seen = False
+
+        # Fenêtres secondaires
         self.code_window = None
         self.code_text = None
-
         self.console_text = None
 
-        self.canvas = None
+        self.map_window = None
+        self.course_window = None
 
+        # Widgets principaux
+        self.canvas = None
         self.status_label = None
+
         self.chapter_label = None
         self.difficulty_label = None
+
         self.title_label = None
         self.instruction_label = None
-        self.concept_label = None
-        self.next_button = None
 
+        # Dimensions carte
         self.cell_size = 50
         self.grid_x = 0
         self.grid_y = 0
 
         self.configure_root()
+
         self.create_interface()
 
+        self.refresh_level_information()
+
         self.root.after(
-            50,
+            100,
             self.draw_world
+        )
+
+        # Le cours s'ouvre automatiquement
+        # au début du chapitre.
+        self.root.after(
+            300,
+            self.open_course_window
         )
 
     # ========================================================
@@ -98,7 +116,6 @@ class GameUI:
     # ========================================================
 
     def configure_root(self):
-        """Configure la fenêtre principale."""
 
         self.root.configure(
             bg=BACKGROUND
@@ -110,11 +127,10 @@ class GameUI:
         )
 
     # ========================================================
-    # CONSTRUCTION DE L'INTERFACE
+    # CONSTRUCTION
     # ========================================================
 
     def create_interface(self):
-        """Construit toute l'interface principale."""
 
         self.create_top_bar()
 
@@ -146,16 +162,14 @@ class GameUI:
         )
 
         self.create_game_area()
+
         self.create_mission_panel()
 
-        self.refresh_level_information()
-
     # ========================================================
-    # BARRE SUPÉRIEURE
+    # BARRE DU HAUT
     # ========================================================
 
     def create_top_bar(self):
-        """Crée la barre supérieure."""
 
         top_bar = tk.Frame(
             self.root,
@@ -234,7 +248,55 @@ class GameUI:
         )
 
         self.difficulty_label.pack(
+            side="left",
+            padx=(8, 0)
+        )
+
+        map_button = tk.Button(
+            top_bar,
+            text="CARTE",
+            command=self.open_map_window,
+            bg=YELLOW,
+            fg=BLACK,
+            activebackground=ORANGE,
+            activeforeground=BLACK,
+            relief="flat",
+            cursor="hand2",
+            padx=14,
+            pady=5,
+            font=(
+                "Arial",
+                9,
+                "bold"
+            )
+        )
+
+        map_button.pack(
             side="right"
+        )
+
+        course_button = tk.Button(
+            top_bar,
+            text="COURS",
+            command=self.open_course_window,
+            bg="#4c3a69",
+            fg=WHITE,
+            activebackground=PINK,
+            activeforeground=WHITE,
+            relief="flat",
+            cursor="hand2",
+            padx=14,
+            pady=5,
+            font=(
+                "Arial",
+                9,
+                "bold"
+            )
+        )
+
+        course_button.pack(
+            side="right",
+            padx=(0, 8)
         )
 
     # ========================================================
@@ -242,7 +304,6 @@ class GameUI:
     # ========================================================
 
     def create_game_area(self):
-        """Crée la partie gauche contenant la carte."""
 
         left_frame = tk.Frame(
             self.main_frame,
@@ -307,7 +368,6 @@ class GameUI:
             bg=PANEL,
             fg=WHITE,
             anchor="w",
-            justify="left",
             padx=12,
             pady=10,
             font=(
@@ -322,11 +382,10 @@ class GameUI:
         )
 
     # ========================================================
-    # PANNEAU DE MISSION
+    # MISSION
     # ========================================================
 
     def create_mission_panel(self):
-        """Crée le panneau situé à droite."""
 
         right_frame = tk.Frame(
             self.main_frame,
@@ -343,7 +402,7 @@ class GameUI:
             sticky="nsew"
         )
 
-        mission_title = tk.Label(
+        mission = tk.Label(
             right_frame,
             text="MISSION",
             bg=PANEL,
@@ -355,7 +414,7 @@ class GameUI:
             )
         )
 
-        mission_title.pack(
+        mission.pack(
             anchor="w"
         )
 
@@ -398,26 +457,11 @@ class GameUI:
             fill="x"
         )
 
-        self.concept_label = tk.Label(
-            right_frame,
-            text="",
-            bg=PANEL,
-            fg=ORANGE,
-            anchor="w",
-            justify="left",
-            font=(
-                "Arial",
-                10,
-                "bold"
-            )
-        )
+        # Plus de "Notions"
+        # Plus de "Commandes"
+        # Plus de "Niveau suivant"
 
-        self.concept_label.pack(
-            fill="x",
-            pady=(14, 20)
-        )
-
-        code_button = tk.Button(
+        open_code_button = tk.Button(
             right_frame,
             text="OUVRIR LE CODE",
             command=self.open_code_window,
@@ -436,8 +480,9 @@ class GameUI:
             )
         )
 
-        code_button.pack(
-            fill="x"
+        open_code_button.pack(
+            fill="x",
+            pady=(20, 0)
         )
 
         reset_button = tk.Button(
@@ -464,15 +509,14 @@ class GameUI:
             pady=8
         )
 
-        self.next_button = tk.Button(
+        map_button = tk.Button(
             right_frame,
-            text="NIVEAU SUIVANT →",
-            command=self.next_level,
+            text="VOIR LA CARTE",
+            command=self.open_map_window,
             bg=PINK,
             fg=WHITE,
             activebackground=ORANGE,
             activeforeground=BLACK,
-            disabledforeground=MUTED,
             relief="flat",
             cursor="hand2",
             padx=12,
@@ -481,69 +525,18 @@ class GameUI:
                 "Arial",
                 10,
                 "bold"
-            ),
-            state="disabled"
+            )
         )
 
-        self.next_button.pack(
+        map_button.pack(
             fill="x"
         )
 
-        separator = tk.Frame(
-            right_frame,
-            bg="#4a3c69",
-            height=2
-        )
-
-        separator.pack(
-            fill="x",
-            pady=20
-        )
-
-        help_title = tk.Label(
-            right_frame,
-            text="COMMANDES",
-            bg=PANEL,
-            fg=CYAN,
-            font=(
-                "Courier New",
-                10,
-                "bold"
-            )
-        )
-
-        help_title.pack(
-            anchor="w"
-        )
-
-        help_text = tk.Label(
-            right_frame,
-            text=(
-                "forward(1)\n"
-                "backward(1)\n"
-                "left(90)\n"
-                "right(90)"
-            ),
-            bg=PANEL,
-            fg=MUTED,
-            justify="left",
-            font=(
-                "Courier New",
-                10
-            )
-        )
-
-        help_text.pack(
-            anchor="w",
-            pady=(8, 0)
-        )
-
     # ========================================================
-    # INFORMATIONS DU NIVEAU
+    # INFORMATIONS NIVEAU
     # ========================================================
 
     def refresh_level_information(self):
-        """Actualise les textes du niveau."""
 
         chapter = self.level[
             "chapter"
@@ -580,35 +573,694 @@ class GameUI:
             ]
         )
 
-        concepts = self.level.get(
-            "python_concept",
-            []
-        )
-
-        concept_text = ", ".join(
-            concepts
-        )
-
-        self.concept_label.config(
-            text=(
-                "Notions : "
-                + concept_text
-            )
-        )
-
         self.refresh_status()
 
     # ========================================================
-    # DESSIN DE LA CARTE
+    # COURS DU CHAPITRE
     # ========================================================
 
-    def on_canvas_resize(self, event):
-        """Redessine la carte si la fenêtre change de taille."""
+    def open_course_window(self):
+
+        if (
+            self.course_window is not None
+            and self.course_window.winfo_exists()
+        ):
+            self.course_window.lift()
+            return
+
+        course = get_course(
+            self.level["chapter"]
+        )
+
+        window = tk.Toplevel(
+            self.root
+        )
+
+        self.course_window = window
+
+        window.title(
+            "PYT - Cours"
+        )
+
+        window.geometry(
+            "720x650"
+        )
+
+        window.minsize(
+            550,
+            450
+        )
+
+        window.configure(
+            bg=BACKGROUND
+        )
+
+        # Rend le cours prioritaire au premier lancement.
+        if not self.course_seen:
+            window.transient(
+                self.root
+            )
+
+        header = tk.Frame(
+            window,
+            bg=PANEL,
+            padx=20,
+            pady=16
+        )
+
+        header.pack(
+            fill="x"
+        )
+
+        tk.Label(
+            header,
+            text=(
+                f"CHAPITRE "
+                f"{course['chapter']}"
+            ),
+            bg=PANEL,
+            fg=CYAN,
+            font=(
+                "Arial",
+                10,
+                "bold"
+            )
+        ).pack(
+            anchor="w"
+        )
+
+        tk.Label(
+            header,
+            text=course[
+                "title"
+            ],
+            bg=PANEL,
+            fg=WHITE,
+            font=(
+                "Arial",
+                22,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(3, 0)
+        )
+
+        tk.Label(
+            header,
+            text=course[
+                "subtitle"
+            ],
+            bg=PANEL,
+            fg=YELLOW,
+            font=(
+                "Arial",
+                11,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(3, 0)
+        )
+
+        # Zone défilable
+        container = tk.Frame(
+            window,
+            bg=BACKGROUND
+        )
+
+        container.pack(
+            fill="both",
+            expand=True
+        )
+
+        course_canvas = tk.Canvas(
+            container,
+            bg=BACKGROUND,
+            highlightthickness=0
+        )
+
+        scrollbar = tk.Scrollbar(
+            container,
+            orient="vertical",
+            command=course_canvas.yview
+        )
+
+        content = tk.Frame(
+            course_canvas,
+            bg=BACKGROUND
+        )
+
+        content.bind(
+            "<Configure>",
+            lambda event:
+            course_canvas.configure(
+                scrollregion=
+                course_canvas.bbox(
+                    "all"
+                )
+            )
+        )
+
+        course_canvas.create_window(
+            (0, 0),
+            window=content,
+            anchor="nw"
+        )
+
+        course_canvas.configure(
+            yscrollcommand=
+            scrollbar.set
+        )
+
+        course_canvas.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        scrollbar.pack(
+            side="right",
+            fill="y"
+        )
+
+        introduction = tk.Label(
+            content,
+            text=course[
+                "introduction"
+            ],
+            bg=BACKGROUND,
+            fg=WHITE,
+            justify="left",
+            anchor="w",
+            wraplength=620,
+            padx=22,
+            pady=18,
+            font=(
+                "Arial",
+                11
+            )
+        )
+
+        introduction.pack(
+            fill="x"
+        )
+
+        for section in course[
+            "sections"
+        ]:
+
+            card = tk.Frame(
+                content,
+                bg=PANEL,
+                padx=16,
+                pady=14
+            )
+
+            card.pack(
+                fill="x",
+                padx=22,
+                pady=7
+            )
+
+            tk.Label(
+                card,
+                text=section[
+                    "title"
+                ],
+                bg=PANEL,
+                fg=YELLOW,
+                anchor="w",
+                font=(
+                    "Arial",
+                    13,
+                    "bold"
+                )
+            ).pack(
+                fill="x"
+            )
+
+            tk.Label(
+                card,
+                text=section[
+                    "text"
+                ],
+                bg=PANEL,
+                fg=WHITE,
+                justify="left",
+                anchor="w",
+                wraplength=580,
+                font=(
+                    "Arial",
+                    10
+                )
+            ).pack(
+                fill="x",
+                pady=(7, 8)
+            )
+
+            code_box = tk.Label(
+                card,
+                text=section[
+                    "example"
+                ],
+                bg="#101019",
+                fg=CYAN,
+                justify="left",
+                anchor="w",
+                padx=12,
+                pady=10,
+                font=(
+                    "Courier New",
+                    11
+                )
+            )
+
+            code_box.pack(
+                fill="x"
+            )
+
+            tk.Label(
+                card,
+                text=section[
+                    "explanation"
+                ],
+                bg=PANEL,
+                fg=MUTED,
+                justify="left",
+                anchor="w",
+                wraplength=580,
+                font=(
+                    "Arial",
+                    10
+                )
+            ).pack(
+                fill="x",
+                pady=(8, 0)
+            )
+
+        bottom = tk.Frame(
+            window,
+            bg=BACKGROUND,
+            padx=22,
+            pady=16
+        )
+
+        bottom.pack(
+            fill="x"
+        )
+
+        start_button = tk.Button(
+            bottom,
+            text="COMMENCER LES EXERCICES",
+            command=self.close_course_and_start,
+            bg=PINK,
+            fg=WHITE,
+            activebackground=ORANGE,
+            activeforeground=BLACK,
+            relief="flat",
+            cursor="hand2",
+            padx=16,
+            pady=11,
+            font=(
+                "Arial",
+                11,
+                "bold"
+            )
+        )
+
+        start_button.pack(
+            side="right"
+        )
+
+    def close_course_and_start(self):
+
+        self.course_seen = True
+
+        if (
+            self.course_window is not None
+            and self.course_window.winfo_exists()
+        ):
+            self.course_window.destroy()
+
+        self.course_window = None
+
+        self.open_map_window()
+
+    # ========================================================
+    # CARTE DES EXERCICES
+    # ========================================================
+
+    def open_map_window(self):
+
+        if (
+            self.map_window is not None
+            and self.map_window.winfo_exists()
+        ):
+            self.map_window.lift()
+            self.draw_level_map()
+            return
+
+        window = tk.Toplevel(
+            self.root
+        )
+
+        self.map_window = window
+
+        window.title(
+            "PYT - Carte du chapitre"
+        )
+
+        window.geometry(
+            "700x420"
+        )
+
+        window.minsize(
+            600,
+            360
+        )
+
+        window.configure(
+            bg=BACKGROUND
+        )
+
+        tk.Label(
+            window,
+            text="CARTE DU CHAPITRE 1",
+            bg=BACKGROUND,
+            fg=WHITE,
+            font=(
+                "Courier New",
+                18,
+                "bold"
+            )
+        ).pack(
+            pady=(24, 4)
+        )
+
+        tk.Label(
+            window,
+            text="Déplacements de base",
+            bg=BACKGROUND,
+            fg=CYAN,
+            font=(
+                "Arial",
+                10,
+                "bold"
+            )
+        ).pack()
+
+        self.map_canvas = tk.Canvas(
+            window,
+            bg=BACKGROUND,
+            highlightthickness=0,
+            height=230
+        )
+
+        self.map_canvas.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=10
+        )
+
+        self.map_canvas.bind(
+            "<Configure>",
+            lambda event:
+            self.draw_level_map()
+        )
+
+        tk.Label(
+            window,
+            text=(
+                "Termine un exercice pour "
+                "débloquer le suivant."
+            ),
+            bg=BACKGROUND,
+            fg=MUTED,
+            font=(
+                "Arial",
+                10
+            )
+        ).pack(
+            pady=(0, 18)
+        )
+
+        self.root.after(
+            50,
+            self.draw_level_map
+        )
+
+    def draw_level_map(self):
+
+        if (
+            not hasattr(
+                self,
+                "map_canvas"
+            )
+        ):
+            return
+
+        if not self.map_canvas.winfo_exists():
+            return
+
+        canvas = self.map_canvas
+
+        canvas.delete(
+            "all"
+        )
+
+        width = max(
+            canvas.winfo_width(),
+            600
+        )
+
+        height = max(
+            canvas.winfo_height(),
+            200
+        )
+
+        center_y = (
+            height // 2
+        )
+
+        positions = [
+            width * 0.20,
+            width * 0.50,
+            width * 0.80,
+        ]
+
+        # Lignes entre les exercices
+        canvas.create_line(
+            positions[0],
+            center_y,
+            positions[2],
+            center_y,
+            fill="#54466e",
+            width=6
+        )
+
+        difficulties = [
+            "FACILE",
+            "MOYEN",
+            "DIFFICILE",
+        ]
+
+        for index in range(3):
+
+            exercise = index + 1
+
+            x = positions[index]
+
+            completed = (
+                exercise
+                in self.completed_exercises
+            )
+
+            unlocked = (
+                exercise
+                <= self.unlocked_exercise
+            )
+
+            current = (
+                exercise
+                == self.level[
+                    "exercise"
+                ]
+            )
+
+            if completed:
+                color = GREEN
+                text = "✓"
+
+            elif current:
+                color = PINK
+                text = str(
+                    exercise
+                )
+
+            elif unlocked:
+                color = CYAN
+                text = str(
+                    exercise
+                )
+
+            else:
+                color = "#413852"
+                text = "🔒"
+
+            radius = 34
+
+            circle = canvas.create_oval(
+                x - radius,
+                center_y - radius,
+                x + radius,
+                center_y + radius,
+                fill=color,
+                outline=BLACK,
+                width=4
+            )
+
+            number = canvas.create_text(
+                x,
+                center_y,
+                text=text,
+                fill=(
+                    BLACK
+                    if color in (
+                        CYAN,
+                        GREEN
+                    )
+                    else WHITE
+                ),
+                font=(
+                    "Arial",
+                    17,
+                    "bold"
+                )
+            )
+
+            canvas.create_text(
+                x,
+                center_y + 58,
+                text=(
+                    f"EXERCICE "
+                    f"{exercise}"
+                ),
+                fill=WHITE,
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                )
+            )
+
+            canvas.create_text(
+                x,
+                center_y + 77,
+                text=difficulties[
+                    index
+                ],
+                fill=MUTED,
+                font=(
+                    "Arial",
+                    8
+                )
+            )
+
+            if unlocked:
+
+                callback = (
+                    lambda event,
+                    ex=exercise:
+                    self.select_exercise(
+                        ex
+                    )
+                )
+
+                canvas.tag_bind(
+                    circle,
+                    "<Button-1>",
+                    callback
+                )
+
+                canvas.tag_bind(
+                    number,
+                    "<Button-1>",
+                    callback
+                )
+
+                canvas.tag_bind(
+                    circle,
+                    "<Enter>",
+                    lambda event:
+                    canvas.config(
+                        cursor="hand2"
+                    )
+                )
+
+                canvas.tag_bind(
+                    circle,
+                    "<Leave>",
+                    lambda event:
+                    canvas.config(
+                        cursor=""
+                    )
+                )
+
+    def select_exercise(
+        self,
+        exercise
+    ):
+
+        if (
+            exercise
+            > self.unlocked_exercise
+        ):
+            return
+
+        new_level = get_level(
+            1,
+            exercise
+        )
+
+        self.level = new_level
+
+        self.game.load_level(
+            new_level
+        )
+
+        self.runner = Runner(
+            self.game
+        )
+
+        self.refresh_level_information()
 
         self.draw_world()
 
+        self.clear_editor()
+
+        self.clear_console()
+
+        if (
+            self.map_window is not None
+            and self.map_window.winfo_exists()
+        ):
+            self.map_window.destroy()
+
+        self.map_window = None
+
+    # ========================================================
+    # CARTE DU JEU
+    # ========================================================
+
+    def on_canvas_resize(
+        self,
+        event
+    ):
+        self.draw_world()
+
     def draw_world(self):
-        """Dessine entièrement le monde."""
 
         if self.canvas is None:
             return
@@ -617,33 +1269,23 @@ class GameUI:
             "all"
         )
 
-        canvas_width = max(
+        width = max(
             self.canvas.winfo_width(),
             400
         )
 
-        canvas_height = max(
+        height = max(
             self.canvas.winfo_height(),
             350
         )
 
-        available_width = (
-            canvas_width - 30
-        )
-
-        available_height = (
-            canvas_height - 30
-        )
-
         width_size = (
-            available_width
-            // self.game.cols
-        )
+            width - 30
+        ) // self.game.cols
 
         height_size = (
-            available_height
-            // self.game.rows
-        )
+            height - 30
+        ) // self.game.rows
 
         self.cell_size = max(
             20,
@@ -664,23 +1306,12 @@ class GameUI:
         )
 
         self.grid_x = (
-            canvas_width
-            - map_width
+            width - map_width
         ) // 2
 
         self.grid_y = (
-            canvas_height
-            - map_height
+            height - map_height
         ) // 2
-
-        self.draw_tiles()
-
-        self.draw_robot()
-
-        self.refresh_status()
-
-    def draw_tiles(self):
-        """Dessine chaque case de la grille."""
 
         for row in range(
             self.game.rows
@@ -695,12 +1326,15 @@ class GameUI:
                     col
                 )
 
+        self.draw_robot()
+
+        self.refresh_status()
+
     def draw_tile(
         self,
         row,
         col
     ):
-        """Dessine une case."""
 
         x1 = (
             self.grid_x
@@ -718,28 +1352,29 @@ class GameUI:
         if (
             row + col
         ) % 2 == 0:
-            floor_color = GRID_DARK
+            color = GRID_DARK
+
         else:
-            floor_color = GRID_LIGHT
+            color = GRID_LIGHT
 
         self.canvas.create_rectangle(
             x1,
             y1,
             x2,
             y2,
-            fill=floor_color,
+            fill=color,
             outline=BLACK,
             width=2
         )
 
-        tile_type = (
+        tile = (
             self.game.get_tile_type(
                 row,
                 col
             )
         )
 
-        if tile_type == self.game.WALL:
+        if tile == self.game.WALL:
             self.draw_wall(
                 x1,
                 y1,
@@ -747,7 +1382,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.GOAL:
+        elif tile == self.game.GOAL:
             self.draw_goal(
                 x1,
                 y1,
@@ -755,7 +1390,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.OBJECT:
+        elif tile == self.game.OBJECT:
             self.draw_object(
                 x1,
                 y1,
@@ -763,7 +1398,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.DEPOSIT:
+        elif tile == self.game.DEPOSIT:
             self.draw_deposit(
                 x1,
                 y1,
@@ -771,7 +1406,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.BUTTON:
+        elif tile == self.game.BUTTON:
             self.draw_button(
                 x1,
                 y1,
@@ -779,7 +1414,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.DOOR:
+        elif tile == self.game.DOOR:
             self.draw_door(
                 x1,
                 y1,
@@ -787,7 +1422,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.DIRT:
+        elif tile == self.game.DIRT:
             self.draw_dirt(
                 x1,
                 y1,
@@ -795,7 +1430,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.BOX:
+        elif tile == self.game.BOX:
             self.draw_box(
                 x1,
                 y1,
@@ -803,7 +1438,7 @@ class GameUI:
                 y2
             )
 
-        elif tile_type == self.game.CHARGER:
+        elif tile == self.game.CHARGER:
             self.draw_charger(
                 x1,
                 y1,
@@ -812,7 +1447,7 @@ class GameUI:
             )
 
     # ========================================================
-    # ÉLÉMENTS VISUELS
+    # DESSINS
     # ========================================================
 
     def draw_wall(
@@ -822,7 +1457,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine un mur rétro."""
 
         margin = max(
             3,
@@ -852,19 +1486,6 @@ class GameUI:
             width=2
         )
 
-        middle_x = (
-            x1 + x2
-        ) / 2
-
-        self.canvas.create_line(
-            middle_x,
-            y1 + margin,
-            middle_x,
-            middle_y,
-            fill=BLACK,
-            width=2
-        )
-
     def draw_goal(
         self,
         x1,
@@ -872,7 +1493,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine le cristal de destination."""
 
         center_x = (
             x1 + x2
@@ -887,7 +1507,7 @@ class GameUI:
             * 0.28
         )
 
-        points = [
+        self.canvas.create_polygon(
             center_x,
             center_y - size,
 
@@ -899,22 +1519,10 @@ class GameUI:
 
             center_x - size,
             center_y,
-        ]
 
-        self.canvas.create_polygon(
-            points,
             fill=YELLOW,
             outline=BLACK,
             width=3
-        )
-
-        self.canvas.create_line(
-            center_x,
-            center_y - size,
-            center_x,
-            center_y + size,
-            fill=WHITE,
-            width=2
         )
 
     def draw_object(
@@ -924,7 +1532,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine un objet à ramasser."""
 
         margin = (
             self.cell_size
@@ -948,7 +1555,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine une zone de dépôt."""
 
         margin = (
             self.cell_size
@@ -971,7 +1577,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine un bouton au sol."""
 
         margin = (
             self.cell_size
@@ -995,7 +1600,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine une porte fermée."""
 
         margin = (
             self.cell_size
@@ -1012,16 +1616,6 @@ class GameUI:
             width=3
         )
 
-        self.canvas.create_oval(
-            x2 - self.cell_size * 0.35,
-            (y1 + y2) / 2,
-            x2 - self.cell_size * 0.27,
-            (y1 + y2) / 2
-            + self.cell_size * 0.08,
-            fill=YELLOW,
-            outline=BLACK
-        )
-
     def draw_dirt(
         self,
         x1,
@@ -1029,22 +1623,12 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine une case sale."""
 
         self.canvas.create_oval(
             x1 + self.cell_size * 0.20,
-            y1 + self.cell_size * 0.45,
-            x1 + self.cell_size * 0.48,
+            y1 + self.cell_size * 0.40,
+            x1 + self.cell_size * 0.55,
             y1 + self.cell_size * 0.70,
-            fill=DIRT_COLOR,
-            outline=""
-        )
-
-        self.canvas.create_oval(
-            x1 + self.cell_size * 0.48,
-            y1 + self.cell_size * 0.25,
-            x1 + self.cell_size * 0.76,
-            y1 + self.cell_size * 0.56,
             fill=DIRT_COLOR,
             outline=""
         )
@@ -1056,7 +1640,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine une caisse."""
 
         margin = (
             self.cell_size
@@ -1098,7 +1681,6 @@ class GameUI:
         x2,
         y2
     ):
-        """Dessine une station de recharge."""
 
         center_x = (
             x1 + x2
@@ -1109,10 +1691,18 @@ class GameUI:
         ) / 2
 
         self.canvas.create_rectangle(
-            center_x - self.cell_size * 0.24,
-            center_y - self.cell_size * 0.24,
-            center_x + self.cell_size * 0.24,
-            center_y + self.cell_size * 0.24,
+            center_x
+            - self.cell_size * 0.24,
+
+            center_y
+            - self.cell_size * 0.24,
+
+            center_x
+            + self.cell_size * 0.24,
+
+            center_y
+            + self.cell_size * 0.24,
+
             fill=CHARGER_COLOR,
             outline=BLACK,
             width=3
@@ -1141,7 +1731,6 @@ class GameUI:
     # ========================================================
 
     def draw_robot(self):
-        """Dessine Pyt sur sa position logique."""
 
         row = self.game.robot.row
         col = self.game.robot.col
@@ -1156,42 +1745,45 @@ class GameUI:
             + row * self.cell_size
         )
 
-        x2 = x1 + self.cell_size
-        y2 = y1 + self.cell_size
-
         center_x = (
-            x1 + x2
-        ) / 2
+            x1
+            + self.cell_size / 2
+        )
 
         center_y = (
-            y1 + y2
-        ) / 2
+            y1
+            + self.cell_size / 2
+        )
 
         # Ombre
         self.canvas.create_oval(
             center_x
             - self.cell_size * 0.25,
+
             center_y
             + self.cell_size * 0.18,
 
             center_x
             + self.cell_size * 0.25,
+
             center_y
-            + self.cell_size * 0.32,
+            + self.cell_size * 0.30,
 
             fill="#17121e",
             outline=""
         )
 
-        # Corps blanc
+        # Corps
         self.canvas.create_rectangle(
             center_x
             - self.cell_size * 0.23,
+
             center_y
-            - self.cell_size * 0.17,
+            - self.cell_size * 0.14,
 
             center_x
             + self.cell_size * 0.23,
+
             center_y
             + self.cell_size * 0.24,
 
@@ -1204,28 +1796,32 @@ class GameUI:
         self.canvas.create_rectangle(
             center_x
             - self.cell_size * 0.29,
+
             center_y
             - self.cell_size * 0.34,
 
             center_x
             + self.cell_size * 0.29,
+
             center_y
             - self.cell_size * 0.05,
 
-            fill="#f4f1f6",
+            fill=WHITE,
             outline=BLACK,
             width=3
         )
 
-        # Écran du visage
+        # Écran visage
         self.canvas.create_rectangle(
             center_x
             - self.cell_size * 0.19,
+
             center_y
             - self.cell_size * 0.27,
 
             center_x
             + self.cell_size * 0.19,
+
             center_y
             - self.cell_size * 0.12,
 
@@ -1234,66 +1830,51 @@ class GameUI:
             width=2
         )
 
-        # Yeux cyan
-        eye_size = max(
+        eye = max(
             2,
             self.cell_size * 0.035
         )
 
-        self.canvas.create_rectangle(
-            center_x
-            - self.cell_size * 0.10
-            - eye_size,
+        # Yeux
+        for offset in (
+            -0.10,
+            0.10
+        ):
 
-            center_y
-            - self.cell_size * 0.205
-            - eye_size,
+            eye_x = (
+                center_x
+                + self.cell_size
+                * offset
+            )
 
-            center_x
-            - self.cell_size * 0.10
-            + eye_size,
+            eye_y = (
+                center_y
+                - self.cell_size
+                * 0.195
+            )
 
-            center_y
-            - self.cell_size * 0.205
-            + eye_size,
+            self.canvas.create_rectangle(
+                eye_x - eye,
+                eye_y - eye,
+                eye_x + eye,
+                eye_y + eye,
+                fill=CYAN,
+                outline=""
+            )
 
-            fill=CYAN,
-            outline=""
-        )
-
-        self.canvas.create_rectangle(
-            center_x
-            + self.cell_size * 0.10
-            - eye_size,
-
-            center_y
-            - self.cell_size * 0.205
-            - eye_size,
-
-            center_x
-            + self.cell_size * 0.10
-            + eye_size,
-
-            center_y
-            - self.cell_size * 0.205
-            + eye_size,
-
-            fill=CYAN,
-            outline=""
-        )
-
-        # Direction
-        symbol = (
-            self.game.robot
-            .get_direction_symbol()
-        )
-
+        # Orientation
         self.canvas.create_text(
             center_x,
             center_y
-            + self.cell_size * 0.11,
-            text=symbol,
+            + self.cell_size * 0.10,
+
+            text=(
+                self.game.robot
+                .get_direction_symbol()
+            ),
+
             fill=PINK,
+
             font=(
                 "Arial",
                 max(
@@ -1308,50 +1889,50 @@ class GameUI:
         )
 
     # ========================================================
-    # FENÊTRE DE CODE
+    # ÉDITEUR DE CODE
     # ========================================================
 
     def open_code_window(self):
-        """Ouvre l'éditeur Python dans une fenêtre séparée."""
 
         if (
             self.code_window is not None
             and self.code_window.winfo_exists()
         ):
             self.code_window.lift()
-            self.code_window.focus_force()
             return
 
-        self.code_window = tk.Toplevel(
+        window = tk.Toplevel(
             self.root
         )
 
-        self.code_window.title(
-            "PYT - Éditeur Python"
+        self.code_window = window
+
+        window.title(
+            "PYT - Code Python"
         )
 
-        self.code_window.geometry(
-            "600x520"
+        window.geometry(
+            "620x520"
         )
 
-        self.code_window.minsize(
+        window.minsize(
             450,
             350
         )
 
-        self.code_window.configure(
+        window.configure(
             bg="#0d0d14"
         )
 
         header = tk.Frame(
-            self.code_window,
+            window,
             bg="#0d0d14"
         )
 
         header.pack(
             fill="x",
             padx=14,
-            pady=(14, 6)
+            pady=(14, 7)
         )
 
         tk.Label(
@@ -1368,24 +1949,32 @@ class GameUI:
             side="left"
         )
 
-        tk.Label(
+        # Le bouton rose PYT lance le programme.
+        pyt_button = tk.Button(
             header,
-            text="Pyt",
+            text="PYT ▶",
+            command=self.execute_code,
             bg=PINK,
             fg=WHITE,
-            padx=8,
-            pady=3,
+            activebackground=ORANGE,
+            activeforeground=BLACK,
+            relief="flat",
+            cursor="hand2",
+            padx=14,
+            pady=6,
             font=(
                 "Arial",
-                9,
+                10,
                 "bold"
             )
-        ).pack(
+        )
+
+        pyt_button.pack(
             side="right"
         )
 
         editor_frame = tk.Frame(
-            self.code_window,
+            window,
             bg=BLACK,
             padx=2,
             pady=2
@@ -1400,7 +1989,7 @@ class GameUI:
         self.code_text = tk.Text(
             editor_frame,
             bg="#11111a",
-            fg="#f2eff4",
+            fg=WHITE,
             insertbackground=CYAN,
             selectbackground="#54377b",
             selectforeground=WHITE,
@@ -1420,10 +2009,15 @@ class GameUI:
             expand=True
         )
 
-        self.insert_starter_code()
+        # IMPORTANT :
+        # aucun code prérempli.
+        self.code_text.delete(
+            "1.0",
+            "end"
+        )
 
-        console_label = tk.Label(
-            self.code_window,
+        tk.Label(
+            window,
             text="CONSOLE",
             bg="#0d0d14",
             fg=MUTED,
@@ -1433,16 +2027,14 @@ class GameUI:
                 9,
                 "bold"
             )
-        )
-
-        console_label.pack(
+        ).pack(
             fill="x",
             padx=14,
             pady=(10, 3)
         )
 
         self.console_text = tk.Text(
-            self.code_window,
+            window,
             height=4,
             bg="#171720",
             fg=CYAN,
@@ -1461,127 +2053,59 @@ class GameUI:
             padx=14
         )
 
-        button_bar = tk.Frame(
-            self.code_window,
+        bottom = tk.Frame(
+            window,
             bg="#0d0d14"
         )
 
-        button_bar.pack(
+        bottom.pack(
             fill="x",
             padx=14,
             pady=14
         )
 
-        run_button = tk.Button(
-            button_bar,
-            text="▶ EXÉCUTER",
-            command=self.execute_code,
-            bg=CYAN,
-            fg=BLACK,
-            activebackground=YELLOW,
-            activeforeground=BLACK,
-            relief="flat",
-            cursor="hand2",
-            padx=15,
-            pady=9,
-            font=(
-                "Arial",
-                10,
-                "bold"
-            )
-        )
-
-        run_button.pack(
-            side="left"
-        )
-
         clear_button = tk.Button(
-            button_bar,
+            bottom,
             text="EFFACER",
-            command=self.clear_code,
+            command=self.clear_editor,
             bg="#4c3a69",
             fg=WHITE,
             activebackground="#604c80",
             activeforeground=WHITE,
             relief="flat",
             cursor="hand2",
-            padx=15,
-            pady=9
+            padx=14,
+            pady=8
         )
 
         clear_button.pack(
+            side="left"
+        )
+
+        reset_button = tk.Button(
+            bottom,
+            text="RECOMMENCER",
+            command=self.reset_level,
+            bg="#4c3a69",
+            fg=WHITE,
+            activebackground="#604c80",
+            activeforeground=WHITE,
+            relief="flat",
+            cursor="hand2",
+            padx=14,
+            pady=8
+        )
+
+        reset_button.pack(
             side="left",
             padx=8
         )
 
-        reset_button = tk.Button(
-            button_bar,
-            text="RESET",
-            command=self.reset_level,
-            bg=PINK,
-            fg=WHITE,
-            activebackground=ORANGE,
-            relief="flat",
-            cursor="hand2",
-            padx=15,
-            pady=9
-        )
-
-        reset_button.pack(
-            side="left"
-        )
-
-    def insert_starter_code(self):
-        """Insère une petite aide selon l'exercice."""
-
-        if self.code_text is None:
-            return
-
-        exercise = self.level[
-            "exercise"
-        ]
-
-        if exercise == 1:
-            code = (
-                "# Fais avancer Pyt jusqu'au cristal\n"
-                "forward(1)\n"
-            )
-
-        elif exercise == 2:
-            code = (
-                "# Utilise forward() et right(90)\n"
-                "\n"
-            )
-
-        else:
-            code = (
-                "# Trouve le chemin jusqu'au cristal\n"
-                "# forward(), backward(), left(), right()\n"
-                "\n"
-            )
-
-        self.code_text.insert(
-            "1.0",
-            code
-        )
-
-    def clear_code(self):
-        """Efface l'éditeur."""
-
-        if self.code_text is None:
-            return
-
-        self.code_text.delete(
-            "1.0",
-            "end"
-        )
-
     # ========================================================
-    # EXÉCUTION DU CODE
+    # EXÉCUTION
     # ========================================================
 
     def execute_code(self):
-        """Exécute le programme écrit par l'élève."""
 
         if self.code_text is None:
             return
@@ -1591,13 +2115,18 @@ class GameUI:
             "end-1c"
         )
 
-        # Chaque exécution recommence le niveau
-        # depuis son état initial.
-        self.game.reset()
+        # Si l'éditeur est vide :
+        # aucun mouvement.
+        if not code.strip():
 
-        self.next_button.config(
-            state="disabled"
-        )
+            self.show_console_message(
+                "Écris un programme avant de lancer Pyt."
+            )
+
+            return
+
+        # Chaque lancement repart du début.
+        self.game.reset()
 
         result = self.runner.run(
             code
@@ -1605,29 +2134,119 @@ class GameUI:
 
         self.draw_world()
 
-        self.show_console_result(
-            result
-        )
+        if result["error"]:
+
+            self.show_console_message(
+                result["error"]
+            )
+
+            return
+
+        if result["output"].strip():
+
+            self.show_console_message(
+                result["output"]
+            )
+
+        elif result[
+            "level_completed"
+        ]:
+
+            self.show_console_message(
+                "Mission réussie !"
+            )
+
+        else:
+
+            self.show_console_message(
+                "Programme terminé.\n"
+                "Pyt n'a pas encore réussi la mission."
+            )
 
         if result[
             "level_completed"
         ]:
-            self.next_button.config(
-                state="normal"
+
+            self.complete_current_exercise()
+
+    # ========================================================
+    # RÉUSSITE / PROGRESSION
+    # ========================================================
+
+    def complete_current_exercise(self):
+
+        exercise = self.level[
+            "exercise"
+        ]
+
+        # Évite de refaire le déblocage
+        # plusieurs fois.
+        already_completed = (
+            exercise
+            in self.completed_exercises
+        )
+
+        self.completed_exercises.add(
+            exercise
+        )
+
+        if (
+            exercise < 3
+            and self.unlocked_exercise
+            < exercise + 1
+        ):
+
+            self.unlocked_exercise = (
+                exercise + 1
             )
+
+        self.refresh_status()
+
+        if already_completed:
+            return
+
+        if exercise < 3:
+
+            answer = messagebox.askyesno(
+                "Mission réussie",
+                (
+                    "Bravo ! Exercice réussi.\n\n"
+                    f"L'exercice "
+                    f"{exercise + 1} "
+                    "est maintenant débloqué.\n\n"
+                    "Ouvrir la carte ?"
+                )
+            )
+
+            if answer:
+                self.open_map_window()
+
+        else:
 
             messagebox.showinfo(
-                "Mission réussie",
-                "Bravo ! Pyt a réussi la mission."
+                "Chapitre terminé",
+                (
+                    "Bravo !\n\n"
+                    "Tu as terminé les trois "
+                    "exercices du chapitre 1."
+                )
             )
 
-    def show_console_result(
+            self.open_map_window()
+
+    # ========================================================
+    # CONSOLE
+    # ========================================================
+
+    def show_console_message(
         self,
-        result
+        message
     ):
-        """Affiche le résultat dans la console."""
 
         if self.console_text is None:
+            return
+
+        if not self.console_text.winfo_exists():
             return
 
         self.console_text.config(
@@ -1639,61 +2258,16 @@ class GameUI:
             "end"
         )
 
-        if result["error"]:
-            text = (
-                "ERREUR\n"
-                + result["error"]
-            )
-
-        else:
-            output = result[
-                "output"
-            ]
-
-            if output.strip():
-                text = output
-
-            elif result[
-                "level_completed"
-            ]:
-                text = (
-                    "Mission réussie !"
-                )
-
-            else:
-                text = (
-                    "Programme terminé.\n"
-                    "La mission n'est pas encore réussie."
-                )
-
         self.console_text.insert(
             "1.0",
-            text
+            message
         )
 
         self.console_text.config(
             state="disabled"
         )
 
-    # ========================================================
-    # RESET
-    # ========================================================
-
-    def reset_level(self):
-        """Recommence le niveau."""
-
-        self.runner.reset()
-
-        self.next_button.config(
-            state="disabled"
-        )
-
-        self.clear_console()
-
-        self.draw_world()
-
     def clear_console(self):
-        """Vide la console."""
 
         if self.console_text is None:
             return
@@ -1714,51 +2288,7 @@ class GameUI:
             state="disabled"
         )
 
-    # ========================================================
-    # NIVEAU SUIVANT
-    # ========================================================
-
-    def next_level(self):
-        """Passe au prochain exercice."""
-
-        if not self.game.completed:
-            return
-
-        new_level = get_next_level(
-            self.level["chapter"],
-            self.level["exercise"]
-        )
-
-        if new_level is None:
-            messagebox.showinfo(
-                "PYT",
-                "Chapitre 1 terminé !"
-            )
-
-            return
-
-        self.level = new_level
-
-        self.game.load_level(
-            new_level
-        )
-
-        self.runner = Runner(
-            self.game
-        )
-
-        self.next_button.config(
-            state="disabled"
-        )
-
-        self.refresh_level_information()
-
-        self.draw_world()
-
-        self.prepare_code_for_new_level()
-
-    def prepare_code_for_new_level(self):
-        """Prépare l'éditeur pour le nouveau niveau."""
+    def clear_editor(self):
 
         if self.code_text is None:
             return
@@ -1771,31 +2301,50 @@ class GameUI:
             "end"
         )
 
-        self.insert_starter_code()
+    # ========================================================
+    # RESET
+    # ========================================================
+
+    def reset_level(self):
+
+        self.runner.reset()
 
         self.clear_console()
+
+        self.draw_world()
 
     # ========================================================
     # STATUT
     # ========================================================
 
     def refresh_status(self):
-        """Actualise le message sous la carte."""
 
         if self.status_label is None:
             return
 
-        message = self.game.message
+        exercise = self.level[
+            "exercise"
+        ]
 
-        if not message:
+        if (
+            exercise
+            in self.completed_exercises
+        ):
+
             message = (
-                "Pyt attend ton programme."
+                "✓ Exercice réussi."
             )
 
-        if self.game.completed:
+        elif self.game.message:
+
             message = (
-                "✓ Mission réussie ! "
-                "Le niveau suivant est débloqué."
+                self.game.message
+            )
+
+        else:
+
+            message = (
+                "Pyt attend ton programme."
             )
 
         self.status_label.config(
@@ -1807,12 +2356,23 @@ class GameUI:
     # ========================================================
 
     def close_game(self):
-        """Ferme proprement le jeu."""
 
         if (
             self.code_window is not None
             and self.code_window.winfo_exists()
         ):
             self.code_window.destroy()
+
+        if (
+            self.map_window is not None
+            and self.map_window.winfo_exists()
+        ):
+            self.map_window.destroy()
+
+        if (
+            self.course_window is not None
+            and self.course_window.winfo_exists()
+        ):
+            self.course_window.destroy()
 
         self.root.destroy()
