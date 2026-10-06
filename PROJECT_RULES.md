@@ -957,3 +957,4 @@ pick_up()
 clean()
 drop()
 open_door()
+Finalement, Z et A travaillent sur le moteur ; T et N travaillent eux sur l'interface
