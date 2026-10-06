@@ -1,25 +1,21 @@
 """
 robot.py
-Jeu éducatif Python - Pyt
+PYT - Robot logique du jeu.
 
-Ce fichier gère le robot Pyt.
+Ce fichier gère uniquement Pyt :
+- sa position
+- sa direction
+- ses rotations
+- ses déplacements
+- son inventaire
+- son énergie
 
-Responsabilités :
-- position de Pyt
-- orientation de Pyt
-- rotations
-- calcul de la prochaine case
-- inventaire
-- énergie
-- remise à zéro
-
-Les collisions et les règles du niveau sont gérées
-par game.py.
+Il ne contient aucun code Tkinter.
 """
 
 
 class Robot:
-    """Représente Pyt, le robot contrôlé par l'élève."""
+    """Représente Pyt dans le moteur du jeu."""
 
     # ========================================================
     # DIRECTIONS
@@ -38,7 +34,7 @@ class Robot:
     ]
 
     # ========================================================
-    # CRÉATION
+    # INITIALISATION
     # ========================================================
 
     def __init__(
@@ -47,58 +43,41 @@ class Robot:
         col=0,
         direction=EAST
     ):
-        """
-        Crée Pyt.
-
-        row :
-            ligne actuelle dans la grille
-
-        col :
-            colonne actuelle dans la grille
-
-        direction :
-            direction dans laquelle Pyt regarde
-        """
 
         self.row = row
         self.col = col
 
         self.direction = direction
 
-        # Nombre d'objets transportés.
         self.inventory = 0
 
-        # Énergie prévue pour certains niveaux futurs.
         self.max_energy = 100
         self.energy = self.max_energy
 
-        # Indique si Pyt est actuellement actif.
         self.active = True
+
+        self._validate_direction(
+            self.direction
+        )
 
     # ========================================================
     # POSITION
     # ========================================================
 
     def get_position(self):
-        """
-        Retourne la position logique actuelle de Pyt.
-
-        Exemple :
-            (3, 5)
-        """
+        """Retourne la position logique de Pyt."""
 
         return (
             self.row,
             self.col
         )
 
-    def set_position(self, row, col):
-        """
-        Change directement la position logique.
-
-        Cette fonction doit surtout être utilisée par
-        le moteur du jeu.
-        """
+    def set_position(
+        self,
+        row,
+        col
+    ):
+        """Modifie directement la position de Pyt."""
 
         self.row = row
         self.col = col
@@ -107,45 +86,52 @@ class Robot:
     # DIRECTION
     # ========================================================
 
+    def _validate_direction(
+        self,
+        direction
+    ):
+
+        if direction not in self.DIRECTIONS:
+
+            raise ValueError(
+                f"Direction inconnue : {direction}"
+            )
+
     def get_direction_vector(self):
         """
-        Retourne le déplacement correspondant à
-        l'orientation actuelle.
+        Retourne le déplacement correspondant
+        à la direction actuelle.
 
-        north -> ligne - 1
-        east  -> colonne + 1
-        south -> ligne + 1
-        west  -> colonne - 1
+        north = ligne - 1
+        east  = colonne + 1
+        south = ligne + 1
+        west  = colonne - 1
         """
 
-        if self.direction == self.NORTH:
-            return (-1, 0)
+        vectors = {
+            self.NORTH: (-1, 0),
+            self.EAST: (0, 1),
+            self.SOUTH: (1, 0),
+            self.WEST: (0, -1),
+        }
 
-        if self.direction == self.EAST:
-            return (0, 1)
-
-        if self.direction == self.SOUTH:
-            return (1, 0)
-
-        if self.direction == self.WEST:
-            return (0, -1)
-
-        # Sécurité si la direction est invalide.
-        return (0, 0)
+        return vectors[
+            self.direction
+        ]
 
     def get_backward_vector(self):
         """
-        Retourne le vecteur opposé à l'orientation
+        Retourne le vecteur opposé à la direction
         actuelle de Pyt.
         """
 
-        row_change, col_change = (
+        row_delta, col_delta = (
             self.get_direction_vector()
         )
 
         return (
-            -row_change,
-            -col_change
+            -row_delta,
+            -col_delta
         )
 
     # ========================================================
@@ -153,178 +139,204 @@ class Robot:
     # ========================================================
 
     def turn_right(self):
-        """
-        Tourne Pyt de 90 degrés vers la droite.
-        """
+        """Tourne Pyt de 90 degrés vers la droite."""
 
-        current_index = self.DIRECTIONS.index(
+        index = self.DIRECTIONS.index(
             self.direction
         )
 
-        new_index = (
-            current_index + 1
-        ) % len(self.DIRECTIONS)
+        index = (
+            index + 1
+        ) % len(
+            self.DIRECTIONS
+        )
 
-        self.direction = self.DIRECTIONS[
-            new_index
-        ]
+        self.direction = (
+            self.DIRECTIONS[
+                index
+            ]
+        )
+
+        return self.direction
 
     def turn_left(self):
-        """
-        Tourne Pyt de 90 degrés vers la gauche.
-        """
+        """Tourne Pyt de 90 degrés vers la gauche."""
 
-        current_index = self.DIRECTIONS.index(
+        index = self.DIRECTIONS.index(
             self.direction
         )
 
-        new_index = (
-            current_index - 1
-        ) % len(self.DIRECTIONS)
+        index = (
+            index - 1
+        ) % len(
+            self.DIRECTIONS
+        )
 
-        self.direction = self.DIRECTIONS[
-            new_index
-        ]
+        self.direction = (
+            self.DIRECTIONS[
+                index
+            ]
+        )
+
+        return self.direction
 
     def turn_around(self):
-        """
-        Fait faire un demi-tour à Pyt.
-        """
+        """Fait faire un demi-tour à Pyt."""
 
         self.turn_right()
         self.turn_right()
 
-    def rotate_right(self, angle):
+        return self.direction
+
+    # ========================================================
+    # ROTATIONS AVEC ANGLE
+    # ========================================================
+
+    def rotate_right(
+        self,
+        angle=90
+    ):
         """
-        Tourne Pyt vers la droite.
+        Tourne vers la droite.
 
-        Les angles autorisés sont des multiples de 90.
+        Normalement runner.py découpe déjà
+        right(180) en deux actions de 90 degrés.
 
-        Exemples :
-            90
-            180
-            270
-            360
+        Cette méthode reste néanmoins compatible
+        avec plusieurs quarts de tour.
         """
 
-        self._validate_angle(angle)
+        angle = self._validate_angle(
+            angle
+        )
 
-        number_of_turns = (
+        turns = (
             angle // 90
-        ) % 4
+        )
 
-        for _ in range(number_of_turns):
+        for _ in range(
+            turns
+        ):
             self.turn_right()
 
-    def rotate_left(self, angle):
-        """
-        Tourne Pyt vers la gauche.
+        return self.direction
 
-        Les angles autorisés sont des multiples de 90.
-        """
+    def rotate_left(
+        self,
+        angle=90
+    ):
+        """Tourne vers la gauche."""
 
-        self._validate_angle(angle)
+        angle = self._validate_angle(
+            angle
+        )
 
-        number_of_turns = (
+        turns = (
             angle // 90
-        ) % 4
+        )
 
-        for _ in range(number_of_turns):
+        for _ in range(
+            turns
+        ):
             self.turn_left()
 
-    def _validate_angle(self, angle):
-        """
-        Vérifie qu'un angle est compatible avec
-        la grille du jeu.
-        """
+        return self.direction
 
-        if not isinstance(angle, int):
-            raise ValueError(
-                "L'angle doit être un nombre entier."
+    def _validate_angle(
+        self,
+        angle
+    ):
+
+        if isinstance(
+            angle,
+            bool
+        ):
+
+            raise TypeError(
+                "L'angle doit être un entier."
+            )
+
+        if not isinstance(
+            angle,
+            int
+        ):
+
+            raise TypeError(
+                "L'angle doit être un entier."
             )
 
         if angle < 0:
+
             raise ValueError(
                 "L'angle ne peut pas être négatif."
             )
 
         if angle % 90 != 0:
+
             raise ValueError(
-                "Pyt doit tourner par multiples de 90 degrés."
+                "L'angle doit être un multiple de 90."
             )
 
+        return angle
+
     # ========================================================
-    # CALCUL DES DÉPLACEMENTS
+    # PROCHAINE CASE
     # ========================================================
 
     def get_forward_position(self):
         """
-        Calcule la prochaine case devant Pyt.
-
-        Cette fonction ne déplace PAS directement Pyt.
-        game.py doit vérifier que le mouvement est autorisé.
+        Calcule la case située devant Pyt
+        sans le déplacer.
         """
 
-        row_change, col_change = (
+        row_delta, col_delta = (
             self.get_direction_vector()
         )
 
-        new_row = (
-            self.row + row_change
-        )
-
-        new_col = (
-            self.col + col_change
-        )
-
         return (
-            new_row,
-            new_col
+            self.row + row_delta,
+            self.col + col_delta
         )
 
     def get_backward_position(self):
         """
-        Calcule la prochaine case derrière Pyt.
-
-        Pyt recule sans changer son orientation.
+        Calcule la case située derrière Pyt
+        sans le déplacer.
         """
 
-        row_change, col_change = (
+        row_delta, col_delta = (
             self.get_backward_vector()
         )
 
-        new_row = (
-            self.row + row_change
-        )
-
-        new_col = (
-            self.col + col_change
-        )
-
         return (
-            new_row,
-            new_col
+            self.row + row_delta,
+            self.col + col_delta
         )
 
     # ========================================================
-    # DÉPLACEMENTS AVEC LE MOTEUR
+    # AVANCER
     # ========================================================
 
-    def forward(self, game, steps=1):
+    def forward(
+        self,
+        game,
+        steps=1
+    ):
         """
-        Fait avancer Pyt.
+        Déplace Pyt vers l'avant.
 
-        Chaque déplacement est envoyé à game.py afin que
-        le moteur vérifie les murs, portes, caisses et
-        interactions automatiques.
+        Cette méthode reste disponible pour le moteur,
+        même si l'animation actuelle utilise surtout
+        get_forward_position().
         """
 
-        self._validate_steps(steps)
+        steps = self._validate_steps(
+            steps
+        )
 
-        for _ in range(steps):
-
-            if not self.active:
-                return False
+        for _ in range(
+            steps
+        ):
 
             new_row, new_col = (
                 self.get_forward_position()
@@ -340,17 +352,28 @@ class Robot:
 
         return True
 
-    def backward(self, game, steps=1):
+    # ========================================================
+    # RECULER
+    # ========================================================
+
+    def backward(
+        self,
+        game,
+        steps=1
+    ):
         """
-        Fait reculer Pyt sans changer son orientation.
+        Déplace Pyt vers l'arrière.
+
+        Pyt conserve son orientation lorsqu'il recule.
         """
 
-        self._validate_steps(steps)
+        steps = self._validate_steps(
+            steps
+        )
 
-        for _ in range(steps):
-
-            if not self.active:
-                return False
+        for _ in range(
+            steps
+        ):
 
             new_row, new_col = (
                 self.get_backward_position()
@@ -366,81 +389,109 @@ class Robot:
 
         return True
 
-    def _validate_steps(self, steps):
-        """
-        Vérifie le nombre de cases demandé.
-        """
+    # ========================================================
+    # VALIDATION DES PAS
+    # ========================================================
 
-        if not isinstance(steps, int):
-            raise ValueError(
+    def _validate_steps(
+        self,
+        steps
+    ):
+
+        if isinstance(
+            steps,
+            bool
+        ):
+
+            raise TypeError(
+                "Le nombre de cases doit être un entier."
+            )
+
+        if not isinstance(
+            steps,
+            int
+        ):
+
+            raise TypeError(
                 "Le nombre de cases doit être un entier."
             )
 
         if steps < 0:
+
             raise ValueError(
-                "Le nombre de cases ne peut pas être négatif."
+                "Le nombre de cases ne peut pas "
+                "être négatif."
             )
+
+        return steps
 
     # ========================================================
     # INVENTAIRE
     # ========================================================
 
     def has_object(self):
-        """
-        Indique si Pyt transporte au moins un objet.
-        """
+        """Indique si Pyt transporte un objet."""
 
-        return self.inventory > 0
+        return (
+            self.inventory > 0
+        )
 
-    def add_object(self):
-        """
-        Ajoute un objet à l'inventaire.
-        """
+    def add_object(
+        self,
+        amount=1
+    ):
 
-        self.inventory += 1
+        if amount < 0:
+            return
 
-    def remove_object(self):
-        """
-        Retire un objet de l'inventaire.
+        self.inventory += amount
 
-        Retourne True si un objet a été retiré.
-        """
+    def remove_object(
+        self,
+        amount=1
+    ):
 
-        if self.inventory <= 0:
+        if amount < 0:
             return False
 
-        self.inventory -= 1
+        if self.inventory < amount:
+            return False
+
+        self.inventory -= amount
 
         return True
+
+    def clear_inventory(self):
+
+        self.inventory = 0
 
     # ========================================================
     # ÉNERGIE
     # ========================================================
 
     def recharge(self):
-        """
-        Recharge complètement Pyt.
-        """
 
-        self.energy = self.max_energy
+        self.energy = (
+            self.max_energy
+        )
 
-    def use_energy(self, amount=1):
-        """
-        Retire de l'énergie à Pyt.
-
-        Cette fonction est prête pour de futurs exercices.
-        """
+    def consume_energy(
+        self,
+        amount=1
+    ):
 
         if amount < 0:
-            raise ValueError(
-                "La quantité d'énergie doit être positive."
-            )
+            return True
+
+        if self.energy < amount:
+
+            self.energy = 0
+
+            return False
 
         self.energy -= amount
 
-        if self.energy <= 0:
-            self.energy = 0
-            self.active = False
+        return True
 
     # ========================================================
     # RESET
@@ -453,55 +504,67 @@ class Robot:
         direction=EAST
     ):
         """
-        Remet Pyt dans son état initial.
-
-        game.py appelle cette fonction lorsqu'un niveau
-        commence ou recommence.
+        Replace Pyt dans son état initial.
         """
 
-        if direction not in self.DIRECTIONS:
-            direction = self.EAST
+        self._validate_direction(
+            direction
+        )
 
         self.row = row
         self.col = col
+
         self.direction = direction
 
         self.inventory = 0
 
-        self.energy = self.max_energy
+        self.energy = (
+            self.max_energy
+        )
 
         self.active = True
 
     # ========================================================
-    # INFORMATIONS POUR L'INTERFACE
+    # ÉTAT
     # ========================================================
 
     def get_state(self):
-        """
-        Retourne l'état actuel de Pyt.
-
-        ui.py pourra lire ces informations sans créer
-        une deuxième position indépendante.
-        """
 
         return {
             "row": self.row,
             "col": self.col,
-            "direction": self.direction,
-            "inventory": self.inventory,
-            "energy": self.energy,
-            "max_energy": self.max_energy,
-            "active": self.active,
+
+            "position": (
+                self.row,
+                self.col
+            ),
+
+            "direction": (
+                self.direction
+            ),
+
+            "inventory": (
+                self.inventory
+            ),
+
+            "energy": (
+                self.energy
+            ),
+
+            "max_energy": (
+                self.max_energy
+            ),
+
+            "active": (
+                self.active
+            ),
         }
 
-    def get_direction_symbol(self):
-        """
-        Retourne un symbole simple correspondant à
-        l'orientation.
+    # ========================================================
+    # SYMBOLE DE DIRECTION
+    # ========================================================
 
-        Il pourra être utile pour les premiers tests
-        avant d'avoir les sprites définitifs.
-        """
+    def get_direction_symbol(self):
 
         symbols = {
             self.NORTH: "↑",
@@ -510,25 +573,20 @@ class Robot:
             self.WEST: "←",
         }
 
-        return symbols.get(
-            self.direction,
-            "?"
-        )
+        return symbols[
+            self.direction
+        ]
 
     # ========================================================
-    # AFFICHAGE TEXTE / DEBUG
+    # TEXTE
     # ========================================================
 
     def __str__(self):
-        """
-        Représentation simple de Pyt pour le débogage.
-        """
 
         return (
-            f"Pyt("
-            f"position=({self.row}, {self.col}), "
-            f"direction={self.direction}, "
-            f"inventaire={self.inventory}, "
-            f"energie={self.energy}"
-            f")"
+            "Pyt("
+            f"row={self.row}, "
+            f"col={self.col}, "
+            f"direction={self.direction}"
+            ")"
         )

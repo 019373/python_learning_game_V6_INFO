@@ -1,19 +1,32 @@
 """
 runner.py
-Exécution du code Python écrit par l'élève.
+PYT - Exécution du code Python de l'élève.
 
-Ce fichier :
-- vérifie le code
-- fournit les commandes de Pyt
-- exécute le programme
-- récupère les erreurs
-- limite les programmes trop longs
+Principe :
+1. Le code Python de l'élève est vérifié.
+2. Il est exécuté sans déplacer immédiatement Pyt.
+3. Les commandes forward(), backward(), left() et right()
+   sont transformées en une liste d'actions.
+4. ui.py joue ensuite ces actions une par une.
 
-Les commandes de déplacement sont :
-    forward()
-    backward()
-    left()
-    right()
+Exemple :
+
+    forward(3)
+    right(90)
+    forward(2)
+
+devient :
+
+    [
+        ("forward", 1),
+        ("forward", 1),
+        ("forward", 1),
+        ("right", 90),
+        ("forward", 1),
+        ("forward", 1),
+    ]
+
+Cela permet d'animer Pyt sans bloquer Tkinter.
 """
 
 import ast
@@ -22,35 +35,38 @@ import sys
 
 
 class Runner:
-    """Exécute le code Python de l'élève."""
+    """Analyse et prépare le programme de l'élève."""
 
     def __init__(self, game):
+
         self.game = game
         self.robot = game.robot
 
         self.output = []
+        self.actions = []
+
         self.last_error = None
+
         self.running = False
 
-        # Sécurité générale.
-        self.max_operations = 10000
-        self.operation_count = 0
+        # Nombre maximal d'actions de Pyt.
+        self.max_actions = 500
 
-        # Sécurité contre les boucles infinies.
-        # Le compteur Python compte les lignes exécutées.
+        # Protection contre les programmes
+        # qui exécutent énormément de Python.
         self.max_python_steps = 50000
+
         self.python_steps = 0
 
     # ========================================================
-    # COMMANDES DE PYT
+    # COMMANDES PYT
     # ========================================================
 
     def forward(self, distance=1):
         """
-        Fait avancer Pyt.
+        Ajoute des déplacements vers l'avant.
 
-        Exemple :
-            forward(3)
+        forward(3) devient trois actions distinctes.
         """
 
         distance = self._validate_distance(
@@ -58,24 +74,17 @@ class Runner:
         )
 
         for _ in range(distance):
-            self._count_operation()
 
-            moved = self.robot.forward(
-                self.game,
+            self._add_action(
+                "forward",
                 1
             )
-
-            if not moved:
-                return False
 
         return True
 
     def backward(self, distance=1):
         """
-        Fait reculer Pyt.
-
-        Exemple :
-            backward(2)
+        Ajoute des déplacements vers l'arrière.
         """
 
         distance = self._validate_distance(
@@ -83,70 +92,107 @@ class Runner:
         )
 
         for _ in range(distance):
-            self._count_operation()
 
-            moved = self.robot.backward(
-                self.game,
+            self._add_action(
+                "backward",
                 1
             )
-
-            if not moved:
-                return False
 
         return True
 
     def right(self, angle=90):
         """
-        Tourne Pyt vers la droite.
+        Ajoute une ou plusieurs rotations à droite.
 
-        Exemple :
+        right(180) devient :
             right(90)
-        """
+            right(90)
 
-        self._count_operation()
+        Ainsi chaque quart de tour pourra prendre
+        deux secondes dans l'interface.
+        """
 
         angle = self._validate_angle(
             angle
         )
 
-        self.robot.rotate_right(
-            angle
-        )
+        turns = angle // 90
+
+        for _ in range(turns):
+
+            self._add_action(
+                "right",
+                90
+            )
 
         return True
 
     def left(self, angle=90):
         """
-        Tourne Pyt vers la gauche.
-
-        Exemple :
-            left(90)
+        Ajoute une ou plusieurs rotations à gauche.
         """
-
-        self._count_operation()
 
         angle = self._validate_angle(
             angle
         )
 
-        self.robot.rotate_left(
-            angle
-        )
+        turns = angle // 90
+
+        for _ in range(turns):
+
+            self._add_action(
+                "left",
+                90
+            )
 
         return True
 
     # ========================================================
-    # VALIDATION DES VALEURS
+    # AJOUT D'UNE ACTION
     # ========================================================
 
-    def _validate_distance(self, distance):
+    def _add_action(
+        self,
+        action_type,
+        value
+    ):
 
-        if isinstance(distance, bool):
+        if (
+            len(self.actions)
+            >= self.max_actions
+        ):
+            raise RuntimeError(
+                "Ton programme demande trop d'actions à Pyt."
+            )
+
+        self.actions.append(
+            (
+                action_type,
+                value
+            )
+        )
+
+    # ========================================================
+    # VALIDATION DISTANCE
+    # ========================================================
+
+    def _validate_distance(
+        self,
+        distance
+    ):
+
+        if isinstance(
+            distance,
+            bool
+        ):
             raise TypeError(
                 "La distance doit être un nombre entier."
             )
 
-        if not isinstance(distance, int):
+        if not isinstance(
+            distance,
+            int
+        ):
             raise TypeError(
                 "La distance doit être un nombre entier."
             )
@@ -156,23 +202,34 @@ class Runner:
                 "La distance ne peut pas être négative."
             )
 
-        # Évite qu'un élève écrive par accident
-        # forward(999999999).
-        if distance > 1000:
+        if distance > 100:
             raise ValueError(
-                "La distance est trop grande."
+                "Cette distance est trop grande."
             )
 
         return distance
 
-    def _validate_angle(self, angle):
+    # ========================================================
+    # VALIDATION ANGLE
+    # ========================================================
 
-        if isinstance(angle, bool):
+    def _validate_angle(
+        self,
+        angle
+    ):
+
+        if isinstance(
+            angle,
+            bool
+        ):
             raise TypeError(
                 "L'angle doit être un nombre entier."
             )
 
-        if not isinstance(angle, int):
+        if not isinstance(
+            angle,
+            int
+        ):
             raise TypeError(
                 "L'angle doit être un nombre entier."
             )
@@ -205,8 +262,10 @@ class Runner:
         end="\n"
     ):
         """
-        Remplace print() afin d'afficher le résultat
-        dans la console du jeu.
+        Remplace print().
+
+        Le texte sera affiché dans la console
+        de la fenêtre de code.
         """
 
         text = sep.join(
@@ -224,24 +283,29 @@ class Runner:
 
     def create_environment(self):
         """
-        Crée l'environnement dans lequel
-        le programme de l'élève est exécuté.
+        Crée l'environnement Python disponible
+        pour l'élève.
         """
 
         safe_builtins = {
+
+            # Affichage
             "print": self.game_print,
 
+            # Types
             "int": int,
             "float": float,
             "str": str,
             "bool": bool,
 
+            # Calculs
             "round": round,
             "min": min,
             "max": max,
             "abs": abs,
             "pow": pow,
 
+            # Collections
             "len": len,
             "range": range,
             "enumerate": enumerate,
@@ -254,6 +318,7 @@ class Runner:
         }
 
         environment = {
+
             "__builtins__": safe_builtins,
 
             # Commandes de Pyt
@@ -262,8 +327,7 @@ class Runner:
             "left": self.left,
             "right": self.right,
 
-            # Quelques fonctions mathématiques
-            # utiles pour les futurs chapitres.
+            # Mathématiques simples
             "sqrt": math.sqrt,
             "floor": math.floor,
             "ceil": math.ceil,
@@ -275,12 +339,18 @@ class Runner:
     # VÉRIFICATION DU CODE
     # ========================================================
 
-    def check_code(self, code):
+    def check_code(
+        self,
+        code
+    ):
         """
-        Vérifie le programme avant son exécution.
+        Vérifie le programme avant exécution.
         """
 
-        if not isinstance(code, str):
+        if not isinstance(
+            code,
+            str
+        ):
             raise TypeError(
                 "Le programme doit être du texte."
             )
@@ -289,12 +359,14 @@ class Runner:
             return
 
         try:
+
             tree = ast.parse(
                 code,
                 mode="exec"
             )
 
         except SyntaxError as error:
+
             raise SyntaxError(
                 self._format_syntax_error(
                     error
@@ -304,55 +376,63 @@ class Runner:
         forbidden_nodes = (
             ast.Import,
             ast.ImportFrom,
+
             ast.With,
             ast.AsyncWith,
+
             ast.AsyncFunctionDef,
             ast.Await,
+
             ast.Lambda,
             ast.ClassDef,
+
             ast.Global,
             ast.Nonlocal,
+
             ast.Delete,
         )
 
-        for node in ast.walk(tree):
+        for node in ast.walk(
+            tree
+        ):
 
             if isinstance(
                 node,
                 forbidden_nodes
             ):
+
                 raise ValueError(
                     "Cette instruction n'est pas "
                     "disponible dans PYT."
                 )
 
-            # Bloque les noms spéciaux Python
-            # comme __import__.
+            # Bloque __import__, __class__, etc.
             if isinstance(
                 node,
                 ast.Name
             ):
-                if node.id.startswith("__"):
+
+                if node.id.startswith(
+                    "__"
+                ):
                     raise ValueError(
                         "Ce nom n'est pas autorisé."
                     )
 
-            # Autorise par exemple :
-            # liste.append(...)
-            #
-            # mais bloque les attributs spéciaux
-            # comme objet.__class__.
             if isinstance(
                 node,
                 ast.Attribute
             ):
-                if node.attr.startswith("__"):
+
+                if node.attr.startswith(
+                    "__"
+                ):
                     raise ValueError(
                         "Cet attribut n'est pas autorisé."
                     )
 
     # ========================================================
-    # PROTECTION CONTRE LES BOUCLES INFINIES
+    # PROTECTION CONTRE BOUCLES INFINIES
     # ========================================================
 
     def _trace_execution(
@@ -364,12 +444,12 @@ class Runner:
         """
         Compte les lignes Python exécutées.
 
-        Cela permet d'arrêter par exemple :
+        Exemple dangereux :
 
             while True:
                 x = 1
 
-        au lieu de bloquer complètement l'interface.
+        sera arrêté.
         """
 
         if event == "line":
@@ -380,6 +460,7 @@ class Runner:
                 self.python_steps
                 > self.max_python_steps
             ):
+
                 raise RuntimeError(
                     "Le programme a été arrêté : "
                     "il semble contenir une boucle infinie "
@@ -389,31 +470,38 @@ class Runner:
         return self._trace_execution
 
     # ========================================================
-    # EXÉCUTION
+    # PRÉPARATION DU PROGRAMME
     # ========================================================
 
-    def run(self, code):
+    def prepare(
+        self,
+        code
+    ):
         """
-        Exécute le programme de l'élève.
+        Analyse et exécute le Python de l'élève
+        uniquement pour fabriquer la liste d'actions.
 
-        Retourne un dictionnaire contenant :
-        - l'erreur éventuelle
-        - la sortie print()
-        - la réussite du niveau
+        Pyt ne bouge PAS ici.
         """
 
         self.output = []
+        self.actions = []
+
         self.last_error = None
 
-        self.operation_count = 0
         self.python_steps = 0
 
         self.running = True
 
         try:
+
             self.check_code(
                 code
             )
+
+            if not code.strip():
+
+                return self._create_result()
 
             environment = (
                 self.create_environment()
@@ -425,13 +513,12 @@ class Runner:
                 "exec"
             )
 
-            # Active temporairement la protection
-            # contre les boucles infinies.
             sys.settrace(
                 self._trace_execution
             )
 
             try:
+
                 exec(
                     compiled_code,
                     environment,
@@ -439,20 +526,19 @@ class Runner:
                 )
 
             finally:
-                # IMPORTANT :
-                # toujours désactiver le traceur.
+
                 sys.settrace(
                     None
                 )
 
-            self.game.check_success()
-
         except SyntaxError as error:
+
             self.last_error = str(
                 error
             )
 
         except NameError as error:
+
             self.last_error = (
                 self._format_name_error(
                     error
@@ -460,31 +546,34 @@ class Runner:
             )
 
         except TypeError as error:
+
             self.last_error = (
                 "Erreur de type : "
                 + str(error)
             )
 
         except ValueError as error:
+
             self.last_error = (
                 "Erreur : "
                 + str(error)
             )
 
         except RuntimeError as error:
+
             self.last_error = str(
                 error
             )
 
         except Exception as error:
+
             self.last_error = (
                 "Erreur Python : "
                 + str(error)
             )
 
         finally:
-            # Sécurité supplémentaire :
-            # le traceur ne doit jamais rester actif.
+
             sys.settrace(
                 None
             )
@@ -494,21 +583,65 @@ class Runner:
         return self._create_result()
 
     # ========================================================
-    # COMPTEUR D'OPÉRATIONS
+    # COMPATIBILITÉ
     # ========================================================
 
-    def _count_operation(self):
+    def run(
+        self,
+        code
+    ):
+        """
+        Alias temporaire de prepare().
 
-        self.operation_count += 1
+        Cela évite de casser immédiatement un ancien ui.py
+        qui appelle encore runner.run(code).
 
-        if (
-            self.operation_count
-            > self.max_operations
-        ):
-            raise RuntimeError(
-                "Le programme a effectué trop "
-                "d'actions avec Pyt."
-            )
+        ATTENTION :
+        cette fonction prépare seulement les actions.
+        Elle ne déplace plus directement Pyt.
+        """
+
+        return self.prepare(
+            code
+        )
+
+    # ========================================================
+    # RÉSULTAT
+    # ========================================================
+
+    def _create_result(
+        self
+    ):
+
+        return {
+
+            "success": (
+                self.last_error
+                is None
+            ),
+
+            "error": (
+                self.last_error
+            ),
+
+            "output": "".join(
+                self.output
+            ),
+
+            # Copie de la liste pour éviter
+            # qu'elle soit modifiée de l'extérieur.
+            "actions": list(
+                self.actions
+            ),
+
+            "action_count": len(
+                self.actions
+            ),
+
+            # La réussite ne peut plus être connue ici.
+            # Elle sera vérifiée APRÈS l'animation.
+            "level_completed": False,
+        }
 
     # ========================================================
     # ERREURS
@@ -520,6 +653,7 @@ class Runner:
     ):
 
         if error.lineno is None:
+
             return (
                 "Erreur de syntaxe."
             )
@@ -544,47 +678,21 @@ class Runner:
         )
 
     # ========================================================
-    # RÉSULTAT
-    # ========================================================
-
-    def _create_result(self):
-
-        return {
-            "success": (
-                self.last_error
-                is None
-            ),
-
-            "error": (
-                self.last_error
-            ),
-
-            "output": "".join(
-                self.output
-            ),
-
-            "level_completed": (
-                self.game.completed
-            ),
-
-            "operations": (
-                self.operation_count
-            ),
-        }
-
-    # ========================================================
     # RESET
     # ========================================================
 
-    def reset(self):
+    def reset(
+        self
+    ):
         """
-        Replace le niveau dans son état initial.
+        Réinitialise le Runner et le niveau.
         """
 
         self.output = []
+        self.actions = []
+
         self.last_error = None
 
-        self.operation_count = 0
         self.python_steps = 0
 
         self.running = False

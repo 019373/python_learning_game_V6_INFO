@@ -1,26 +1,31 @@
 """
 game.py
-Moteur principal du jeu Pyt.
+PYT - Moteur logique du jeu.
 
 Ce fichier gère :
-- la carte logique
-- les limites de la grille
+- la grille
 - les murs
 - les objets
-- les cases spéciales
+- les portes
+- les boutons
+- les caisses
+- les cases à nettoyer
+- les chargeurs
+- les objectifs
 - les interactions automatiques
-- la réussite du niveau
 
-Il ne gère PAS :
-- l'affichage Tkinter
-- le Canvas
-- la fenêtre de code
-- l'exécution du code Python de l'élève
+IMPORTANT :
+game.py ne gère aucune fenêtre Tkinter.
+L'affichage de la victoire appartient à ui.py.
 """
 
 
 class Game:
-    """Représente l'état logique d'un niveau."""
+    """État logique d'un exercice de PYT."""
+
+    # ========================================================
+    # TYPES DE CASES
+    # ========================================================
 
     EMPTY = 0
     WALL = 1
@@ -33,16 +38,15 @@ class Game:
     BOX = 8
     CHARGER = 9
 
-    def __init__(self, level, robot):
-        """
-        Crée une partie à partir d'un niveau.
+    # ========================================================
+    # INITIALISATION
+    # ========================================================
 
-        level :
-            dictionnaire provenant de levels.py
-
-        robot :
-            objet Robot provenant de robot.py
-        """
+    def __init__(
+        self,
+        level,
+        robot
+    ):
 
         self.level = level
         self.robot = robot
@@ -64,6 +68,7 @@ class Game:
         self.collected_objects = 0
         self.deposited_objects = 0
         self.cleaned_tiles = 0
+
         self.activated_buttons = set()
 
         self.completed = False
@@ -71,62 +76,107 @@ class Game:
 
         self.message = ""
 
-        self.load_level(level)
+        self.load_level(
+            level
+        )
 
-    # ---------------------------------------------------------
+    # ========================================================
     # CHARGEMENT DU NIVEAU
-    # ---------------------------------------------------------
+    # ========================================================
 
-    def load_level(self, level):
-        """Charge toutes les données nécessaires au niveau."""
+    def load_level(
+        self,
+        level
+    ):
 
         self.level = level
 
-        self.rows = level.get("rows", 8)
-        self.cols = level.get("cols", 10)
+        self.rows = level.get(
+            "rows",
+            8
+        )
+
+        self.cols = level.get(
+            "cols",
+            10
+        )
 
         self.walls = self._positions_to_set(
-            level.get("walls", [])
+            level.get(
+                "walls",
+                []
+            )
         )
 
         self.objects = self._positions_to_set(
-            level.get("objects", [])
+            level.get(
+                "objects",
+                []
+            )
         )
 
         self.deposits = self._positions_to_set(
-            level.get("deposits", [])
+            level.get(
+                "deposits",
+                []
+            )
         )
 
         self.buttons = self._positions_to_set(
-            level.get("buttons", [])
+            level.get(
+                "buttons",
+                []
+            )
         )
 
         self.doors = self._positions_to_set(
-            level.get("doors", [])
+            level.get(
+                "doors",
+                []
+            )
         )
 
         self.dirt = self._positions_to_set(
-            level.get("dirt", [])
+            level.get(
+                "dirt",
+                []
+            )
         )
 
         self.boxes = self._positions_to_set(
-            level.get("boxes", [])
+            level.get(
+                "boxes",
+                []
+            )
         )
 
         self.chargers = self._positions_to_set(
-            level.get("chargers", [])
+            level.get(
+                "chargers",
+                []
+            )
         )
 
-        goal = level.get("goal")
+        goal = level.get(
+            "goal"
+        )
 
         if goal is None:
             self.goal = None
+
         else:
-            self.goal = tuple(goal)
+            self.goal = tuple(
+                goal
+            )
+
+        # ----------------------------------------------------
+        # STATISTIQUES
+        # ----------------------------------------------------
 
         self.collected_objects = 0
         self.deposited_objects = 0
         self.cleaned_tiles = 0
+
         self.activated_buttons = set()
 
         self.completed = False
@@ -134,7 +184,14 @@ class Game:
 
         self.message = ""
 
-        start = level.get("start", (0, 0))
+        # ----------------------------------------------------
+        # POSITION DE DÉPART
+        # ----------------------------------------------------
+
+        start = level.get(
+            "start",
+            (0, 0)
+        )
 
         start_row = start[0]
         start_col = start[1]
@@ -150,175 +207,307 @@ class Game:
             start_direction
         )
 
-        self.check_automatic_interactions()
+        # Les interactions sur la case de départ
+        # peuvent être effectuées automatiquement.
+        #
+        # Mais on ne valide PAS encore la réussite.
+        self.check_automatic_interactions(
+            check_completion=False
+        )
 
-    def _positions_to_set(self, positions):
-        """
-        Transforme une liste de positions en ensemble de tuples.
+    # ========================================================
+    # CONVERSION POSITIONS
+    # ========================================================
 
-        Exemple :
-        [[1, 2], [3, 4]]
-
-        devient :
-        {(1, 2), (3, 4)}
-        """
+    def _positions_to_set(
+        self,
+        positions
+    ):
 
         result = set()
 
         for position in positions:
-            result.add(tuple(position))
+
+            result.add(
+                tuple(
+                    position
+                )
+            )
 
         return result
 
-    # ---------------------------------------------------------
-    # INFORMATIONS SUR LA CARTE
-    # ---------------------------------------------------------
+    # ========================================================
+    # LIMITES
+    # ========================================================
 
-    def is_inside(self, row, col):
-        """Vérifie qu'une position est dans la grille."""
+    def is_inside(
+        self,
+        row,
+        col
+    ):
 
         return (
             0 <= row < self.rows
-            and 0 <= col < self.cols
+            and
+            0 <= col < self.cols
         )
 
-    def is_wall(self, row, col):
-        """Retourne True si la case contient un mur."""
+    # ========================================================
+    # OBSTACLES
+    # ========================================================
 
-        return (row, col) in self.walls
+    def is_wall(
+        self,
+        row,
+        col
+    ):
 
-    def is_door(self, row, col):
-        """Retourne True si la case contient une porte fermée."""
+        return (
+            row,
+            col
+        ) in self.walls
 
-        return (row, col) in self.doors
+    def is_door(
+        self,
+        row,
+        col
+    ):
 
-    def is_box(self, row, col):
-        """Retourne True si la case contient une caisse."""
+        return (
+            row,
+            col
+        ) in self.doors
 
-        return (row, col) in self.boxes
+    def is_box(
+        self,
+        row,
+        col
+    ):
 
-    def is_blocked(self, row, col):
-        """
-        Vérifie si Pyt ne peut pas entrer sur cette case.
-        """
+        return (
+            row,
+            col
+        ) in self.boxes
 
-        if not self.is_inside(row, col):
+    def is_blocked(
+        self,
+        row,
+        col
+    ):
+
+        if not self.is_inside(
+            row,
+            col
+        ):
             return True
 
-        if self.is_wall(row, col):
+        if self.is_wall(
+            row,
+            col
+        ):
             return True
 
-        if self.is_door(row, col):
+        if self.is_door(
+            row,
+            col
+        ):
             return True
 
-        if self.is_box(row, col):
+        if self.is_box(
+            row,
+            col
+        ):
             return True
 
         return False
 
-    def can_move_to(self, row, col):
-        """Retourne True si Pyt peut aller sur la case."""
+    def can_move_to(
+        self,
+        row,
+        col
+    ):
 
-        return not self.is_blocked(row, col)
+        return not self.is_blocked(
+            row,
+            col
+        )
 
-    # ---------------------------------------------------------
-    # DÉPLACEMENT
-    # ---------------------------------------------------------
+    # ========================================================
+    # DÉPLACEMENT DU ROBOT
+    # ========================================================
 
-    def move_robot_to(self, row, col):
+    def move_robot_to(
+        self,
+        row,
+        col
+    ):
         """
-        Demande au moteur de déplacer Pyt vers une position.
+        Déplace Pyt sur une case.
 
-        Cette fonction ne décide pas de la direction.
-        Elle reçoit simplement la prochaine case calculée
-        par robot.py.
+        Cette méthode :
+        - vérifie les collisions
+        - déplace Pyt
+        - déclenche les interactions automatiques
+
+        Elle ne déclenche aucun message Tkinter.
         """
 
-        if not self.is_inside(row, col):
+        if not self.is_inside(
+            row,
+            col
+        ):
+
             self.message = (
                 "Pyt ne peut pas sortir de la carte."
             )
+
             return False
 
-        if self.is_wall(row, col):
+        if self.is_wall(
+            row,
+            col
+        ):
+
             self.message = (
                 "Pyt est bloqué par un mur."
             )
+
             return False
 
-        if self.is_door(row, col):
+        if self.is_door(
+            row,
+            col
+        ):
+
             self.message = (
                 "La porte est fermée."
             )
+
             return False
 
-        if self.is_box(row, col):
-            pushed = self.try_push_box(row, col)
+        # ----------------------------------------------------
+        # CAISSE
+        # ----------------------------------------------------
+
+        if self.is_box(
+            row,
+            col
+        ):
+
+            pushed = self.try_push_box(
+                row,
+                col
+            )
 
             if not pushed:
+
                 self.message = (
-                    "Pyt ne peut pas pousser cette caisse."
+                    "Pyt ne peut pas pousser "
+                    "cette caisse."
                 )
+
                 return False
+
+        # ----------------------------------------------------
+        # DÉPLACEMENT
+        # ----------------------------------------------------
 
         self.robot.row = row
         self.robot.col = col
 
         self.message = ""
 
-        self.check_automatic_interactions()
-        self.check_success()
+        # Interactions automatiques.
+        self.check_automatic_interactions(
+            check_completion=True
+        )
 
         return True
 
-    # ---------------------------------------------------------
-    # CAISSES
-    # ---------------------------------------------------------
+    # ========================================================
+    # POUSSER UNE CAISSE
+    # ========================================================
 
-    def try_push_box(self, box_row, box_col):
+    def try_push_box(
+        self,
+        box_row,
+        box_col
+    ):
         """
-        Essaie de pousser automatiquement une caisse.
+        Pousse une caisse dans la direction
+        vers laquelle Pyt regarde.
 
-        La caisse est poussée dans la direction actuelle
-        de Pyt.
+        Cette mécanique sera surtout utile
+        pour des missions futures.
         """
 
         delta_row, delta_col = (
-            self.robot.get_direction_vector()
+            self.robot
+            .get_direction_vector()
         )
 
-        new_row = box_row + delta_row
-        new_col = box_col + delta_col
+        new_row = (
+            box_row
+            + delta_row
+        )
 
-        if not self.is_inside(new_row, new_col):
+        new_col = (
+            box_col
+            + delta_col
+        )
+
+        if not self.is_inside(
+            new_row,
+            new_col
+        ):
             return False
 
-        if self.is_wall(new_row, new_col):
+        if self.is_wall(
+            new_row,
+            new_col
+        ):
             return False
 
-        if self.is_door(new_row, new_col):
+        if self.is_door(
+            new_row,
+            new_col
+        ):
             return False
 
-        if self.is_box(new_row, new_col):
+        if self.is_box(
+            new_row,
+            new_col
+        ):
             return False
 
-        old_position = (box_row, box_col)
-        new_position = (new_row, new_col)
+        old_position = (
+            box_row,
+            box_col
+        )
 
-        self.boxes.remove(old_position)
-        self.boxes.add(new_position)
+        new_position = (
+            new_row,
+            new_col
+        )
+
+        self.boxes.remove(
+            old_position
+        )
+
+        self.boxes.add(
+            new_position
+        )
 
         return True
 
-    # ---------------------------------------------------------
+    # ========================================================
     # INTERACTIONS AUTOMATIQUES
-    # ---------------------------------------------------------
+    # ========================================================
 
-    def check_automatic_interactions(self):
-        """
-        Lance automatiquement les interactions correspondant
-        à la case sur laquelle se trouve Pyt.
-        """
+    def check_automatic_interactions(
+        self,
+        check_completion=True
+    ):
 
         position = (
             self.robot.row,
@@ -326,64 +515,112 @@ class Game:
         )
 
         if position in self.objects:
-            self.collect_object(position)
+
+            self.collect_object(
+                position
+            )
 
         if position in self.deposits:
-            self.deposit_object(position)
+
+            self.deposit_object(
+                position
+            )
 
         if position in self.dirt:
-            self.clean_tile(position)
+
+            self.clean_tile(
+                position
+            )
 
         if position in self.buttons:
-            self.activate_button(position)
+
+            self.activate_button(
+                position
+            )
 
         if position in self.chargers:
+
             self.recharge_robot()
 
-        self.check_success()
+        # On peut mettre completed à True ici,
+        # mais aucune fenêtre de victoire n'est affichée.
+        #
+        # ui.py attend la fin de l'animation
+        # avant d'appeler handle_success().
+        if check_completion:
 
-    def collect_object(self, position):
-        """Ramasse automatiquement un objet."""
+            self.check_success()
+
+    # ========================================================
+    # RAMASSAGE AUTOMATIQUE
+    # ========================================================
+
+    def collect_object(
+        self,
+        position
+    ):
 
         if position not in self.objects:
             return
 
-        self.objects.remove(position)
+        self.objects.remove(
+            position
+        )
 
         self.collected_objects += 1
 
-        if hasattr(self.robot, "inventory"):
+        if hasattr(
+            self.robot,
+            "inventory"
+        ):
+
             self.robot.inventory += 1
 
         self.message = (
             "Pyt a ramassé un objet."
         )
 
-    def deposit_object(self, position):
-        """
-        Dépose automatiquement un objet si Pyt en possède un.
-        """
+    # ========================================================
+    # DÉPÔT AUTOMATIQUE
+    # ========================================================
 
-        if not hasattr(self.robot, "inventory"):
+    def deposit_object(
+        self,
+        position
+    ):
+
+        if not hasattr(
+            self.robot,
+            "inventory"
+        ):
             return
 
         if self.robot.inventory <= 0:
             return
 
         self.robot.inventory -= 1
+
         self.deposited_objects += 1
 
         self.message = (
             "Pyt a déposé un objet."
         )
 
-    def clean_tile(self, position):
-        """Nettoie automatiquement une case sale."""
+    # ========================================================
+    # NETTOYAGE AUTOMATIQUE
+    # ========================================================
+
+    def clean_tile(
+        self,
+        position
+    ):
 
         if position not in self.dirt:
             return
 
-        self.dirt.remove(position)
+        self.dirt.remove(
+            position
+        )
 
         self.cleaned_tiles += 1
 
@@ -391,43 +628,61 @@ class Game:
             "Pyt a nettoyé la case."
         )
 
-    def activate_button(self, position):
-        """
-        Active automatiquement un bouton.
+    # ========================================================
+    # BOUTON
+    # ========================================================
 
-        Pour le MVP, un bouton peut ouvrir toutes les portes
-        du niveau.
-        """
+    def activate_button(
+        self,
+        position
+    ):
 
         if position in self.activated_buttons:
             return
 
-        self.activated_buttons.add(position)
+        self.activated_buttons.add(
+            position
+        )
 
-        if len(self.doors) > 0:
+        # Pour l'instant, un bouton ouvre
+        # toutes les portes du niveau.
+        if self.doors:
+
             self.doors.clear()
 
         self.message = (
             "Pyt a activé un mécanisme."
         )
 
-    def recharge_robot(self):
-        """Recharge automatiquement Pyt."""
+    # ========================================================
+    # CHARGEUR
+    # ========================================================
 
-        if hasattr(self.robot, "energy"):
-            if hasattr(self.robot, "max_energy"):
-                self.robot.energy = self.robot.max_energy
+    def recharge_robot(self):
+
+        if hasattr(
+            self.robot,
+            "energy"
+        ):
+
+            if hasattr(
+                self.robot,
+                "max_energy"
+            ):
+
+                self.robot.energy = (
+                    self.robot.max_energy
+                )
 
         self.message = (
             "Pyt est rechargé."
         )
 
-    # ---------------------------------------------------------
-    # OBJECTIF
-    # ---------------------------------------------------------
+    # ========================================================
+    # CRISTAL
+    # ========================================================
 
     def robot_is_on_goal(self):
-        """Vérifie si Pyt se trouve sur la destination."""
 
         if self.goal is None:
             return False
@@ -437,13 +692,17 @@ class Game:
             self.robot.col
         ) == self.goal
 
+    # ========================================================
+    # RÉUSSITE
+    # ========================================================
+
     def check_success(self):
         """
-        Vérifie la condition de réussite du niveau.
+        Vérifie si l'objectif logique est réussi.
 
-        Plusieurs types d'objectifs sont prévus afin que
-        levels.py puisse créer différents exercices sans
-        déplacer la logique dans l'interface.
+        IMPORTANT :
+        cette méthode ne crée aucun messagebox.
+        ui.py décide quand annoncer la réussite.
         """
 
         objective = self.level.get(
@@ -451,26 +710,64 @@ class Game:
             "reach_goal"
         )
 
+        success = False
+
+        # ----------------------------------------------------
+        # ATTEINDRE LE CRISTAL
+        # ----------------------------------------------------
+
         if objective == "reach_goal":
-            success = self.robot_is_on_goal()
+
+            success = (
+                self.robot_is_on_goal()
+            )
+
+        # ----------------------------------------------------
+        # RAMASSER TOUS LES OBJETS
+        # ----------------------------------------------------
 
         elif objective == "collect_all":
+
             success = (
                 len(self.objects) == 0
             )
 
+        # ----------------------------------------------------
+        # NETTOYER
+        # ----------------------------------------------------
+
         elif objective == "clean_all":
+
             success = (
                 len(self.dirt) == 0
             )
 
+        # ----------------------------------------------------
+        # BOUTONS
+        # ----------------------------------------------------
+
         elif objective == "activate_all":
+
             success = (
-                len(self.activated_buttons)
-                >= len(self.buttons)
+                len(
+                    self.activated_buttons
+                )
+                >=
+                len(
+                    self.buttons
+                )
+                and
+                len(
+                    self.buttons
+                ) > 0
             )
 
+        # ----------------------------------------------------
+        # DÉPÔT
+        # ----------------------------------------------------
+
         elif objective == "deposit":
+
             required = self.level.get(
                 "required_deposits",
                 1
@@ -481,52 +778,69 @@ class Game:
                 >= required
             )
 
+        # ----------------------------------------------------
+        # CAISSES
+        # ----------------------------------------------------
+
         elif objective == "boxes":
-            targets = self._positions_to_set(
-                self.level.get(
-                    "box_targets",
-                    []
+
+            targets = (
+                self._positions_to_set(
+                    self.level.get(
+                        "box_targets",
+                        []
+                    )
                 )
             )
 
             success = (
                 len(targets) > 0
-                and targets.issubset(self.boxes)
+                and
+                targets.issubset(
+                    self.boxes
+                )
             )
+
+        # ----------------------------------------------------
+        # OBJECTIF COMBINÉ
+        # ----------------------------------------------------
 
         elif objective == "combined":
+
             success = (
                 self.robot_is_on_goal()
-                and len(self.objects) == 0
-                and len(self.dirt) == 0
+                and
+                len(self.objects) == 0
+                and
+                len(self.dirt) == 0
             )
 
-        else:
-            success = False
+        # ----------------------------------------------------
+        # RÉSULTAT
+        # ----------------------------------------------------
 
-        if success:
-            self.completed = True
+        self.completed = bool(
+            success
+        )
 
-            self.message = (
-                "Niveau réussi !"
-            )
+        return self.completed
 
-        return success
+    # ========================================================
+    # TYPE D'UNE CASE
+    # ========================================================
 
-    # ---------------------------------------------------------
-    # ÉTAT POUR L'INTERFACE
-    # ---------------------------------------------------------
+    def get_tile_type(
+        self,
+        row,
+        col
+    ):
 
-    def get_tile_type(self, row, col):
-        """
-        Donne à ui.py le contenu logique d'une case.
+        position = (
+            row,
+            col
+        )
 
-        ui.py pourra ensuite décider comment dessiner
-        graphiquement cette information.
-        """
-
-        position = (row, col)
-
+        # Obstacles prioritaires.
         if position in self.walls:
             return self.WALL
 
@@ -536,6 +850,7 @@ class Game:
         if position in self.boxes:
             return self.BOX
 
+        # Interactions.
         if position in self.objects:
             return self.OBJECT
 
@@ -551,20 +866,20 @@ class Game:
         if position in self.chargers:
             return self.CHARGER
 
+        # Objectif.
         if self.goal == position:
             return self.GOAL
 
         return self.EMPTY
 
-    def get_state(self):
-        """
-        Retourne une copie simple de l'état actuel.
+    # ========================================================
+    # ÉTAT COMPLET
+    # ========================================================
 
-        Utile pour ui.py sans lui demander de recréer
-        une deuxième logique de jeu.
-        """
+    def get_state(self):
 
         return {
+
             "rows": self.rows,
             "cols": self.cols,
 
@@ -577,39 +892,79 @@ class Game:
                 self.robot.direction
             ),
 
-            "walls": set(self.walls),
-            "objects": set(self.objects),
-            "deposits": set(self.deposits),
-            "buttons": set(self.buttons),
-            "doors": set(self.doors),
-            "dirt": set(self.dirt),
-            "boxes": set(self.boxes),
-            "chargers": set(self.chargers),
+            "walls": set(
+                self.walls
+            ),
+
+            "objects": set(
+                self.objects
+            ),
+
+            "deposits": set(
+                self.deposits
+            ),
+
+            "buttons": set(
+                self.buttons
+            ),
+
+            "doors": set(
+                self.doors
+            ),
+
+            "dirt": set(
+                self.dirt
+            ),
+
+            "boxes": set(
+                self.boxes
+            ),
+
+            "chargers": set(
+                self.chargers
+            ),
 
             "goal": self.goal,
 
-            "completed": self.completed,
-            "failed": self.failed,
+            "completed": (
+                self.completed
+            ),
 
-            "message": self.message,
+            "failed": (
+                self.failed
+            ),
 
-            "collected_objects":
-                self.collected_objects,
+            "message": (
+                self.message
+            ),
 
-            "deposited_objects":
-                self.deposited_objects,
+            "collected_objects": (
+                self.collected_objects
+            ),
 
-            "cleaned_tiles":
-                self.cleaned_tiles,
+            "deposited_objects": (
+                self.deposited_objects
+            ),
+
+            "cleaned_tiles": (
+                self.cleaned_tiles
+            ),
+
+            "activated_buttons": set(
+                self.activated_buttons
+            ),
         }
 
-    # ---------------------------------------------------------
+    # ========================================================
     # RESET
-    # ---------------------------------------------------------
+    # ========================================================
 
     def reset(self):
         """
-        Remet entièrement le niveau dans son état initial.
+        Replace entièrement l'exercice
+        dans son état initial.
         """
 
-        self.load_level(self.level)
+        self.load_level(
+            self.level
+        )
