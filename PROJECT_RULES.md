@@ -902,3 +902,58 @@ L’exercice doit rester réalisable uniquement avec les notions enseignées aup
 - le moteur doit vérifier le résultat obtenu, pas imposer une seule manière exacte d’écrire le code.
 
 Une fois l’exercice difficile réussi, le jeu considère que l’élève a terminé le parcours principal.
+# Capacités de Pyt
+
+## Déplacement
+- avancer
+- reculer
+- tourner à gauche
+- tourner à droite
+
+## Interactions automatiques
+- ramasser un objet
+- déposer un objet
+- nettoyer une case
+- pousser un objet ou une caisse
+- activer un bouton
+- ouvrir une porte
+- recharger Pyt
+- atteindre une destination
+- déclencher un mécanisme lié à une case spéciale
+- terminer un niveau lorsqu’un objectif est atteint
+
+## Défis possibles
+- éviter des murs
+- suivre un chemin
+- atteindre une destination
+- ranger des objets
+- trier des objets
+- nettoyer une pièce
+- déplacer des caisses
+- activer plusieurs mécanismes
+- ouvrir un passage
+- récupérer plusieurs objets
+- déposer des objets au bon endroit
+- choisir le bon trajet
+- effectuer un trajet avec une boucle
+- utiliser des conditions pour choisir une action
+- répéter des actions avec `for`
+- répéter des actions avec `while`
+- utiliser des variables pour contrôler un trajet
+- utiliser des listes pour organiser plusieurs éléments
+- créer une fonction pour automatiser une partie du trajet
+- combiner plusieurs notions Python dans un même niveau
+
+## Règle
+
+Les déplacements doivent utiliser autant que possible les commandes Python/Turtle réellement vues en cours.
+
+Les interactions comme ramasser, déposer, nettoyer, pousser, activer ou ouvrir doivent être gérées automatiquement par le moteur lorsqu’elles peuvent l’être.
+
+L’élève ne doit pas avoir besoin d’utiliser des commandes inventées comme :
+
+```python
+pick_up()
+clean()
+drop()
+open_door()
