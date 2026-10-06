@@ -2,134 +2,165 @@
 levels.py
 Jeu éducatif Python - Pyt
 
-Ce fichier contient les niveaux du jeu.
+Ce fichier contient :
+- les cours des chapitres
+- les exercices
+- les cartes
+- les objectifs
+- la progression entre les exercices
 
 IMPORTANT :
-- Les niveaux sont créés à l'avance.
-- Ils ne sont pas générés aléatoirement.
-- Chaque chapitre contient 3 exercices :
-    1. Facile
-    2. Moyen
-    3. Difficile
-- Tous les niveaux utilisent le même format.
+Le cours explique les notions.
+Les exercices servent uniquement à s'entraîner.
 """
 
 
 # ============================================================
-# CHAPITRE 1
-# DÉPLACEMENTS DE BASE / TURTLE
+# COURS DU CHAPITRE 1
+# ============================================================
+
+CHAPTER_1_COURSE = {
+    "chapter": 1,
+
+    "title": "Déplacer Pyt",
+
+    "subtitle": "Les déplacements de base",
+
+    "introduction": (
+        "Dans ce chapitre, tu vas apprendre à déplacer Pyt "
+        "sur une grille avec des instructions Python.\n\n"
+        "Pyt regarde toujours dans une direction. "
+        "Il peut avancer, reculer et tourner."
+    ),
+
+    "sections": [
+        {
+            "title": "1. Avancer",
+
+            "text": (
+                "La fonction forward() permet de faire "
+                "avancer Pyt dans la direction qu'il regarde."
+            ),
+
+            "example": (
+                "forward(1)\n"
+                "forward(3)"
+            ),
+
+            "explanation": (
+                "Le nombre entre parenthèses indique "
+                "le nombre de cases à parcourir."
+            ),
+        },
+
+        {
+            "title": "2. Reculer",
+
+            "text": (
+                "La fonction backward() permet de faire "
+                "reculer Pyt sans changer sa direction."
+            ),
+
+            "example": (
+                "backward(1)\n"
+                "backward(2)"
+            ),
+
+            "explanation": (
+                "Pyt recule du nombre de cases indiqué "
+                "entre parenthèses."
+            ),
+        },
+
+        {
+            "title": "3. Tourner à droite",
+
+            "text": (
+                "La fonction right() permet à Pyt de "
+                "tourner vers la droite."
+            ),
+
+            "example": (
+                "right(90)"
+            ),
+
+            "explanation": (
+                "Dans nos exercices, 90 degrés correspond "
+                "à un quart de tour."
+            ),
+        },
+
+        {
+            "title": "4. Tourner à gauche",
+
+            "text": (
+                "La fonction left() permet à Pyt de "
+                "tourner vers la gauche."
+            ),
+
+            "example": (
+                "left(90)"
+            ),
+
+            "explanation": (
+                "Comme avec right(), 90 degrés correspond "
+                "à un quart de tour."
+            ),
+        },
+
+        {
+            "title": "5. Plusieurs instructions",
+
+            "text": (
+                "Python exécute les instructions dans "
+                "l'ordre, de haut en bas."
+            ),
+
+            "example": (
+                "forward(3)\n"
+                "right(90)\n"
+                "forward(2)"
+            ),
+
+            "explanation": (
+                "Ici, Pyt avance de 3 cases, tourne à droite, "
+                "puis avance encore de 2 cases."
+            ),
+        },
+    ],
+}
+
+
+# ============================================================
+# CHAPITRE 1 - EXERCICES
 # ============================================================
 
 CHAPTER_1 = [
-    # --------------------------------------------------------
+
+    # ========================================================
     # EXERCICE 1 - FACILE
-    # --------------------------------------------------------
+    # ========================================================
+
     {
         "chapter": 1,
         "exercise": 1,
+
         "difficulty": "Facile",
 
-        "title": "Premier déplacement",
+        "title": "Ligne droite",
 
         "instruction": (
-            "Aide Pyt à atteindre le cristal jaune.\n\n"
-            "Utilise forward() pour faire avancer Pyt."
+            "Amène Pyt jusqu'au cristal jaune."
         ),
 
-        "python_concept": [
-            "forward"
-        ],
-
-        # Taille logique de la carte
         "rows": 7,
         "cols": 9,
 
-        # Position de départ : (ligne, colonne)
         "start": (3, 1),
 
-        # Pyt regarde vers la droite
         "start_direction": "east",
 
-        # Destination
         "goal": (3, 6),
-
-        # Murs
-        "walls": [
-            (0, 0),
-            (0, 1),
-            (0, 2),
-            (0, 3),
-            (0, 4),
-            (0, 5),
-            (0, 6),
-            (0, 7),
-            (0, 8),
-
-            (6, 0),
-            (6, 1),
-            (6, 2),
-            (6, 3),
-            (6, 4),
-            (6, 5),
-            (6, 6),
-            (6, 7),
-            (6, 8),
-
-            (1, 0),
-            (2, 0),
-            (3, 0),
-            (4, 0),
-            (5, 0),
-
-            (1, 8),
-            (2, 8),
-            (3, 8),
-            (4, 8),
-            (5, 8),
-        ],
-
-        # Éléments interactifs
-        "objects": [],
-        "deposits": [],
-        "buttons": [],
-        "doors": [],
-        "dirt": [],
-        "boxes": [],
-        "chargers": [],
-
-        # Condition de réussite utilisée par game.py
-        "objective": "reach_goal",
-    },
-
-    # --------------------------------------------------------
-    # EXERCICE 2 - MOYEN
-    # --------------------------------------------------------
-    {
-        "chapter": 1,
-        "exercise": 2,
-        "difficulty": "Moyen",
-
-        "title": "Premier virage",
-
-        "instruction": (
-            "Le chemin n'est plus tout droit !\n\n"
-            "Fais avancer Pyt puis utilise right(90) "
-            "pour tourner à droite et atteindre le cristal."
-        ),
-
-        "python_concept": [
-            "forward",
-            "right"
-        ],
-
-        "rows": 7,
-        "cols": 9,
-
-        "start": (2, 1),
-
-        "start_direction": "east",
-
-        "goal": (5, 6),
 
         "walls": [
             # Bord supérieur
@@ -167,17 +198,6 @@ CHAPTER_1 = [
             (3, 8),
             (4, 8),
             (5, 8),
-
-            # Obstacles
-            (3, 2),
-            (3, 3),
-            (3, 4),
-            (3, 5),
-
-            (4, 2),
-            (4, 3),
-            (4, 4),
-            (4, 5),
         ],
 
         "objects": [],
@@ -191,31 +211,114 @@ CHAPTER_1 = [
         "objective": "reach_goal",
     },
 
-    # --------------------------------------------------------
+    # ========================================================
+    # EXERCICE 2 - MOYEN
+    # ========================================================
+
+    {
+        "chapter": 1,
+        "exercise": 2,
+
+        "difficulty": "Moyen",
+
+        "title": "Premier virage",
+
+        "instruction": (
+            "Amène Pyt jusqu'au cristal jaune "
+            "en suivant le chemin."
+        ),
+
+        "rows": 8,
+        "cols": 10,
+
+        "start": (2, 1),
+
+        "start_direction": "east",
+
+        "goal": (5, 7),
+
+        "walls": [
+            # Bord supérieur
+            (0, 0),
+            (0, 1),
+            (0, 2),
+            (0, 3),
+            (0, 4),
+            (0, 5),
+            (0, 6),
+            (0, 7),
+            (0, 8),
+            (0, 9),
+
+            # Bord inférieur
+            (7, 0),
+            (7, 1),
+            (7, 2),
+            (7, 3),
+            (7, 4),
+            (7, 5),
+            (7, 6),
+            (7, 7),
+            (7, 8),
+            (7, 9),
+
+            # Bord gauche
+            (1, 0),
+            (2, 0),
+            (3, 0),
+            (4, 0),
+            (5, 0),
+            (6, 0),
+
+            # Bord droit
+            (1, 9),
+            (2, 9),
+            (3, 9),
+            (4, 9),
+            (5, 9),
+            (6, 9),
+
+            # Mur horizontal
+            (3, 1),
+            (3, 2),
+            (3, 3),
+            (3, 4),
+            (3, 5),
+            (3, 6),
+
+            # Mur vertical
+            (4, 6),
+            (5, 6),
+            (6, 6),
+        ],
+
+        "objects": [],
+        "deposits": [],
+        "buttons": [],
+        "doors": [],
+        "dirt": [],
+        "boxes": [],
+        "chargers": [],
+
+        "objective": "reach_goal",
+    },
+
+    # ========================================================
     # EXERCICE 3 - DIFFICILE
-    # --------------------------------------------------------
+    # ========================================================
+
     {
         "chapter": 1,
         "exercise": 3,
+
         "difficulty": "Difficile",
 
-        "title": "Le petit labyrinthe",
+        "title": "Le labyrinthe",
 
         "instruction": (
-            "Guide Pyt jusqu'au cristal en évitant les murs.\n\n"
-            "Tu peux utiliser :\n"
-            "forward()\n"
-            "backward()\n"
-            "left()\n"
-            "right()"
+            "Trouve le chemin et amène Pyt "
+            "jusqu'au cristal jaune."
         ),
-
-        "python_concept": [
-            "forward",
-            "backward",
-            "left",
-            "right"
-        ],
 
         "rows": 9,
         "cols": 11,
@@ -271,7 +374,7 @@ CHAPTER_1 = [
             (6, 10),
             (7, 10),
 
-            # Labyrinthe intérieur
+            # Obstacles intérieurs
             (2, 2),
             (2, 3),
             (2, 4),
@@ -317,7 +420,7 @@ CHAPTER_1 = [
 
 
 # ============================================================
-# TOUS LES CHAPITRES
+# CHAPITRES
 # ============================================================
 
 CHAPTERS = {
@@ -325,144 +428,189 @@ CHAPTERS = {
 }
 
 
+COURSES = {
+    1: CHAPTER_1_COURSE,
+}
+
+
 # ============================================================
-# FONCTIONS D'ACCÈS AUX NIVEAUX
+# RÉCUPÉRER UN COURS
+# ============================================================
+
+def get_course(chapter):
+    """
+    Retourne le cours complet d'un chapitre.
+    """
+
+    if chapter not in COURSES:
+        raise ValueError(
+            f"Le cours du chapitre {chapter} "
+            f"n'existe pas."
+        )
+
+    return COURSES[chapter]
+
+
+# ============================================================
+# RÉCUPÉRER UN NIVEAU
 # ============================================================
 
 def get_level(chapter, exercise):
     """
-    Retourne un niveau précis.
+    Retourne un exercice précis.
 
     Exemple :
-        get_level(1, 1)
-
-    retourne l'exercice facile du chapitre 1.
+        get_level(1, 2)
     """
 
     if chapter not in CHAPTERS:
         raise ValueError(
-            f"Le chapitre {chapter} n'existe pas."
+            f"Le chapitre {chapter} "
+            f"n'existe pas."
         )
 
-    levels = CHAPTERS[chapter]
+    for level in CHAPTERS[chapter]:
 
-    for level in levels:
-        if level["exercise"] == exercise:
+        if (
+            level["exercise"]
+            == exercise
+        ):
             return level
 
     raise ValueError(
-        f"L'exercice {exercise} du chapitre "
-        f"{chapter} n'existe pas."
+        f"L'exercice {exercise} "
+        f"du chapitre {chapter} "
+        f"n'existe pas."
     )
 
 
+# ============================================================
+# RÉCUPÉRER UN CHAPITRE
+# ============================================================
+
 def get_chapter(chapter):
     """
-    Retourne tous les exercices d'un chapitre.
+    Retourne les exercices d'un chapitre.
     """
 
     if chapter not in CHAPTERS:
         raise ValueError(
-            f"Le chapitre {chapter} n'existe pas."
+            f"Le chapitre {chapter} "
+            f"n'existe pas."
         )
 
     return CHAPTERS[chapter]
 
 
+# ============================================================
+# NOMBRE DE CHAPITRES
+# ============================================================
+
 def get_number_of_chapters():
     """
-    Retourne le nombre de chapitres actuellement créés.
+    Retourne le nombre de chapitres créés.
     """
 
-    return len(CHAPTERS)
+    return len(
+        CHAPTERS
+    )
 
+
+# ============================================================
+# NOMBRE D'EXERCICES
+# ============================================================
 
 def get_number_of_levels(chapter):
     """
-    Retourne le nombre d'exercices d'un chapitre.
+    Retourne le nombre d'exercices du chapitre.
     """
 
-    return len(get_chapter(chapter))
+    return len(
+        get_chapter(chapter)
+    )
 
 
-def get_next_level(chapter, exercise):
+# ============================================================
+# NIVEAU SUIVANT
+# ============================================================
+
+def get_next_level(
+    chapter,
+    exercise
+):
     """
-    Retourne le prochain niveau.
+    Retourne l'exercice suivant.
 
-    Si l'exercice actuel est le dernier du chapitre,
-    la fonction essaie de passer au chapitre suivant.
-
-    Retourne None s'il n'y a pas encore de niveau suivant.
+    Retourne None si aucun exercice suivant
+    n'est disponible.
     """
 
-    levels = get_chapter(chapter)
+    levels = get_chapter(
+        chapter
+    )
 
-    current_index = None
+    for index, level in enumerate(
+        levels
+    ):
 
-    for index, level in enumerate(levels):
-        if level["exercise"] == exercise:
-            current_index = index
+        if (
+            level["exercise"]
+            == exercise
+        ):
+
+            next_index = (
+                index + 1
+            )
+
+            if (
+                next_index
+                < len(levels)
+            ):
+                return levels[
+                    next_index
+                ]
+
             break
 
-    if current_index is None:
-        return None
-
-    # Exercice suivant dans le même chapitre
-    next_index = current_index + 1
-
-    if next_index < len(levels):
-        return levels[next_index]
-
-    # Chapitre suivant
-    next_chapter = chapter + 1
+    next_chapter = (
+        chapter + 1
+    )
 
     if next_chapter in CHAPTERS:
-        next_levels = CHAPTERS[next_chapter]
 
-        if len(next_levels) > 0:
+        next_levels = CHAPTERS[
+            next_chapter
+        ]
+
+        if next_levels:
             return next_levels[0]
 
     return None
 
 
-def level_exists(chapter, exercise):
+# ============================================================
+# VÉRIFIER UN NIVEAU
+# ============================================================
+
+def level_exists(
+    chapter,
+    exercise
+):
     """
-    Vérifie simplement si un niveau existe.
+    Vérifie si un exercice existe.
     """
 
     if chapter not in CHAPTERS:
         return False
 
-    for level in CHAPTERS[chapter]:
-        if level["exercise"] == exercise:
+    for level in CHAPTERS[
+        chapter
+    ]:
+
+        if (
+            level["exercise"]
+            == exercise
+        ):
             return True
 
     return False
-
-
-# ============================================================
-# PETIT TEST DU FICHIER
-# ============================================================
-
-if __name__ == "__main__":
-    print("Test de levels.py")
-    print("-----------------")
-
-    print(
-        "Nombre de chapitres :",
-        get_number_of_chapters()
-    )
-
-    print(
-        "Nombre de niveaux dans le chapitre 1 :",
-        get_number_of_levels(1)
-    )
-
-    level = get_level(1, 1)
-
-    print()
-    print("Premier niveau :")
-    print("Titre :", level["title"])
-    print("Difficulté :", level["difficulty"])
-    print("Départ :", level["start"])
-    print("Objectif :", level["goal"])
