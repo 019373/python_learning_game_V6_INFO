@@ -1059,3 +1059,129 @@ Exemple pour le chapitre 1 : Pyt peut devoir avancer jusqu’à un livre, le ré
 - Pyt doit donc servir à présenter les explications, les indications, certains messages d’erreur et les conseils, afin de garder une interface cohérente.
 
 Toutes ces fonctionnalités doivent respecter l’architecture actuelle du projet, rester compatibles avec la version navigateur et ne pas casser les fonctionnalités déjà opérationnelles.
+# Modifications à apporter au jeu
+
+## Règle importante
+
+**NE TOUCHE PAS AUX GRAPHISMES ACTUELS DU JEU POUR L’INSTANT. GARDE-LES COMME ILS SONT.**
+
+Les modifications demandées ici concernent principalement le fonctionnement, les animations, la navigation, la carte, les messages et l’adaptation mobile. Ne refais pas le style graphique général du jeu.
+
+---
+
+## 1. Version mobile
+
+Rendre le jeu utilisable également sur mobile.
+
+Sur ordinateur, garder le fonctionnement actuel avec les fenêtres / pop-ups.
+
+Sur mobile, à la demande du professeur, les éléments qui apparaissent normalement sous forme de pop-up doivent apparaître **directement dans la page** plutôt que dans des fenêtres flottantes.
+
+Le contenu doit rester le même. Seule la manière de l’afficher change selon l’appareil.
+
+---
+
+## 2. Cinématique d’introduction
+
+Améliorer la cinématique actuelle sans changer son principe.
+
+Actuellement, Pyt arrive trop rapidement.
+
+Modifier son arrivée pour que :
+
+- Pyt arrive plus lentement ;
+- il se déplace en **sautillant**, un peu comme la lampe dans l’introduction Pixar ;
+- l’animation reste fluide ;
+- Pyt soit légèrement plus éloigné des lettres lorsqu’il arrive à sa position finale ;
+- Pyt soit légèrement réduit car il paraît actuellement un peu plus grand que les lettres ;
+- Pyt et les lettres aient finalement une taille cohérente.
+
+Ajouter également un message clignotant doucement du type :
+
+**« Appuyez sur une touche pour continuer »**
+
+Sur mobile, cela doit plutôt indiquer qu’il faut toucher l’écran.
+
+Tant que l’utilisateur n’a :
+
+- appuyé sur aucune touche sur ordinateur ;
+- ou touché l’écran sur mobile ;
+
+**rien ne doit continuer.**
+
+L’introduction reste figée sur sa scène finale jusqu’à cette interaction.
+
+---
+
+## 3. Bouton Crédits
+
+Dans les paramètres, ajouter un bouton :
+
+**Crédits**
+
+Lorsqu’on clique dessus, lancer une cinématique de crédits avec un défilement dans le style d’un générique spatial à la Star Wars.
+
+Les crédits défilent progressivement.
+
+Contenu :
+
+### Son
+
+Jean Noah
+Tom Kahle
+
+### Graphisme
+
+Noah Jean
+Tom Kahle
+Zéphyr Thomas
+Adrian Thiébaud
+
+### Moteur du jeu
+
+Adrian Thiébaud
+Zéphyr Thomas
+
+Après ces catégories, ajouter un texte de remerciements volontairement assez solennel et pompeux, remerciant notamment les personnes ayant participé au projet, les professeurs et les personnes ayant permis sa réalisation.
+
+À la fin :
+
+- le titre du jeu **PYT** apparaît en grand ;
+- il arrive progressivement au centre de l’écran ;
+- une fois arrivé au milieu, l’animation se fige.
+
+À ce moment-là, le générique reste affiché.
+
+Ajouter une **croix en haut à droite** permettant de fermer les crédits et de revenir aux paramètres.
+
+---
+
+## 4. Messages de Pyt
+
+Pour les messages où Pyt apparaît en bas de l’écran avec sa bulle de dialogue :
+
+- conserver le contenu actuel des messages sauf modifications déjà demandées auparavant ;
+- ajouter une petite **croix en haut à droite de la bulle** pour pouvoir la fermer.
+
+Lorsque Pyt apparaît pour donner un message :
+
+- ajouter une petite animation d’entrée de Pyt.
+
+Lorsque l’utilisateur ferme la bulle :
+
+- Pyt doit quitter l’écran avec une petite animation de sortie.
+
+Il ne doit pas simplement apparaître et disparaître instantanément.
+
+---
+
+## 5. Paramètre musique
+
+Dans les paramètres, lorsqu’on choisit :
+
+**Musique = Non**
+
+le volume doit automatiquement passer à :
+
+```text
+0 %
