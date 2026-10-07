@@ -997,3 +997,65 @@ ui.js
 PROJECT_RULES.md
 README.md
 assets/
+# Améliorations à ajouter au jeu
+
+Il faut maintenant améliorer le jeu avec les éléments suivants. Ces modifications doivent être intégrées sans supprimer ou modifier inutilement ce qui fonctionne déjà.
+
+- Ajouter un **menu principal** avec au minimum les boutons `Play` et `Settings`.
+
+- Dans `Settings`, permettre au joueur :
+- d’activer ou désactiver la musique ;
+- de régler le volume sonore.
+
+- Ajouter une **cinématique animée d’introduction** avant le menu ou au lancement du jeu. Au début, seules les lettres **P** et **T** du titre sont affichées. Pyt arrive depuis la droite de l’écran, se place entre les deux lettres et lève les bras afin que sa silhouette représente le **Y**. L’ensemble forme alors **PYT**, qui est le titre du jeu. Les lettres et le robot doivent avoir une taille visuellement cohérente. Pendant cette animation, Pyt montre uniquement avec ses yeux qu’il est content. Il ne faut pas utiliser une image fixe : la scène doit réellement être animée.
+
+- Prévoir le système audio de manière à pouvoir utiliser plusieurs musiques différentes :
+- une musique pour la cinématique d’introduction ;
+- une musique pour les parties d’explication / théorie ;
+- une musique différente pour chaque chapitre pendant le jeu.
+
+Cependant, **le jeu doit fonctionner normalement même si aucun fichier musical n’a encore été ajouté**. L’absence d’une musique ne doit jamais provoquer d’erreur ou empêcher le jeu de démarrer.
+
+- Ajouter beaucoup plus de **décoration dans les niveaux**. Chaque chapitre se déroule dans une pièce différente d’une maison. Le décor doit donc correspondre à la pièce associée au chapitre et rendre les niveaux beaucoup moins vides.
+
+- Ajouter également du décor sur la **carte de sélection des niveaux**. L’apparence de la carte doit évoluer ou contenir des éléments visuels correspondant à la pièce / au thème du chapitre sélectionné.
+
+- Modifier la vitesse de déplacement de Pyt. Un déplacement d’une case doit prendre environ **0,5 seconde**, et non environ 2 secondes.
+
+- Rendre la progression des niveaux beaucoup plus progressive en difficulté. Les exercices faciles doivent rester accessibles, puis les niveaux moyens et difficiles doivent demander de plus en plus de raisonnement et combiner davantage de notions.
+
+- Les exercices doivent être conçus pour pousser réellement l’élève à utiliser **toutes les notions importantes du chapitre**, et si possible certaines notions apprises dans les chapitres précédents. Il ne faut pas qu’une notion puisse être complètement évitée avec une solution beaucoup trop simple.
+
+Exemple pour le chapitre 1 : Pyt peut devoir avancer jusqu’à un livre, le récupérer automatiquement, puis revenir en arrière pour atteindre l’objectif. Cela oblige notamment l’élève à comprendre différents déplacements au lieu de simplement utiliser `forward()` une fois.
+
+- Il faut cependant continuer à accepter **plusieurs solutions correctes** lorsqu’elles permettent réellement d’atteindre l’objectif. Le jeu ne doit pas comparer le code de l’élève à une seule solution enregistrée.
+
+- Lorsqu’un élève exécute un programme incorrect, **Pyt doit quand même effectuer les actions valides du programme**. Il ne faut pas empêcher le robot de bouger simplement parce que la solution finale est incorrecte. Voir Pyt se déplacer doit permettre à l’élève de comprendre visuellement où son raisonnement s’est trompé.
+
+- Si Pyt termine son programme mais se trouve au mauvais endroit, une petite **bulle de pensée** doit apparaître au-dessus ou près de lui avec un message du type :
+
+`Ce n’est pas là que je voulais aller...`
+
+- Prévoir correctement les différents cas d’échec : mauvaise destination, trajet incomplet, objet non récupéré, objet mal placé, objectif non terminé, etc. Le feedback doit correspondre à ce qui s’est réellement passé.
+
+- Lors de la **première tentative incorrecte**, ne pas souligner immédiatement la faute dans le code. Le jeu doit indiquer à l’élève qu’il peut revoir la théorie et lui préciser que, s’il se trompe encore, le jeu pourra lui montrer plus précisément où se trouve son erreur.
+
+- Après cette première erreur, proposer de **revoir la théorie**. Lorsque l’élève termine cette révision, il doit revenir directement au même exercice avec son code, et non être renvoyé sur la carte des niveaux.
+
+- À partir de la **deuxième tentative incorrecte**, lorsque cela est techniquement possible et pertinent, la partie problématique du code doit être **soulignée en rouge** afin d’aider l’élève à identifier son erreur.
+
+- Le système d’aide doit tenir compte du fait qu’un programme peut être syntaxiquement correct mais produire un mauvais résultat. Il ne faut donc pas forcément signaler une ligne comme « fausse » lorsqu’il existe plusieurs solutions possibles. L’aide doit uniquement être donnée lorsqu’il est possible d’identifier raisonnablement le problème.
+
+- Sur la **carte des niveaux**, ajouter une indication claire expliquant qu’il faut cliquer sur un exercice pour le lancer. Cette indication doit apparaître naturellement dans l’interface, notamment lors de la première utilisation.
+
+- Ajouter des boutons permettant de **passer d’un chapitre à l’autre** depuis la carte.
+
+- Le joueur doit pouvoir revenir sur un chapitre précédent et **refaire un exercice déjà terminé**.
+
+- Pour toutes les informations données directement au joueur dans le jeu, utiliser Pyt comme personnage-guide. Pyt apparaît en **bas à gauche de l’écran** et parle avec une bulle de dialogue.
+
+- **Ne pas réécrire inutilement le contenu actuel des bulles de dialogue**, car leur contenu actuel convient. Il faut conserver ce contenu et uniquement appliquer les modifications demandées précédemment lorsqu’elles sont nécessaires.
+
+- Pyt doit donc servir à présenter les explications, les indications, certains messages d’erreur et les conseils, afin de garder une interface cohérente.
+
+Toutes ces fonctionnalités doivent respecter l’architecture actuelle du projet, rester compatibles avec la version navigateur et ne pas casser les fonctionnalités déjà opérationnelles.
