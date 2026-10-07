@@ -1,3626 +1,440 @@
 "use strict";
 
 /* =========================================================
-   PYT
-   game.js
+   PYT - game.js
 
-   Moteur principal du jeu.
+   MOTEUR PRINCIPAL DU JEU
 
-   - rendu Canvas
-   - art.js pour tous les graphismes
-   - déplacement de Pyt
-   - collisions
-   - objets
-   - mini-interpréteur Python
-   - variables
-   - listes
-   - dictionnaires
-   - if / elif / else
-   - for / range
-   - while
-   - fonctions
-   - print
-   - validation des missions
+   ---------------------------------------------------------
+
+   PRINCIPES :
+
+   - Pyt se déplace sur une grille logique.
+   - Le décor n'est PAS la grille.
+   - La grille est dessinée par-dessus le décor.
+   - 1 case ≈ 0,5 seconde de déplacement.
+   - Les actions valides sont jouées même si le programme
+     n'atteint finalement pas l'objectif.
+   - On vérifie le résultat obtenu, pas une solution exacte.
+   - Les interactions simples sont automatiques.
+
+   COMMANDES PRINCIPALES ÉLÈVE :
+
+       forward(1)
+       backward(1)
+       left(90)
+       right(90)
+
+   Compatibilité supplémentaire :
+
+       avancer(1)
+       reculer(1)
+       tourner_gauche(90)
+       tourner_droite(90)
+
+   Interactions automatiques :
+
+   - ramasser un objet
+   - déposer un objet
+   - pousser une caisse
+   - activer un bouton
+   - ouvrir une porte
+   - nettoyer une case
+   - recharger Pyt
+   - atteindre une destination
+
 ========================================================= */
 
 
-class PytGame {
+/* =========================================================
+   SIGNAUX INTERNES DE L'INTERPRÉTEUR
+========================================================= */
+
+class PytReturnSignal {
+
+    constructor(value) {
+
+        this.value =
+            value;
+    }
+}
+
+
+class PytBreakSignal {
 
     constructor() {
 
-        this.canvas = null;
-        this.ctx = null;
+        this.isBreakSignal =
+            true;
+    }
+}
 
-        this.levelData = null;
-        this.world = null;
-        this.robot = null;
 
-        this.running = false;
 
-        this.animationFrame = null;
+/* =========================================================
+   SCOPE PYTHON SIMPLIFIÉ
+========================================================= */
 
-        this.renderRobotX = 0;
-        this.renderRobotY = 0;
+class PytScope {
 
-        this.moveAnimation = null;
+    constructor(parent = null) {
 
-        this.execution = null;
+        this.parent =
+            parent;
 
-        this.maxInstructions = 4000;
-        this.maxLoopIterations = 500;
-        this.maxCallDepth = 50;
 
-        this.resizeObserver = null;
-
-        this.init();
+        this.values =
+            Object.create(
+                null
+            );
     }
 
 
+    hasLocal(name) {
 
-    /* =====================================================
-       INITIALISATION
-    ===================================================== */
+        return Object.prototype
+            .hasOwnProperty
+            .call(
+                this.values,
+                name
+            );
+    }
 
-    init() {
+
+    has(name) {
 
         if (
-            document.readyState ===
-            "loading"
+            this.hasLocal(
+                name
+            )
         ) {
 
-            document.addEventListener(
-                "DOMContentLoaded",
-                () => this.start(),
-                {
-                    once: true
-                }
-            );
-
-        } else {
-
-            this.start();
-        }
-    }
-
-
-
-    start() {
-
-        this.canvas =
-            document.getElementById(
-                "game-canvas"
-            );
-
-
-        if (!this.canvas) {
-
-            console.warn(
-                "PYT : canvas introuvable."
-            );
-
-            return;
+            return true;
         }
 
 
-        this.ctx =
-            this.canvas.getContext(
-                "2d"
-            );
-
-
-        this.ctx.imageSmoothingEnabled =
-            false;
-
-
-        this.bindEvents();
-
-        this.prepareResize();
-
-        this.drawEmptyWorld();
+        return Boolean(
+            this.parent &&
+            this.parent.has(
+                name
+            )
+        );
     }
 
 
+    get(name) {
 
-    /* =====================================================
-       EVENTS
-    ===================================================== */
+        if (
+            this.hasLocal(
+                name
+            )
+        ) {
 
-    bindEvents() {
-
-        window.addEventListener(
-            "pyt:load-level",
-            event => {
-
-                const data =
-                    event.detail?.data;
-
-
-                if (data) {
-
-                    this.loadLevel(
-                        data
-                    );
-                }
-            }
-        );
+            return this.values[
+                name
+            ];
+        }
 
 
-        window.addEventListener(
-            "pyt:reload-world",
-            event => {
+        if (
+            this.parent
+        ) {
 
-                const data =
-                    event.detail?.data ||
-                    this.levelData;
-
-
-                if (data) {
-
-                    this.loadLevel(
-                        data
-                    );
-                }
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:run-code",
-            event => {
-
-                const code =
-                    String(
-                        event.detail?.code ??
-                        ""
-                    );
-
-
-                this.executeCode(
-                    code
+            return this.parent
+                .get(
+                    name
                 );
-            }
+        }
+
+
+        throw new Error(
+            `Nom inconnu : ${name}`
         );
     }
 
 
+    set(
+        name,
+        value
+    ) {
 
-    /* =====================================================
-       REDIMENSIONNEMENT
-    ===================================================== */
-
-    prepareResize() {
-
-        const container =
-            this.canvas
-                ?.parentElement;
-
-
-        if (
-            !container ||
-            typeof ResizeObserver ===
-                "undefined"
-        ) {
-
-            return;
-        }
+        this.values[
+            name
+        ] =
+            value;
 
 
-        this.resizeObserver =
-            new ResizeObserver(
-                () => {
-
-                    this.draw();
-                }
-            );
-
-
-        this.resizeObserver.observe(
-            container
-        );
+        return value;
     }
+}
 
 
 
-    /* =====================================================
-       CHARGEMENT D'UN NIVEAU
-    ===================================================== */
+/* =========================================================
+   ANALYSEUR DES NOTIONS UTILISÉES
+========================================================= */
 
-    loadLevel(data) {
+class PytCodeAnalyzer {
 
-        this.cancelExecution();
+    static analyze(source) {
 
-
-        this.levelData =
-            this.clone(
-                data
-            );
-
-
-        this.world =
-            this.clone(
-                data
-            );
-
-
-        if (
-            !this.world.map
-        ) {
-
-            this.world.map = {
-
-                width: 8,
-
-                height: 6,
-
-                blocked: [],
-
-                decorations: []
-            };
-        }
-
-
-        if (
-            !Array.isArray(
-                this.world.map.blocked
-            )
-        ) {
-
-            this.world.map.blocked =
-                [];
-        }
-
-
-        if (
-            !Array.isArray(
-                this.world.map.decorations
-            )
-        ) {
-
-            this.world.map.decorations =
-                [];
-        }
-
-
-        if (
-            !Array.isArray(
-                this.world.objects
-            )
-        ) {
-
-            this.world.objects =
-                [];
-        }
-
-
-        if (
-            !Array.isArray(
-                this.world.targets
-            )
-        ) {
-
-            this.world.targets =
-                [];
-        }
-
-
-        this.createRobot();
-
-        this.draw();
-
-
-        this.setStatus(
-            "Prêt"
-        );
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:world-ready",
-                {
-                    detail: {
-
-                        level:
-                            this.levelData,
-
-                        world:
-                            this.world,
-
-                        robot:
-                            this.robot
-                    }
-                }
-            )
-        );
-    }
-
-
-
-    createRobot() {
-
-        if (
-            typeof window.PytRobot !==
-            "function"
-        ) {
-
-            console.error(
-                "PYT : robot.js n'est pas chargé."
-            );
-
-            return;
-        }
-
-
-        this.robot =
-            new window.PytRobot({
-
-                world:
-                    this.world,
-
-                state:
-                    this.world.robot || {
-                        x: 0,
-                        y: 0,
-                        direction: "E"
-                    },
-
-                stepDuration:
-                    500,
-
-                turnDuration:
-                    180,
-
-                onChange:
-                    state => {
-
-                        if (
-                            !this.moveAnimation
-                        ) {
-
-                            this.renderRobotX =
-                                state.x;
-
-                            this.renderRobotY =
-                                state.y;
-                        }
-
-
-                        this.draw();
-                    },
-
-                onAction:
-                    action => {
-
-                        this.handleRobotAction(
-                            action
-                        );
-                    }
-            });
-
-
-        this.renderRobotX =
-            this.robot.x;
-
-        this.renderRobotY =
-            this.robot.y;
-    }
-
-
-
-    /* =====================================================
-       ACTIONS DU ROBOT
-    ===================================================== */
-
-    handleRobotAction(action) {
-
-        if (
-            action.type ===
-            "move_start"
-        ) {
-
-            this.animateRobotMove(
-                action
-            );
-
-            return;
-        }
-
-
-        this.draw();
-    }
-
-
-
-    animateRobotMove(action) {
-
-        if (
-            !action.from ||
-            !action.to
-        ) {
-
-            return;
-        }
-
-
-        const start =
-            performance.now();
-
-
-        const duration =
-            Number(
-                action.duration
-            ) || 500;
-
-
-        this.moveAnimation = {
-
-            from:
-                action.from,
-
-            to:
-                action.to
-        };
-
-
-        const animate =
-            now => {
-
-                if (
-                    !this.moveAnimation
-                ) {
-
-                    return;
-                }
-
-
-                const progress =
-                    Math.min(
-                        1,
-                        (
-                            now -
-                            start
-                        ) /
-                        duration
-                    );
-
-
-                const smooth =
-                    progress < 0.5
-                        ? 2 *
-                            progress *
-                            progress
-                        : 1 -
-                            Math.pow(
-                                -2 *
-                                progress +
-                                2,
-                                2
-                            ) /
-                            2;
-
-
-                this.renderRobotX =
-                    action.from.x +
-                    (
-                        action.to.x -
-                        action.from.x
-                    ) *
-                    smooth;
-
-
-                this.renderRobotY =
-                    action.from.y +
-                    (
-                        action.to.y -
-                        action.from.y
-                    ) *
-                    smooth;
-
-
-                this.draw();
-
-
-                if (
-                    progress < 1
-                ) {
-
-                    this.animationFrame =
-                        requestAnimationFrame(
-                            animate
-                        );
-
-                } else {
-
-                    this.renderRobotX =
-                        action.to.x;
-
-                    this.renderRobotY =
-                        action.to.y;
-
-
-                    this.moveAnimation =
-                        null;
-
-
-                    this.draw();
-                }
-            };
-
-
-        if (
-            this.animationFrame
-        ) {
-
-            cancelAnimationFrame(
-                this.animationFrame
-            );
-        }
-
-
-        this.animationFrame =
-            requestAnimationFrame(
-                animate
-            );
-    }
-
-
-
-    /* =====================================================
-       RENDU PRINCIPAL
-    ===================================================== */
-
-    drawEmptyWorld() {
-
-        if (
-            !this.ctx ||
-            !this.canvas
-        ) {
-
-            return;
-        }
-
-
-        this.ctx.clearRect(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-
-        this.ctx.fillStyle =
-            "#18191c";
-
-
-        this.ctx.fillRect(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
-        );
-    }
-
-
-
-    draw() {
-
-        if (
-            !this.ctx ||
-            !this.canvas
-        ) {
-
-            return;
-        }
-
-
-        if (
-            !this.world
-        ) {
-
-            this.drawEmptyWorld();
-
-            return;
-        }
-
-
-        const layout =
-            this.getCanvasLayout();
-
-
-        this.ctx.clearRect(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-
-        this.drawBackground(
-            layout
-        );
-
-
-        this.drawFloor(
-            layout
-        );
-
-
-        this.drawGrid(
-            layout
-        );
-
-
-        this.drawTargets(
-            layout
-        );
-
-
-        this.drawDecorations(
-            layout
-        );
-
-
-        this.drawObjects(
-            layout
-        );
-
-
-        this.drawRobot(
-            layout
-        );
-    }
-
-
-
-    /* =====================================================
-       LAYOUT
-    ===================================================== */
-
-    getCanvasLayout() {
-
-        const map =
-            this.world?.map ||
-            {};
-
-
-        const columns =
-            Math.max(
-                1,
-                Number(
-                    map.width
-                ) || 8
-            );
-
-
-        const rows =
-            Math.max(
-                1,
-                Number(
-                    map.height
-                ) || 6
-            );
-
-
-        const padding =
-            34;
-
-
-        const tile =
-            Math.max(
-                16,
-                Math.floor(
-                    Math.min(
-                        (
-                            this.canvas.width -
-                            padding * 2
-                        ) /
-                        columns,
-
-                        (
-                            this.canvas.height -
-                            padding * 2
-                        ) /
-                        rows
-                    )
-                )
-            );
-
-
-        const width =
-            tile *
-            columns;
-
-
-        const height =
-            tile *
-            rows;
-
-
-        return {
-
-            columns,
-
-            rows,
-
-            tile,
-
-            width,
-
-            height,
-
-            x:
-                Math.floor(
-                    (
-                        this.canvas.width -
-                        width
-                    ) /
-                    2
-                ),
-
-            y:
-                Math.floor(
-                    (
-                        this.canvas.height -
-                        height
-                    ) /
-                    2
-                )
-        };
-    }
-
-
-
-    /* =====================================================
-       FOND
-    ===================================================== */
-
-    drawBackground(layout) {
-
-        const ctx =
-            this.ctx;
-
-
-        const gradient =
-            ctx.createLinearGradient(
-                0,
-                0,
-                0,
-                this.canvas.height
-            );
-
-
-        gradient.addColorStop(
-            0,
-            "#25262b"
-        );
-
-
-        gradient.addColorStop(
-            1,
-            "#111215"
-        );
-
-
-        ctx.fillStyle =
-            gradient;
-
-
-        ctx.fillRect(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-
-        ctx.fillStyle =
-            "rgba(0,0,0,0.25)";
-
-
-        this.roundRect(
-            layout.x - 14,
-            layout.y - 14,
-            layout.width + 28,
-            layout.height + 28,
-            18
-        );
-
-
-        ctx.fill();
-    }
-
-
-
-    /* =====================================================
-       SOL
-    ===================================================== */
-
-    drawFloor(layout) {
-
-        const room =
-            this.normalize(
-                this.levelData?.room ||
+        const code =
+            String(
+                source ||
                 ""
             );
 
 
-        let floorType =
-            "sol_bois";
-
-
-        if (
-            room === "cuisine" ||
-            room === "toilette" ||
-            room === "salle_d_eau"
-        ) {
-
-            floorType =
-                "carrelage";
-        }
-
-
-        if (
-            room === "jardin"
-        ) {
-
-            floorType =
-                "herbe";
-        }
-
-
-        for (
-            let y = 0;
-            y < layout.rows;
-            y += 1
-        ) {
-
-            for (
-                let x = 0;
-                x < layout.columns;
-                x += 1
-            ) {
-
-                const point =
-                    this.cellTopLeft(
-                        x,
-                        y,
-                        layout
-                    );
-
-
-                if (
-                    window.PYTArt
-                ) {
-
-                    if (
-                        room === "garage"
-                    ) {
-
-                        this.ctx.fillStyle =
-                            "#76787c";
-
-
-                        this.ctx.fillRect(
-                            point.x,
-                            point.y,
-                            layout.tile,
-                            layout.tile
-                        );
-
-                    } else if (
-                        room ===
-                        "cave_a_vin"
-                    ) {
-
-                        this.ctx.fillStyle =
-                            (
-                                (
-                                    x +
-                                    y
-                                ) %
-                                2 ===
-                                0
-                            )
-                                ? "#77716d"
-                                : "#6b6562";
-
-
-                        this.ctx.fillRect(
-                            point.x,
-                            point.y,
-                            layout.tile,
-                            layout.tile
-                        );
-
-                    } else if (
-                        room ===
-                        "balcon"
-                    ) {
-
-                        window.PYTArt.draw(
-                            this.ctx,
-                            "chemin",
-                            point.x,
-                            point.y,
-                            layout.tile
-                        );
-
-                    } else {
-
-                        window.PYTArt.draw(
-                            this.ctx,
-                            floorType,
-                            point.x,
-                            point.y,
-                            layout.tile
-                        );
-                    }
-
-                } else {
-
-                    this.ctx.fillStyle =
-                        this.getFallbackFloorColor(
-                            room
-                        );
-
-
-                    this.ctx.fillRect(
-                        point.x,
-                        point.y,
-                        layout.tile,
-                        layout.tile
-                    );
-                }
-            }
-        }
-    }
-
-
-
-    getFallbackFloorColor(room) {
-
-        const colors = {
-
-            entree:
-                "#b8895c",
-
-            cuisine:
-                "#c9c4bd",
-
-            salon:
-                "#b8895c",
-
-            chambre:
-                "#a87b55",
-
-            garage:
-                "#76787c",
-
-            cave_a_vin:
-                "#77716d",
-
-            balcon:
-                "#9b9185",
-
-            toilette:
-                "#c9c4bd",
-
-            jardin:
-                "#5c8a53"
-        };
-
-
-        return (
-            colors[room] ||
-            "#8b735f"
-        );
-    }
-
-
-
-    /* =====================================================
-       GRILLE
-    ===================================================== */
-
-    drawGrid(layout) {
-
-        for (
-            let y = 0;
-            y < layout.rows;
-            y += 1
-        ) {
-
-            for (
-                let x = 0;
-                x < layout.columns;
-                x += 1
-            ) {
-
-                const point =
-                    this.cellTopLeft(
-                        x,
-                        y,
-                        layout
-                    );
-
-
-                this.ctx.strokeStyle =
-                    "rgba(0,0,0,0.10)";
-
-
-                this.ctx.lineWidth =
-                    1;
-
-
-                this.ctx.strokeRect(
-                    point.x + 0.5,
-                    point.y + 0.5,
-                    layout.tile - 1,
-                    layout.tile - 1
-                );
-
-
-                if (
-                    this.isBlocked(
-                        x,
-                        y
-                    )
-                ) {
-
-                    this.drawBlockedCell(
-                        x,
-                        y,
-                        layout
-                    );
-                }
-            }
-        }
-    }
-
-
-
-    drawBlockedCell(
-        x,
-        y,
-        layout
-    ) {
-
-        const point =
-            this.cellTopLeft(
-                x,
-                y,
-                layout
-            );
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            window.PYTArt.draw(
-                this.ctx,
-                "case_bloquee",
-                point.x,
-                point.y,
-                layout.tile
-            );
-
-            return;
-        }
-
-
-        this.ctx.save();
-
-        this.ctx.globalAlpha =
-            0.35;
-
-        this.ctx.fillStyle =
-            "#593f4d";
-
-
-        this.ctx.fillRect(
-            point.x +
-                layout.tile *
-                0.08,
-            point.y +
-                layout.tile *
-                0.08,
-            layout.tile *
-                0.84,
-            layout.tile *
-                0.84
-        );
-
-
-        this.ctx.restore();
-    }
-
-
-
-    /* =====================================================
-       OBJECTIFS
-    ===================================================== */
-
-    drawTargets(layout) {
-
-        const targets =
-            this.world.targets ||
-            [];
-
-
-        targets.forEach(
-            target => {
-
-                const x =
-                    Number(
-                        target.x
-                    );
-
-
-                const y =
-                    Number(
-                        target.y
-                    );
-
-
-                if (
-                    !Number.isFinite(x) ||
-                    !Number.isFinite(y)
-                ) {
-
-                    return;
-                }
-
-
-                const point =
-                    this.cellTopLeft(
-                        x,
-                        y,
-                        layout
-                    );
-
-
-                const type =
-                    target.type ===
-                    "deposit"
-                        ? "depot"
-                        : "objectif";
-
-
-                if (
-                    window.PYTArt
-                ) {
-
-                    window.PYTArt.draw(
-                        this.ctx,
-                        type,
-                        point.x,
-                        point.y,
-                        layout.tile
-                    );
-
-                } else {
-
-                    this.ctx.save();
-
-                    this.ctx.strokeStyle =
-                        "#ffe575";
-
-                    this.ctx.lineWidth =
-                        3;
-
-
-                    this.ctx.strokeRect(
-                        point.x +
-                            layout.tile *
-                            0.15,
-                        point.y +
-                            layout.tile *
-                            0.15,
-                        layout.tile *
-                            0.7,
-                        layout.tile *
-                            0.7
-                    );
-
-
-                    this.ctx.restore();
-                }
-            }
-        );
-    }
-
-
-
-    /* =====================================================
-       DÉCORATIONS
-    ===================================================== */
-
-    drawDecorations(layout) {
-
-        const decorations =
-            this.world
-                ?.map
-                ?.decorations ||
-            [];
-
-
-        decorations.forEach(
-            decoration => {
-
-                this.drawDecoration(
-                    decoration,
-                    layout
-                );
-            }
-        );
-    }
-
-
-
-    drawDecoration(
-        decoration,
-        layout
-    ) {
-
-        const x =
-            Number(
-                decoration.x
-            );
-
-
-        const y =
-            Number(
-                decoration.y
-            );
-
-
-        if (
-            !Number.isFinite(x) ||
-            !Number.isFinite(y)
-        ) {
-
-            return;
-        }
-
-
-        const point =
-            this.cellTopLeft(
-                x,
-                y,
-                layout
-            );
-
-
-        const type =
-            this.normalize(
-                decoration.type
-            );
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            window.PYTArt.draw(
-                this.ctx,
-                type,
-                point.x,
-                point.y,
-                layout.tile,
-                {
-                    animate:
-                        type ===
-                        "piscine"
-                }
-            );
-
-            return;
-        }
-
-
-        this.drawDecorationFallback(
-            decoration,
-            point,
-            layout.tile
-        );
-    }
-
-
-
-    drawDecorationFallback(
-        decoration,
-        point,
-        size
-    ) {
-
-        this.ctx.save();
-
-
-        this.ctx.fillStyle =
-            "rgba(25,25,28,0.45)";
-
-
-        this.ctx.fillRect(
-            point.x +
-                size *
-                0.15,
-            point.y +
-                size *
-                0.15,
-            size *
-                0.7,
-            size *
-                0.7
-        );
-
-
-        this.ctx.fillStyle =
-            "#ffffff";
-
-
-        this.ctx.font =
-            `${Math.max(
-                9,
-                Math.floor(
-                    size *
-                    0.12
-                )
-            )}px monospace`;
-
-
-        this.ctx.textAlign =
-            "center";
-
-
-        this.ctx.textBaseline =
-            "middle";
-
-
-        this.ctx.fillText(
-            decoration.type || "?",
-            point.x +
-                size / 2,
-            point.y +
-                size / 2
-        );
-
-
-        this.ctx.restore();
-    }
-
-
-
-    /* =====================================================
-       OBJETS INTERACTIFS
-    ===================================================== */
-
-    drawObjects(layout) {
-
-        const objects =
-            this.world.objects ||
-            [];
-
-
-        objects.forEach(
-            object => {
-
-                this.drawObject(
-                    object,
-                    layout
-                );
-            }
-        );
-    }
-
-
-
-    drawObject(
-        object,
-        layout
-    ) {
-
-        const x =
-            Number(
-                object.x
-            );
-
-
-        const y =
-            Number(
-                object.y
-            );
-
-
-        if (
-            !Number.isFinite(x) ||
-            !Number.isFinite(y)
-        ) {
-
-            return;
-        }
-
-
-        const point =
-            this.cellTopLeft(
-                x,
-                y,
-                layout
-            );
-
-
-        const artType =
-            this.getObjectArtType(
-                object
-            );
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            /*
-            Léger cercle derrière les objets ramassables.
-
-            Ils restent donc faciles à distinguer
-            du simple décor.
-            */
-
-            if (
-                object.pickable !==
-                false
-            ) {
-
-                this.ctx.save();
-
-
-                this.ctx.globalAlpha =
-                    0.16;
-
-
-                this.ctx.fillStyle =
-                    "#fff2a8";
-
-
-                this.ctx.beginPath();
-
-
-                this.ctx.arc(
-                    point.x +
-                        layout.tile /
-                        2,
-                    point.y +
-                        layout.tile /
-                        2,
-                    layout.tile *
-                        0.38,
-                    0,
-                    Math.PI *
-                        2
-                );
-
-
-                this.ctx.fill();
-
-
-                this.ctx.restore();
-            }
-
-
-            window.PYTArt.draw(
-                this.ctx,
-                artType,
-                point.x,
-                point.y,
-                layout.tile
-            );
-
-
-            return;
-        }
-
-
-        this.ctx.fillStyle =
-            "#ffe575";
-
-
-        this.ctx.fillRect(
-            point.x +
-                layout.tile *
-                0.3,
-            point.y +
-                layout.tile *
-                0.3,
-            layout.tile *
-                0.4,
-            layout.tile *
-                0.4
-        );
-    }
-
-
-
-    getObjectArtType(object) {
-
-        const id =
-            this.normalize(
-                object.id
-            );
-
-
-        const type =
-            this.normalize(
-                object.type
-            );
-
-
-        /*
-        On utilise l'identifiant quand il contient
-        une information graphique particulière.
-        */
-
-        const specialIds =
-            new Set([
-
-                "livre_rouge",
-                "livre_bleu",
-
-                "bouteille_rouge",
-                "bouteille_bleue",
-                "bouteille_verte",
-                "bouteille_jaune",
-
-                "bouee",
-                "cle",
-                "colis",
-                "boite_outils",
-                "arrosoir",
-
-                "jouet_1",
-                "jouet_2",
-                "jouet_3"
-            ]);
-
-
-        if (
-            specialIds.has(
-                id
-            )
-        ) {
-
-            if (
-                id.startsWith(
-                    "jouet_"
-                )
-            ) {
-
-                return "jouet";
-            }
-
-
-            return id;
-        }
-
-
-        return (
-            type ||
-            id ||
-            "objet"
-        );
-    }
-
-
-
-    /* =====================================================
-       PYT
-    ===================================================== */
-
-    drawRobot(layout) {
-
-        if (
-            !this.robot
-        ) {
-
-            return;
-        }
-
-
-        const point =
-            this.cellTopLeft(
-                this.renderRobotX,
-                this.renderRobotY,
-                layout
-            );
-
-
-        const size =
-            layout.tile *
-            0.82;
-
-
-        const x =
-            point.x +
-            (
-                layout.tile -
-                size
-            ) /
-            2;
-
-
-        const y =
-            point.y +
-            (
-                layout.tile -
-                size
-            ) /
-            2;
-
-
-        if (
-            window.PYTArt &&
-            typeof window.PYTArt
-                .drawPyt ===
-                "function"
-        ) {
-
-            window.PYTArt.drawPyt(
-                this.ctx,
-                x,
-                y,
-                size,
-                this.robot.direction,
-                {
-                    bob:
-                        Boolean(
-                            this.moveAnimation
-                        ),
-
-                    happy:
-                        false
-                }
-            );
-
-
-            return;
-        }
-
-
-        this.drawRobotFallback(
-            x,
-            y,
-            size
-        );
-    }
-
-
-
-    drawRobotFallback(
-        x,
-        y,
-        size
-    ) {
-
-        const ctx =
-            this.ctx;
-
-
-        ctx.save();
-
-
-        ctx.fillStyle =
-            "#151619";
-
-
-        ctx.fillRect(
-            x +
-                size *
-                0.2,
-            y +
-                size *
-                0.15,
-            size *
-                0.6,
-            size *
-                0.65
-        );
-
-
-        ctx.fillStyle =
-            "#f3f3ef";
-
-
-        ctx.fillRect(
-            x +
-                size *
-                0.27,
-            y +
-                size *
-                0.22,
-            size *
-                0.46,
-            size *
-                0.45
-        );
-
-
-        ctx.fillStyle =
-            "#fff4a8";
-
-
-        ctx.fillRect(
-            x +
-                size *
-                0.34,
-            y +
-                size *
-                0.31,
-            size *
-                0.07,
-            size *
-                0.09
-        );
-
-
-        ctx.fillRect(
-            x +
-                size *
-                0.59,
-            y +
-                size *
-                0.31,
-            size *
-                0.07,
-            size *
-                0.09
-        );
-
-
-        ctx.restore();
-    }
-
-
-
-    /* =====================================================
-       EXÉCUTION DU PROGRAMME
-    ===================================================== */
-
-    async executeCode(source) {
-
-        if (
-            this.running ||
-            !this.robot ||
-            !this.levelData
-        ) {
-
-            if (
-                this.running
-            ) {
-
-                this.dispatchExecutionResult({
-
-                    success:
-                        false,
-
-                    reason:
-                        "already_running",
-
-                    message:
-                        "Un programme est déjà en cours."
-                });
-            }
-
-
-            return;
-        }
-
-
-        this.running =
-            true;
-
-
-        this.execution = {
-
-            cancelled:
-                false,
-
-            instructionCount:
-                0,
-
-            callDepth:
-                0,
-
-            currentLine:
-                null,
-
-            actionFailures:
-                [],
-
-            output:
-                [],
-
-            ast:
-                null
-        };
-
-
-        this.setStatus(
-            "Programme en cours..."
-        );
-
-
-        window.pytApp
-            ?.hideThought();
-
-
-        window.pytApp
-            ?.clearCodeError();
-
-
-        window.pytApp
-            ?.clearConsole();
-
-
-        try {
-
-            const parser =
-                new PytPythonParser(
-                    source
-                );
-
-
-            const ast =
-                parser.parse();
-
-
-            this.execution.ast =
-                ast;
-
-
-            const interpreter =
-                new PytPythonInterpreter({
-
-                    game:
-                        this,
-
-                    robot:
-                        this.robot,
-
-                    world:
-                        this.world,
-
-                    execution:
-                        this.execution,
-
-                    maxInstructions:
-                        this.maxInstructions,
-
-                    maxLoopIterations:
-                        this.maxLoopIterations,
-
-                    maxCallDepth:
-                        this.maxCallDepth
-                });
-
-
-            await interpreter.execute(
-                ast
-            );
-
-
-            if (
-                this.execution.cancelled
-            ) {
-
-                return;
-            }
-
-
-            const validation =
-                this.validateMission(
-                    source,
-                    ast
-                );
-
-
-            validation.output =
-                [
-                    ...this.execution.output
-                ];
-
-
-            this.dispatchExecutionResult(
-                validation
-            );
-
-        } catch (error) {
-
-            if (
-                this.execution
-                    ?.cancelled
-            ) {
-
-                return;
-            }
-
-
-            console.error(
-                error
-            );
-
-
-            const line =
-                Number(
-                    error.line ||
-                    this.execution
-                        ?.currentLine ||
-                    0
-                );
-
-
-            this.dispatchExecutionResult({
-
-                success:
-                    false,
-
-                reason:
-                    error.reason ||
-                    "python_error",
-
-                errorLine:
-                    line > 0
-                        ? line
-                        : undefined,
-
-                error:
-                    error.message ||
-                    "Erreur dans le programme.",
-
-                message:
-                    this.formatPythonError(
-                        error
-                    ),
-
-                output:
-                    [
-                        ...(
-                            this.execution
-                                ?.output ||
-                            []
-                        )
-                    ]
-            });
-
-        } finally {
-
-            this.running =
-                false;
-        }
-    }
-
-
-
-    cancelExecution() {
-
-        if (
-            this.execution
-        ) {
-
-            this.execution.cancelled =
-                true;
-        }
-
-
-        this.running =
-            false;
-
-
-        if (
-            this.animationFrame
-        ) {
-
-            cancelAnimationFrame(
-                this.animationFrame
-            );
-        }
-
-
-        this.animationFrame =
-            null;
-
-        this.moveAnimation =
-            null;
-    }
-
-
-
-    /* =====================================================
-       API PYTHON
-    ===================================================== */
-
-    createBuiltins() {
-
-        const action =
-            async (
-                callback,
-                name
-            ) => {
-
-                this.assertExecutionActive();
-
-
-                const result =
-                    await callback();
-
-
-                if (
-                    result &&
-                    result.success ===
-                        false &&
-                    result.reason !==
-                        "cancelled"
-                ) {
-
-                    this.execution
-                        .actionFailures
-                        .push({
-
-                            line:
-                                this.execution
-                                    .currentLine,
-
-                            name,
-
-                            reason:
-                                result.reason,
-
-                            result
-                        });
-                }
-
-
-                return null;
-            };
-
-
-        return {
-
-            avancer:
-                async (
-                    amount = 1
-                ) =>
-                    action(
-                        () =>
-                            this.robot
-                                .forward(
-                                    amount
-                                ),
-
-                        "avancer"
-                    ),
-
-
-            tourner_gauche:
-                async () =>
-                    action(
-                        () =>
-                            this.robot
-                                .turnLeft(),
-
-                        "tourner_gauche"
-                    ),
-
-
-            tourner_droite:
-                async () =>
-                    action(
-                        () =>
-                            this.robot
-                                .turnRight(),
-
-                        "tourner_droite"
-                    ),
-
-
-            ramasser:
-                async (
-                    objectName = null
-                ) =>
-                    action(
-                        () =>
-                            this.robot
-                                .pickUp(
-                                    objectName
-                                ),
-
-                        "ramasser"
-                    ),
-
-
-            deposer:
-                async (
-                    objectName = null
-                ) =>
-                    action(
-                        () =>
-                            this.robot
-                                .drop(
-                                    objectName
-                                ),
-
-                        "deposer"
-                    ),
-
-
-            devant_libre:
-                async () =>
-                    this.robot
-                        .frontIsFree(),
-
-
-            sur_objet:
-                async (
-                    objectName = null
-                ) =>
-                    this.robot
-                        .isOnObject(
-                            objectName
-                        ),
-
-
-            inventaire_contient:
-                async objectName =>
-                    this.robot
-                        .inventoryContains(
-                            objectName
-                        ),
-
-
-            position_x:
-                async () =>
-                    this.robot.x,
-
-
-            position_y:
-                async () =>
-                    this.robot.y,
-
-
-            direction:
-                async () =>
-                    this.robot
-                        .direction,
-
+        const result = {
+
+            forward:
+                /\b(?:forward|avancer)\s*\(/.test(
+                    code
+                ),
+
+            backward:
+                /\b(?:backward|reculer)\s*\(/.test(
+                    code
+                ),
+
+            left:
+                /\b(?:left|tourner_gauche)\s*\(/.test(
+                    code
+                ),
+
+            right:
+                /\b(?:right|tourner_droite)\s*\(/.test(
+                    code
+                ),
+
+            variable:
+                /^[ \t]*[A-Za-z_]\w*[ \t]*=(?!=)/m.test(
+                    code
+                ),
+
+            condition:
+                /^[ \t]*(?:if|elif)\b/m.test(
+                    code
+                ),
+
+            for:
+                /^[ \t]*for\b/m.test(
+                    code
+                ),
 
             range:
-                async (
-                    start,
-                    stop = undefined,
-                    step = 1
-                ) =>
-                    this.pythonRange(
-                        start,
-                        stop,
-                        step
-                    ),
+                /\brange\s*\(/.test(
+                    code
+                ),
 
+            while:
+                /^[ \t]*while\b/m.test(
+                    code
+                ),
 
-            len:
-                async value => {
+            list:
+                /\[[\s\S]*?\]/.test(
+                    code
+                ),
 
-                    if (
-                        Array.isArray(
-                            value
-                        ) ||
-                        typeof value ===
-                            "string"
-                    ) {
+            dictionary:
+                /\{[\s\S]*?:[\s\S]*?\}/.test(
+                    code
+                ),
 
-                        return value.length;
-                    }
+            function:
+                /^[ \t]*def\b/m.test(
+                    code
+                ),
 
-
-                    if (
-                        value &&
-                        typeof value ===
-                            "object"
-                    ) {
-
-                        return Object.keys(
-                            value
-                        ).length;
-                    }
-
-
-                    throw this.runtimeError(
-                        "len() ne peut pas être utilisé avec cette valeur."
-                    );
-                },
-
-
-            print:
-                async (
-                    ...values
-                ) => {
-
-                    const text =
-                        values
-                            .map(
-                                value =>
-                                    this.pythonString(
-                                        value
-                                    )
-                            )
-                            .join(
-                                " "
-                            );
-
-
-                    this.execution
-                        .output
-                        .push(
-                            text
-                        );
-
-
-                    window.pytApp
-                        ?.appendConsole(
-                            text
-                        );
-
-
-                    return null;
-                }
+            return:
+                /^[ \t]*return\b/m.test(
+                    code
+                )
         };
-    }
-
-
-
-    pythonRange(
-        start,
-        stop = undefined,
-        step = 1
-    ) {
-
-        let realStart =
-            Number(
-                start
-            );
-
-
-        let realStop =
-            Number(
-                stop
-            );
-
-
-        let realStep =
-            Number(
-                step
-            );
-
-
-        if (
-            stop === undefined
-        ) {
-
-            realStop =
-                realStart;
-
-            realStart =
-                0;
-        }
-
-
-        if (
-            !Number.isFinite(
-                realStart
-            ) ||
-            !Number.isFinite(
-                realStop
-            ) ||
-            !Number.isFinite(
-                realStep
-            )
-        ) {
-
-            throw this.runtimeError(
-                "range() attend des nombres."
-            );
-        }
-
-
-        if (
-            realStep ===
-            0
-        ) {
-
-            throw this.runtimeError(
-                "Le pas de range() ne peut pas être 0."
-            );
-        }
-
-
-        const values =
-            [];
-
-
-        if (
-            realStep > 0
-        ) {
-
-            for (
-                let value = realStart;
-                value < realStop;
-                value += realStep
-            ) {
-
-                values.push(
-                    value
-                );
-
-
-                if (
-                    values.length >
-                    this.maxLoopIterations
-                ) {
-
-                    throw this.runtimeError(
-                        "range() produit trop de valeurs."
-                    );
-                }
-            }
-
-        } else {
-
-            for (
-                let value = realStart;
-                value > realStop;
-                value += realStep
-            ) {
-
-                values.push(
-                    value
-                );
-
-
-                if (
-                    values.length >
-                    this.maxLoopIterations
-                ) {
-
-                    throw this.runtimeError(
-                        "range() produit trop de valeurs."
-                    );
-                }
-            }
-        }
-
-
-        return values;
-    }
-
-
-
-    /* =====================================================
-       VALIDATION DE LA MISSION
-    ===================================================== */
-
-    validateMission(
-        source,
-        ast
-    ) {
-
-        const rules =
-            this.levelData
-                ?.goal
-                ?.rules ||
-            [];
-
-
-        for (
-            const rule
-            of rules
-        ) {
-
-            const result =
-                this.validateRule(
-                    rule
-                );
-
-
-            if (
-                !result.success
-            ) {
-
-                return this.decorateFailure(
-                    result
-                );
-            }
-        }
-
-
-        const conceptResult =
-            this.validateConcepts(
-                source,
-                ast
-            );
-
-
-        if (
-            !conceptResult.success
-        ) {
-
-            return this.decorateFailure(
-                conceptResult
-            );
-        }
-
-
-        return {
-
-            success:
-                true,
-
-            reason:
-                "success",
-
-            message:
-                this.levelData
-                    ?.successMessage ||
-                "Mission réussie !"
-        };
-    }
-
-
-
-    validateRule(rule) {
-
-        switch (
-            rule.type
-        ) {
-
-            case "position": {
-
-                const success =
-                    this.robot.isAt(
-                        rule.x,
-                        rule.y
-                    );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "wrong_destination",
-
-                        wrongDestination:
-                            true,
-
-                        message:
-                            "Pyt n’est pas encore arrivé au bon endroit."
-                    };
-            }
-
-
-            case "inventory_has": {
-
-                const success =
-                    this.robot
-                        .inventoryContains(
-                            rule.object
-                        );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "missing_object",
-
-                        message:
-                            `Il manque encore ${this.objectLabel(rule.object)}.`
-                    };
-            }
-
-
-            case "inventory_not_has": {
-
-                const success =
-                    !this.robot
-                        .inventoryContains(
-                            rule.object
-                        );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "wrong_object",
-
-                        message:
-                            "Pyt a ramassé un objet qu’il ne fallait pas prendre."
-                    };
-            }
-
-
-            case "visited": {
-
-                const success =
-                    this.robot
-                        .hasVisited(
-                            rule.x,
-                            rule.y
-                        );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "incomplete_route",
-
-                        message:
-                            "Le trajet n’est pas encore complet."
-                    };
-            }
-
-
-            case "object_at": {
-
-                const success =
-                    this.world
-                        .objects
-                        .some(
-                            object =>
-                                this.normalize(
-                                    object.id
-                                ) ===
-                                    this.normalize(
-                                        rule.object
-                                    ) &&
-                                Number(
-                                    object.x
-                                ) ===
-                                    Number(
-                                        rule.x
-                                    ) &&
-                                Number(
-                                    object.y
-                                ) ===
-                                    Number(
-                                        rule.y
-                                    )
-                        );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "misplaced_object",
-
-                        message:
-                            "L’objet n’a pas encore été déposé au bon endroit."
-                    };
-            }
-
-
-            case "minimum_moves": {
-
-                const success =
-                    this.robot.moveCount >=
-                    Number(
-                        rule.count
-                    );
-
-
-                return success
-                    ? {
-                        success:
-                            true
-                    }
-                    : {
-                        success:
-                            false,
-
-                        reason:
-                            "incomplete_route",
-
-                        message:
-                            "Pyt n’a pas encore effectué tout le trajet demandé."
-                    };
-            }
-
-
-            default:
-
-                return {
-                    success:
-                        true
-                };
-        }
-    }
-
-
-
-    decorateFailure(result) {
-
-        const actionFailure =
-            this.execution
-                ?.actionFailures
-                ?.find(
-                    item =>
-                        Number(
-                            item.line
-                        ) > 0
-                );
-
-
-        if (
-            actionFailure &&
-            !result.errorLine
-        ) {
-
-            result.errorLine =
-                actionFailure.line;
-
-
-            result.hint =
-                this.actionFailureHint(
-                    actionFailure
-                );
-        }
 
 
         return result;
     }
 
 
-
-    actionFailureHint(failure) {
-
-        switch (
-            failure.reason
-        ) {
-
-            case "blocked":
-
-                return (
-                    `Pyt rencontre un obstacle près de la ligne ${failure.line}. Vérifie le déplacement ou le virage juste avant.`
-                );
-
-
-            case "outside_map":
-
-                return (
-                    `Pyt essaie de sortir de la carte près de la ligne ${failure.line}.`
-                );
-
-
-            case "no_object":
-
-                return (
-                    `À la ligne ${failure.line}, Pyt essaie de ramasser un objet alors qu’il n’y en a aucun sous lui.`
-                );
-
-
-            case "wrong_object":
-
-                return (
-                    `À la ligne ${failure.line}, le nom demandé ne correspond pas à l’objet sous Pyt.`
-                );
-
-
-            case "empty_inventory":
-
-                return (
-                    `À la ligne ${failure.line}, l’inventaire de Pyt est vide.`
-                );
-
-
-            case "object_not_in_inventory":
-
-                return (
-                    `À la ligne ${failure.line}, Pyt essaie de déposer un objet qu’il ne possède pas.`
-                );
-
-
-            case "invalid_distance":
-
-                return (
-                    `La distance utilisée près de la ligne ${failure.line} n’est pas valide.`
-                );
-
-
-            default:
-
-                return (
-                    `Regarde plus attentivement la ligne ${failure.line}.`
-                );
-        }
-    }
-
-
-
-    /* =====================================================
-       VALIDATION DES NOTIONS
-    ===================================================== */
-
-    validateConcepts(
-        source,
-        ast
+    static normalizeConcept(
+        concept
     ) {
 
-        const requirements =
-            this.levelData
-                ?.requiredConcepts ||
-            [];
-
-
-        if (
-            requirements.length ===
-            0
-        ) {
-
-            return {
-                success:
-                    true
-            };
-        }
-
-
-        const features =
-            PytCodeAnalyzer.analyze(
-                source,
-                ast
-            );
-
-
-        for (
-            const requirement
-            of requirements
-        ) {
-
-            if (
-                !this.conceptSatisfied(
-                    requirement,
-                    features
-                )
-            ) {
-
-                return {
-
-                    success:
-                        false,
-
-                    reason:
-                        "missing_concept",
-
-                    message:
-                        this.conceptMessage(
-                            requirement
-                        )
-                };
-            }
-        }
-
-
-        return {
-            success:
-                true
-        };
-    }
-
-
-
-    conceptSatisfied(
-        concept,
-        features
-    ) {
-
-        switch (
-            concept
-        ) {
-
-            case "sequence":
-
-                return (
-                    features.actionCalls >
-                    0
-                );
-
-
-            case "turn":
-
-                return (
-                    features.turnCalls >
-                    0
-                );
-
-
-            case "pickup":
-
-                return (
-                    features.pickupCalls >
-                    0
-                );
-
-
-            case "assignment":
-
-                return (
-                    features.assignments >
-                    0
-                );
-
-
-            case "variables_multiple":
-
-                return (
-                    features.assignments >=
-                    2
-                );
-
-
-            case "string":
-
-                return (
-                    features.stringLiterals >
-                    0
-                );
-
-
-            case "if":
-            case "comparison":
-
-                return (
-                    features.ifStatements >
-                    0
-                );
-
-
-            case "else":
-
-                return (
-                    features.elseBranches >
-                    0
-                );
-
-
-            case "for":
-
-                return (
-                    features.forLoops >
-                    0
-                );
-
-
-            case "range":
-
-                return (
-                    features.forLoops >
-                        0 &&
-                    features.rangeCalls >
-                        0
-                );
-
-
-            case "function_definition":
-
-                return (
-                    features.functions >
-                    0
-                );
-
-
-            case "function_call":
-
-                return (
-                    features.userFunctionCalls >
-                    0
-                );
-
-
-            case "function_call_multiple":
-
-                return (
-                    features.userFunctionCalls >=
-                    2
-                );
-
-
-            case "parameter":
-
-                return (
-                    features.functionParameters >
-                    0
-                );
-
-
-            case "list":
-
-                return (
-                    features.listLiterals >
-                    0
-                );
-
-
-            case "membership":
-
-                return (
-                    features.membershipTests >
-                    0
-                );
-
-
-            case "dictionary":
-
-                return (
-                    features.dictionaryLiterals >
-                    0
-                );
-
-
-            case "dictionary_access":
-
-                return (
-                    features.subscripts >
-                    0
-                );
-
-
-            case "dictionary_access_multiple":
-
-                return (
-                    features.subscripts >=
-                    2
-                );
-
-
-            case "while":
-
-                return (
-                    features.whileLoops >
-                    0
-                );
-
-
-            case "control_structure":
-
-                return (
-                    features.ifStatements >
-                        0 ||
-                    features.forLoops >
-                        0 ||
-                    features.whileLoops >
-                        0
-                );
-
-
-            case "loop":
-
-                return (
-                    features.forLoops >
-                        0 ||
-                    features.whileLoops >
-                        0
-                );
-
-
-            case "function_or_condition":
-
-                return (
-                    features.functions >
-                        0 ||
-                    features.ifStatements >
-                        0
-                );
-
-
-            default:
-
-                /*
-                Une notion inconnue ne doit pas
-                bloquer une solution valide.
-                */
-
-                return true;
-        }
-    }
-
-
-
-    conceptMessage(concept) {
-
-        const messages = {
-
-            assignment:
-                "La mission fonctionne, mais cet exercice te demande aussi d’utiliser une variable.",
-
-            variables_multiple:
-                "Cet exercice te demande d’utiliser plusieurs variables.",
-
-            string:
-                "Cet exercice te demande d’utiliser une chaîne de caractères.",
-
-            if:
-                "Le résultat est bon, mais cet exercice doit aussi utiliser une condition if.",
-
-            else:
-                "Cet exercice doit utiliser if et else.",
-
-            comparison:
-                "Utilise une condition pour prendre la décision demandée.",
-
-            for:
-                "Le trajet fonctionne, mais cet exercice doit être résolu avec une boucle for.",
-
-            range:
-                "Utilise range() avec ta boucle for.",
-
-            function_definition:
-                "Le résultat est bon, mais crée une fonction avec def.",
-
-            function_call:
-                "N’oublie pas d’appeler la fonction que tu as créée.",
-
-            function_call_multiple:
-                "Essaie de réutiliser plusieurs fois ta fonction.",
-
-            parameter:
-                "La fonction doit recevoir un paramètre.",
-
-            list:
-                "Cet exercice doit utiliser une liste.",
-
-            membership:
-                "Utilise la liste pour décider quels objets doivent être pris.",
-
-            dictionary:
-                "Cet exercice doit utiliser un dictionnaire.",
-
-            dictionary_access:
-                "Lis une information enregistrée dans le dictionnaire.",
-
-            dictionary_access_multiple:
-                "Utilise plusieurs informations du dictionnaire.",
-
-            while:
-                "Le résultat est bon, mais cet exercice doit utiliser une boucle while.",
-
-            control_structure:
-                "Utilise au moins une condition ou une boucle pour cette mission.",
-
-            loop:
-                "Utilise une boucle pour organiser cette mission.",
-
-            function_or_condition:
-                "Utilise une fonction ou une condition pour structurer ton programme."
-        };
-
-
-        return (
-            messages[concept] ||
-            "Le résultat est presque bon, mais utilise aussi la notion demandée dans ce chapitre."
-        );
-    }
-
-
-
-    /* =====================================================
-       RÉSULTAT
-    ===================================================== */
-
-    dispatchExecutionResult(result) {
-
-        this.setStatus(
-            result.success
-                ? "Mission réussie"
-                : "Mission non terminée"
-        );
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:execution-result",
-                {
-                    detail:
-                        result
-                }
-            )
-        );
-    }
-
-
-
-    formatPythonError(error) {
-
-        if (
-            error.reason ===
-            "instruction_limit"
-        ) {
-
-            return (
-                "Le programme exécute trop d’instructions. Vérifie qu’une boucle ne tourne pas sans fin."
-            );
-        }
-
-
-        if (
-            error.reason ===
-            "loop_limit"
-        ) {
-
-            return (
-                "Cette boucle semble ne jamais se terminer."
-            );
-        }
-
-
-        if (
-            error.reason ===
-            "name_error"
-        ) {
-
-            return (
-                error.message
-            );
-        }
-
-
-        if (
-            error.reason ===
-            "syntax_error"
-        ) {
-
-            return (
-                `Erreur Python : ${error.message}`
-            );
-        }
-
-
-        return (
-            error.message ||
-            "Python n’a pas pu exécuter ce programme."
-        );
-    }
-
-
-
-    /* =====================================================
-       OUTILS DU MOTEUR
-    ===================================================== */
-
-    assertExecutionActive() {
-
-        if (
-            !this.execution ||
-            this.execution.cancelled
-        ) {
-
-            const error =
-                new Error(
-                    "Exécution annulée."
-                );
-
-
-            error.reason =
-                "cancelled";
-
-
-            throw error;
-        }
-    }
-
-
-
-    runtimeError(
-        message,
-        line = null,
-        reason = "runtime_error"
-    ) {
-
-        const error =
-            new Error(
-                message
-            );
-
-
-        error.line =
-            line ||
-            this.execution
-                ?.currentLine ||
-            null;
-
-
-        error.reason =
-            reason;
-
-
-        return error;
-    }
-
-
-
-    setStatus(message) {
-
-        const element =
-            document.getElementById(
-                "game-status"
-            );
-
-
-        if (
-            element
-        ) {
-
-            element.textContent =
-                message;
-        }
-    }
-
-
-
-    isBlocked(
-        x,
-        y
-    ) {
-
-        const blocked =
-            this.world
-                ?.map
-                ?.blocked ||
-            [];
-
-
-        return blocked.some(
-            cell => {
-
-                if (
-                    Array.isArray(
-                        cell
-                    )
-                ) {
-
-                    return (
-                        Number(
-                            cell[0]
-                        ) ===
-                            Number(x) &&
-                        Number(
-                            cell[1]
-                        ) ===
-                            Number(y)
-                    );
-                }
-
-
-                return (
-                    Number(
-                        cell?.x
-                    ) ===
-                        Number(x) &&
-                    Number(
-                        cell?.y
-                    ) ===
-                        Number(y)
-                );
-            }
-        );
-    }
-
-
-
-    cellTopLeft(
-        x,
-        y,
-        layout
-    ) {
-
-        return {
-
-            x:
-                layout.x +
-                Number(x) *
-                layout.tile,
-
-            y:
-                layout.y +
-                Number(y) *
-                layout.tile
-        };
-    }
-
-
-
-    roundRect(
-        x,
-        y,
-        width,
-        height,
-        radius
-    ) {
-
-        const ctx =
-            this.ctx;
-
-
-        const r =
-            Math.min(
-                radius,
-                width / 2,
-                height / 2
-            );
-
-
-        ctx.beginPath();
-
-
-        ctx.moveTo(
-            x + r,
-            y
-        );
-
-
-        ctx.lineTo(
-            x + width - r,
-            y
-        );
-
-
-        ctx.quadraticCurveTo(
-            x + width,
-            y,
-            x + width,
-            y + r
-        );
-
-
-        ctx.lineTo(
-            x + width,
-            y + height - r
-        );
-
-
-        ctx.quadraticCurveTo(
-            x + width,
-            y + height,
-            x + width - r,
-            y + height
-        );
-
-
-        ctx.lineTo(
-            x + r,
-            y + height
-        );
-
-
-        ctx.quadraticCurveTo(
-            x,
-            y + height,
-            x,
-            y + height - r
-        );
-
-
-        ctx.lineTo(
-            x,
-            y + r
-        );
-
-
-        ctx.quadraticCurveTo(
-            x,
-            y,
-            x + r,
-            y
-        );
-
-
-        ctx.closePath();
-    }
-
-
-
-    objectLabel(object) {
-
-        return String(
-            object ||
-            "un objet"
-        )
-            .replace(
-                /_/g,
-                " "
-            );
-    }
-
-
-
-    pythonString(value) {
-
-        if (
-            value ===
-                null ||
-            value ===
-                undefined
-        ) {
-
-            return "None";
-        }
-
-
-        if (
-            value === true
-        ) {
-
-            return "True";
-        }
-
-
-        if (
-            value === false
-        ) {
-
-            return "False";
-        }
-
-
-        if (
-            Array.isArray(
-                value
-            )
-        ) {
-
-            return (
-                "[" +
-                value
-                    .map(
-                        item =>
-                            this.pythonString(
-                                item
-                            )
-                    )
-                    .join(
-                        ", "
-                    ) +
-                "]"
-            );
-        }
-
-
-        if (
-            typeof value ===
-                "object"
-        ) {
-
-            const entries =
-                Object.entries(
-                    value
-                )
-                    .map(
-                        (
-                            [
-                                key,
-                                item
-                            ]
-                        ) =>
-                            `"${key}": ${this.pythonString(item)}`
-                    );
-
-
-            return (
-                "{" +
-                entries.join(
-                    ", "
-                ) +
-                "}"
-            );
-        }
-
-
-        return String(
-            value
-        );
-    }
-
-
-
-    normalize(value) {
-
-        return String(
-            value ?? ""
-        )
-            .normalize(
-                "NFD"
-            )
-            .replace(
-                /[\u0300-\u036f]/g,
+        const value =
+            String(
+                concept ||
                 ""
             )
-            .trim()
-            .toLowerCase()
-            .replace(
-                /[\s-]+/g,
-                "_"
-            );
+                .normalize("NFD")
+                .replace(
+                    /[\u0300-\u036f]/g,
+                    ""
+                )
+                .toLowerCase()
+                .trim();
+
+
+        const aliases = {
+
+            variables:
+                "variable",
+
+            variable:
+                "variable",
+
+            conditions:
+                "condition",
+
+            if:
+                "condition",
+
+            elif:
+                "condition",
+
+            else:
+                "condition",
+
+            boucle_for:
+                "for",
+
+            for_loop:
+                "for",
+
+            range:
+                "range",
+
+            boucle_while:
+                "while",
+
+            while_loop:
+                "while",
+
+            listes:
+                "list",
+
+            liste:
+                "list",
+
+            list:
+                "list",
+
+            dictionnaires:
+                "dictionary",
+
+            dictionnaire:
+                "dictionary",
+
+            dict:
+                "dictionary",
+
+            functions:
+                "function",
+
+            fonctions:
+                "function",
+
+            fonction:
+                "function",
+
+            def:
+                "function",
+
+            retour:
+                "return",
+
+            reculer:
+                "backward",
+
+            avancer:
+                "forward",
+
+            gauche:
+                "left",
+
+            droite:
+                "right"
+        };
+
+
+        return aliases[
+            value
+        ] ||
+            value;
     }
 
 
-
-    clone(value) {
+    static missingConcepts(
+        source,
+        requiredConcepts
+    ) {
 
         if (
-            typeof structuredClone ===
-            "function"
+            !Array.isArray(
+                requiredConcepts
+            )
         ) {
 
-            return structuredClone(
-                value
-            );
+            return [];
         }
 
 
-        return JSON.parse(
-            JSON.stringify(
-                value
-            )
-        );
-    }
+        const analysis =
+            this.analyze(
+                source
+            );
 
+
+        return requiredConcepts
+            .map(
+                concept =>
+                    this.normalizeConcept(
+                        concept
+                    )
+            )
+            .filter(
+                concept =>
+                    concept &&
+                    analysis[
+                        concept
+                    ] !==
+                        true
+            );
+    }
 }
 
 
 
 /* =========================================================
-   PARSER PYTHON
+   PARSEUR D'EXPRESSIONS
 ========================================================= */
 
+class PytExpressionParser {
 
-class PytPythonParser {
-
-    constructor(source) {
+    constructor(
+        source,
+        scope,
+        interpreter
+    ) {
 
         this.source =
             String(
-                source ??
+                source ||
                 ""
             );
 
 
-        this.lines =
-            this.prepareLines(
+        this.scope =
+            scope;
+
+
+        this.interpreter =
+            interpreter;
+
+
+        this.tokens =
+            this.tokenize(
                 this.source
             );
 
@@ -3632,1108 +446,8 @@ class PytPythonParser {
 
 
     /* =====================================================
-       PRÉPARATION DES LIGNES
-
-       Supporte maintenant les listes/dictionnaires
-       écrits sur plusieurs lignes.
+       TOKENIZER
     ===================================================== */
-
-    prepareLines(source) {
-
-        const rawLines =
-            source
-                .replace(
-                    /\r\n?/g,
-                    "\n"
-                )
-                .split(
-                    "\n"
-                );
-
-
-        const result =
-            [];
-
-
-        let buffer =
-            null;
-
-
-        let bracketDepth =
-            0;
-
-
-        rawLines.forEach(
-            (
-                raw,
-                index
-            ) => {
-
-                const expanded =
-                    raw.replace(
-                        /\t/g,
-                        "    "
-                    );
-
-
-                const clean =
-                    this.stripComment(
-                        expanded
-                    );
-
-
-                if (
-                    buffer ===
-                    null
-                ) {
-
-                    if (
-                        !clean.trim()
-                    ) {
-
-                        return;
-                    }
-
-
-                    const indentMatch =
-                        clean.match(
-                            /^ */
-                        );
-
-
-                    const indentation =
-                        indentMatch
-                            ? indentMatch[0]
-                                .length
-                            : 0;
-
-
-                    buffer = {
-
-                        line:
-                            index + 1,
-
-                        indent:
-                            indentation,
-
-                        text:
-                            clean.trim()
-                    };
-
-
-                    bracketDepth =
-                        this.bracketDelta(
-                            buffer.text
-                        );
-
-
-                    if (
-                        bracketDepth <=
-                        0
-                    ) {
-
-                        result.push(
-                            buffer
-                        );
-
-
-                        buffer =
-                            null;
-
-
-                        bracketDepth =
-                            0;
-                    }
-
-
-                    return;
-                }
-
-
-                const continuation =
-                    clean.trim();
-
-
-                if (
-                    continuation
-                ) {
-
-                    buffer.text +=
-                        " " +
-                        continuation;
-
-
-                    bracketDepth +=
-                        this.bracketDelta(
-                            continuation
-                        );
-                }
-
-
-                if (
-                    bracketDepth <=
-                    0
-                ) {
-
-                    result.push(
-                        buffer
-                    );
-
-
-                    buffer =
-                        null;
-
-
-                    bracketDepth =
-                        0;
-                }
-            }
-        );
-
-
-        if (
-            buffer !==
-            null
-        ) {
-
-            result.push(
-                buffer
-            );
-        }
-
-
-        return result;
-    }
-
-
-
-    bracketDelta(text) {
-
-        let depth =
-            0;
-
-
-        let quote =
-            null;
-
-
-        let escaped =
-            false;
-
-
-        for (
-            let index = 0;
-            index < text.length;
-            index += 1
-        ) {
-
-            const char =
-                text[index];
-
-
-            if (
-                escaped
-            ) {
-
-                escaped =
-                    false;
-
-                continue;
-            }
-
-
-            if (
-                char === "\\"
-            ) {
-
-                escaped =
-                    true;
-
-                continue;
-            }
-
-
-            if (
-                quote
-            ) {
-
-                if (
-                    char ===
-                    quote
-                ) {
-
-                    quote =
-                        null;
-                }
-
-
-                continue;
-            }
-
-
-            if (
-                char === "\"" ||
-                char === "'"
-            ) {
-
-                quote =
-                    char;
-
-                continue;
-            }
-
-
-            if (
-                char === "(" ||
-                char === "[" ||
-                char === "{"
-            ) {
-
-                depth +=
-                    1;
-            }
-
-
-            if (
-                char === ")" ||
-                char === "]" ||
-                char === "}"
-            ) {
-
-                depth -=
-                    1;
-            }
-        }
-
-
-        return depth;
-    }
-
-
-
-    stripComment(line) {
-
-        let quote =
-            null;
-
-
-        let escaped =
-            false;
-
-
-        for (
-            let index = 0;
-            index < line.length;
-            index += 1
-        ) {
-
-            const char =
-                line[index];
-
-
-            if (
-                escaped
-            ) {
-
-                escaped =
-                    false;
-
-                continue;
-            }
-
-
-            if (
-                char === "\\"
-            ) {
-
-                escaped =
-                    true;
-
-                continue;
-            }
-
-
-            if (
-                quote
-            ) {
-
-                if (
-                    char ===
-                    quote
-                ) {
-
-                    quote =
-                        null;
-                }
-
-
-                continue;
-            }
-
-
-            if (
-                char === "\"" ||
-                char === "'"
-            ) {
-
-                quote =
-                    char;
-
-                continue;
-            }
-
-
-            if (
-                char === "#"
-            ) {
-
-                return line.slice(
-                    0,
-                    index
-                );
-            }
-        }
-
-
-        return line;
-    }
-
-
-
-    parse() {
-
-        if (
-            this.lines.length ===
-            0
-        ) {
-
-            return [];
-        }
-
-
-        if (
-            this.lines[0].indent !==
-            0
-        ) {
-
-            throw this.syntaxError(
-                "Indentation inattendue.",
-                this.lines[0].line
-            );
-        }
-
-
-        const result =
-            this.parseBlock(
-                0
-            );
-
-
-        if (
-            this.index <
-            this.lines.length
-        ) {
-
-            throw this.syntaxError(
-                "Indentation incorrecte.",
-                this.lines[
-                    this.index
-                ].line
-            );
-        }
-
-
-        return result;
-    }
-
-
-
-    parseBlock(indent) {
-
-        const statements =
-            [];
-
-
-        while (
-            this.index <
-            this.lines.length
-        ) {
-
-            const current =
-                this.lines[
-                    this.index
-                ];
-
-
-            if (
-                current.indent <
-                indent
-            ) {
-
-                break;
-            }
-
-
-            if (
-                current.indent >
-                indent
-            ) {
-
-                throw this.syntaxError(
-                    "Indentation inattendue.",
-                    current.line
-                );
-            }
-
-
-            if (
-                current.text ===
-                    "else:" ||
-                current.text.startsWith(
-                    "elif "
-                )
-            ) {
-
-                break;
-            }
-
-
-            statements.push(
-                this.parseStatement(
-                    indent
-                )
-            );
-        }
-
-
-        return statements;
-    }
-
-
-
-    parseStatement(indent) {
-
-        const current =
-            this.lines[
-                this.index
-            ];
-
-
-        const text =
-            current.text;
-
-
-        if (
-            /^if\s+.+:$/.test(
-                text
-            )
-        ) {
-
-            return this.parseIf(
-                indent
-            );
-        }
-
-
-        if (
-            /^while\s+.+:$/.test(
-                text
-            )
-        ) {
-
-            return this.parseWhile(
-                indent
-            );
-        }
-
-
-        if (
-            /^for\s+[A-Za-z_]\w*\s+in\s+.+:$/.test(
-                text
-            )
-        ) {
-
-            return this.parseFor(
-                indent
-            );
-        }
-
-
-        if (
-            /^def\s+[A-Za-z_]\w*\s*\(.*\)\s*:$/.test(
-                text
-            )
-        ) {
-
-            return this.parseFunction(
-                indent
-            );
-        }
-
-
-        this.index +=
-            1;
-
-
-        if (
-            text ===
-            "pass"
-        ) {
-
-            return {
-
-                type:
-                    "pass",
-
-                line:
-                    current.line
-            };
-        }
-
-
-        if (
-            text ===
-                "return" ||
-            text.startsWith(
-                "return "
-            )
-        ) {
-
-            const value =
-                text ===
-                    "return"
-                    ? null
-                    : this.parseExpression(
-                        text.slice(
-                            6
-                        ).trim(),
-                        current.line
-                    );
-
-
-            return {
-
-                type:
-                    "return",
-
-                value,
-
-                line:
-                    current.line
-            };
-        }
-
-
-        const assignment =
-            text.match(
-                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=|=)\s*(.+)$/
-            );
-
-
-        if (
-            assignment
-        ) {
-
-            return {
-
-                type:
-                    "assign",
-
-                name:
-                    assignment[1],
-
-                operator:
-                    assignment[2],
-
-                value:
-                    this.parseExpression(
-                        assignment[3],
-                        current.line
-                    ),
-
-                line:
-                    current.line
-            };
-        }
-
-
-        return {
-
-            type:
-                "expression",
-
-            expression:
-                this.parseExpression(
-                    text,
-                    current.line
-                ),
-
-            line:
-                current.line
-        };
-    }
-
-
-
-    parseIf(indent) {
-
-        const current =
-            this.lines[
-                this.index
-            ];
-
-
-        const conditionText =
-            current.text
-                .slice(
-                    2,
-                    -1
-                )
-                .trim();
-
-
-        this.index +=
-            1;
-
-
-        const body =
-            this.parseChildBlock(
-                indent,
-                current.line
-            );
-
-
-        const branches = [
-            {
-
-                condition:
-                    this.parseExpression(
-                        conditionText,
-                        current.line
-                    ),
-
-                body,
-
-                line:
-                    current.line
-            }
-        ];
-
-
-        let elseBody =
-            null;
-
-
-        while (
-            this.index <
-            this.lines.length
-        ) {
-
-            const next =
-                this.lines[
-                    this.index
-                ];
-
-
-            if (
-                next.indent !==
-                indent
-            ) {
-
-                break;
-            }
-
-
-            if (
-                next.text.startsWith(
-                    "elif "
-                ) &&
-                next.text.endsWith(
-                    ":"
-                )
-            ) {
-
-                const condition =
-                    next.text
-                        .slice(
-                            5,
-                            -1
-                        )
-                        .trim();
-
-
-                this.index +=
-                    1;
-
-
-                const branchBody =
-                    this.parseChildBlock(
-                        indent,
-                        next.line
-                    );
-
-
-                branches.push({
-
-                    condition:
-                        this.parseExpression(
-                            condition,
-                            next.line
-                        ),
-
-                    body:
-                        branchBody,
-
-                    line:
-                        next.line
-                });
-
-
-                continue;
-            }
-
-
-            if (
-                next.text ===
-                "else:"
-            ) {
-
-                this.index +=
-                    1;
-
-
-                elseBody =
-                    this.parseChildBlock(
-                        indent,
-                        next.line
-                    );
-
-
-                break;
-            }
-
-
-            break;
-        }
-
-
-        return {
-
-            type:
-                "if",
-
-            branches,
-
-            elseBody,
-
-            line:
-                current.line
-        };
-    }
-
-
-
-    parseWhile(indent) {
-
-        const current =
-            this.lines[
-                this.index
-            ];
-
-
-        const condition =
-            current.text
-                .slice(
-                    5,
-                    -1
-                )
-                .trim();
-
-
-        this.index +=
-            1;
-
-
-        return {
-
-            type:
-                "while",
-
-            condition:
-                this.parseExpression(
-                    condition,
-                    current.line
-                ),
-
-            body:
-                this.parseChildBlock(
-                    indent,
-                    current.line
-                ),
-
-            line:
-                current.line
-        };
-    }
-
-
-
-    parseFor(indent) {
-
-        const current =
-            this.lines[
-                this.index
-            ];
-
-
-        const match =
-            current.text.match(
-                /^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
-            );
-
-
-        if (
-            !match
-        ) {
-
-            throw this.syntaxError(
-                "Boucle for invalide.",
-                current.line
-            );
-        }
-
-
-        this.index +=
-            1;
-
-
-        return {
-
-            type:
-                "for",
-
-            variable:
-                match[1],
-
-            iterable:
-                this.parseExpression(
-                    match[2],
-                    current.line
-                ),
-
-            body:
-                this.parseChildBlock(
-                    indent,
-                    current.line
-                ),
-
-            line:
-                current.line
-        };
-    }
-
-
-
-    parseFunction(indent) {
-
-        const current =
-            this.lines[
-                this.index
-            ];
-
-
-        const match =
-            current.text.match(
-                /^def\s+([A-Za-z_]\w*)\s*\((.*)\)\s*:$/
-            );
-
-
-        if (
-            !match
-        ) {
-
-            throw this.syntaxError(
-                "Définition de fonction invalide.",
-                current.line
-            );
-        }
-
-
-        const paramsText =
-            match[2].trim();
-
-
-        const parameters =
-            paramsText
-                ? paramsText
-                    .split(
-                        ","
-                    )
-                    .map(
-                        value =>
-                            value.trim()
-                    )
-                : [];
-
-
-        parameters.forEach(
-            parameter => {
-
-                if (
-                    !/^[A-Za-z_]\w*$/.test(
-                        parameter
-                    )
-                ) {
-
-                    throw this.syntaxError(
-                        `Paramètre invalide : ${parameter}`,
-                        current.line
-                    );
-                }
-            }
-        );
-
-
-        this.index +=
-            1;
-
-
-        return {
-
-            type:
-                "function",
-
-            name:
-                match[1],
-
-            parameters,
-
-            body:
-                this.parseChildBlock(
-                    indent,
-                    current.line
-                ),
-
-            line:
-                current.line
-        };
-    }
-
-
-
-    parseChildBlock(
-        parentIndent,
-        line
-    ) {
-
-        if (
-            this.index >=
-            this.lines.length
-        ) {
-
-            throw this.syntaxError(
-                "Un bloc indenté est attendu.",
-                line
-            );
-        }
-
-
-        const next =
-            this.lines[
-                this.index
-            ];
-
-
-        if (
-            next.indent <=
-            parentIndent
-        ) {
-
-            throw this.syntaxError(
-                "Un bloc indenté est attendu.",
-                next.line
-            );
-        }
-
-
-        return this.parseBlock(
-            next.indent
-        );
-    }
-
-
-
-    parseExpression(
-        source,
-        line
-    ) {
-
-        const parser =
-            new PytExpressionParser(
-                source,
-                line
-            );
-
-
-        return parser.parse();
-    }
-
-
-
-    syntaxError(
-        message,
-        line
-    ) {
-
-        const error =
-            new Error(
-                message
-            );
-
-
-        error.line =
-            line;
-
-
-        error.reason =
-            "syntax_error";
-
-
-        return error;
-    }
-
-}
-
-
-
-/* =========================================================
-   PARSER D'EXPRESSIONS
-========================================================= */
-
-
-class PytExpressionParser {
-
-    constructor(
-        source,
-        line
-    ) {
-
-        this.source =
-            source;
-
-        this.line =
-            line;
-
-        this.tokens =
-            this.tokenize(
-                source
-            );
-
-        this.index =
-            0;
-    }
-
-
 
     tokenize(source) {
 
@@ -4741,17 +455,17 @@ class PytExpressionParser {
             [];
 
 
-        let index =
+        let i =
             0;
 
 
         while (
-            index <
+            i <
             source.length
         ) {
 
             const char =
-                source[index];
+                source[i];
 
 
             if (
@@ -4760,16 +474,22 @@ class PytExpressionParser {
                 )
             ) {
 
-                index +=
+                i +=
                     1;
 
                 continue;
             }
 
 
+            /* =============================================
+               STRING
+            ============================================= */
+
             if (
-                char === "\"" ||
-                char === "'"
+                char ===
+                    "'" ||
+                char ===
+                    '"'
             ) {
 
                 const quote =
@@ -4780,73 +500,65 @@ class PytExpressionParser {
                     "";
 
 
-                let escaped =
-                    false;
-
-
-                index +=
+                i +=
                     1;
 
 
-                let closed =
-                    false;
-
-
                 while (
-                    index <
+                    i <
                     source.length
                 ) {
 
                     const current =
-                        source[index];
+                        source[i];
 
 
                     if (
-                        escaped
+                        current ===
+                        "\\"
                     ) {
 
-                        const escapes = {
-
-                            n: "\n",
-                            t: "\t",
-                            r: "\r",
-
-                            "\\": "\\",
-
-                            "\"": "\"",
-
-                            "'": "'"
-                        };
-
-
-                        value +=
-                            escapes[current] ??
-                            current;
-
-
-                        escaped =
-                            false;
-
-
-                        index +=
+                        i +=
                             1;
 
 
-                        continue;
-                    }
+                        if (
+                            i <
+                            source.length
+                        ) {
+
+                            const escaped =
+                                source[i];
 
 
-                    if (
-                        current === "\\"
-                    ) {
+                            if (
+                                escaped ===
+                                "n"
+                            ) {
 
-                        escaped =
-                            true;
+                                value +=
+                                    "\n";
 
-                        index +=
-                            1;
+                            } else if (
+                                escaped ===
+                                "t"
+                            ) {
 
-                        continue;
+                                value +=
+                                    "\t";
+
+                            } else {
+
+                                value +=
+                                    escaped;
+                            }
+
+
+                            i +=
+                                1;
+
+                            continue;
+                        }
                     }
 
 
@@ -4855,10 +567,7 @@ class PytExpressionParser {
                         quote
                     ) {
 
-                        closed =
-                            true;
-
-                        index +=
+                        i +=
                             1;
 
                         break;
@@ -4869,18 +578,8 @@ class PytExpressionParser {
                         current;
 
 
-                    index +=
+                    i +=
                         1;
-                }
-
-
-                if (
-                    !closed
-                ) {
-
-                    throw this.error(
-                        "Chaîne de caractères non terminée."
-                    );
                 }
 
 
@@ -4897,19 +596,49 @@ class PytExpressionParser {
             }
 
 
-            const number =
-                source
-                    .slice(
-                        index
-                    )
-                    .match(
-                        /^\d+(?:\.\d+)?/
-                    );
-
+            /* =============================================
+               NUMBER
+            ============================================= */
 
             if (
-                number
+                /[0-9]/.test(
+                    char
+                ) ||
+                (
+                    char ===
+                        "." &&
+                    /[0-9]/.test(
+                        source[
+                            i + 1
+                        ] ||
+                        ""
+                    )
+                )
             ) {
+
+                let raw =
+                    char;
+
+
+                i +=
+                    1;
+
+
+                while (
+                    i <
+                    source.length &&
+                    /[0-9.]/.test(
+                        source[i]
+                    )
+                ) {
+
+                    raw +=
+                        source[i];
+
+                    i +=
+                        1;
+                }
+
 
                 tokens.push({
 
@@ -4918,33 +647,48 @@ class PytExpressionParser {
 
                     value:
                         Number(
-                            number[0]
+                            raw
                         )
                 });
-
-
-                index +=
-                    number[0]
-                        .length;
 
 
                 continue;
             }
 
 
-            const identifier =
-                source
-                    .slice(
-                        index
-                    )
-                    .match(
-                        /^[A-Za-z_]\w*/
-                    );
-
+            /* =============================================
+               IDENTIFIER
+            ============================================= */
 
             if (
-                identifier
+                /[A-Za-z_]/.test(
+                    char
+                )
             ) {
+
+                let name =
+                    char;
+
+
+                i +=
+                    1;
+
+
+                while (
+                    i <
+                    source.length &&
+                    /[A-Za-z0-9_]/.test(
+                        source[i]
+                    )
+                ) {
+
+                    name +=
+                        source[i];
+
+                    i +=
+                        1;
+                }
+
 
                 tokens.push({
 
@@ -4952,24 +696,56 @@ class PytExpressionParser {
                         "identifier",
 
                     value:
-                        identifier[0]
+                        name
                 });
-
-
-                index +=
-                    identifier[0]
-                        .length;
 
 
                 continue;
             }
 
 
+            /* =============================================
+               OPERATORS
+            ============================================= */
+
+            const three =
+                source.slice(
+                    i,
+                    i + 3
+                );
+
+
             const two =
                 source.slice(
-                    index,
-                    index + 2
+                    i,
+                    i + 2
                 );
+
+
+            if (
+                [
+                    "**=",
+                    "//="
+                ].includes(
+                    three
+                )
+            ) {
+
+                tokens.push({
+
+                    type:
+                        "operator",
+
+                    value:
+                        three
+                });
+
+
+                i +=
+                    3;
+
+                continue;
+            }
 
 
             if (
@@ -4978,7 +754,13 @@ class PytExpressionParser {
                     "!=",
                     "<=",
                     ">=",
-                    "//"
+                    "//",
+                    "**",
+                    "+=",
+                    "-=",
+                    "*=",
+                    "/=",
+                    "%="
                 ].includes(
                     two
                 )
@@ -4994,16 +776,15 @@ class PytExpressionParser {
                 });
 
 
-                index +=
+                i +=
                     2;
-
 
                 continue;
             }
 
 
             if (
-                "+-*/%<>()[]{}:,"
+                "+-*/%<>()[]{}:,."
                     .includes(
                         char
                     )
@@ -5019,16 +800,15 @@ class PytExpressionParser {
                 });
 
 
-                index +=
+                i +=
                     1;
-
 
                 continue;
             }
 
 
-            throw this.error(
-                `Caractère inattendu : ${char}`
+            throw new Error(
+                `Caractère non reconnu : ${char}`
             );
         }
 
@@ -5048,23 +828,118 @@ class PytExpressionParser {
 
 
 
+    /* =====================================================
+       HELPERS
+    ===================================================== */
+
+    current() {
+
+        return this.tokens[
+            this.index
+        ];
+    }
+
+
+    next() {
+
+        const token =
+            this.tokens[
+                this.index
+            ];
+
+
+        this.index +=
+            1;
+
+
+        return token;
+    }
+
+
+    matchValue(value) {
+
+        if (
+            this.current()
+                .value ===
+            value
+        ) {
+
+            this.index +=
+                1;
+
+
+            return true;
+        }
+
+
+        return false;
+    }
+
+
+    matchIdentifier(value) {
+
+        const token =
+            this.current();
+
+
+        if (
+            token.type ===
+                "identifier" &&
+            token.value ===
+                value
+        ) {
+
+            this.index +=
+                1;
+
+
+            return true;
+        }
+
+
+        return false;
+    }
+
+
+    expectValue(value) {
+
+        if (
+            !this.matchValue(
+                value
+            )
+        ) {
+
+            throw new Error(
+                `« ${value} » attendu`
+            );
+        }
+    }
+
+
+
+    /* =====================================================
+       PARSE
+    ===================================================== */
+
     parse() {
 
-        const expression =
+        const value =
             this.parseOr();
 
 
         if (
-            !this.isEnd()
+            this.current()
+                .type !==
+            "eof"
         ) {
 
-            throw this.error(
-                `Expression invalide près de "${this.peek().value}".`
+            throw new Error(
+                `Expression invalide près de « ${this.current().value} »`
             );
         }
 
 
-        return expression;
+        return value;
     }
 
 
@@ -5076,24 +951,22 @@ class PytExpressionParser {
 
 
         while (
-            this.matchKeyword(
+            this.matchIdentifier(
                 "or"
             )
         ) {
 
-            left = {
+            const right =
+                this.parseAnd();
 
-                type:
-                    "binary",
 
-                operator:
-                    "or",
-
-                left,
-
-                right:
-                    this.parseAnd()
-            };
+            left =
+                Boolean(
+                    left
+                ) ||
+                Boolean(
+                    right
+                );
         }
 
 
@@ -5109,24 +982,22 @@ class PytExpressionParser {
 
 
         while (
-            this.matchKeyword(
+            this.matchIdentifier(
                 "and"
             )
         ) {
 
-            left = {
+            const right =
+                this.parseNot();
 
-                type:
-                    "binary",
 
-                operator:
-                    "and",
-
-                left,
-
-                right:
-                    this.parseNot()
-            };
+            left =
+                Boolean(
+                    left
+                ) &&
+                Boolean(
+                    right
+                );
         }
 
 
@@ -5138,22 +1009,14 @@ class PytExpressionParser {
     parseNot() {
 
         if (
-            this.matchKeyword(
+            this.matchIdentifier(
                 "not"
             )
         ) {
 
-            return {
-
-                type:
-                    "unary",
-
-                operator:
-                    "not",
-
-                argument:
-                    this.parseNot()
-            };
+            return !Boolean(
+                this.parseNot()
+            );
         }
 
 
@@ -5172,2142 +1035,180 @@ class PytExpressionParser {
             true
         ) {
 
-            let operator =
-                null;
-
+            /*
+             * "not in"
+             */
 
             if (
-                this.matchOperator(
-                    "=="
-                )
-            ) {
-
-                operator =
-                    "==";
-
-            } else if (
-                this.matchOperator(
-                    "!="
-                )
-            ) {
-
-                operator =
-                    "!=";
-
-            } else if (
-                this.matchOperator(
-                    "<="
-                )
-            ) {
-
-                operator =
-                    "<=";
-
-            } else if (
-                this.matchOperator(
-                    ">="
-                )
-            ) {
-
-                operator =
-                    ">=";
-
-            } else if (
-                this.matchOperator(
-                    "<"
-                )
-            ) {
-
-                operator =
-                    "<";
-
-            } else if (
-                this.matchOperator(
-                    ">"
-                )
-            ) {
-
-                operator =
-                    ">";
-
-            } else if (
-                this.matchKeyword(
-                    "in"
-                )
-            ) {
-
-                operator =
-                    "in";
-
-            } else if (
-                this.checkKeyword(
-                    "not"
-                ) &&
-                this.checkKeyword(
-                    "in",
+                this.current()
+                    .type ===
+                    "identifier" &&
+                this.current()
+                    .value ===
+                    "not" &&
+                this.tokens[
+                    this.index +
                     1
-                )
+                ]?.value ===
+                    "in"
             ) {
 
                 this.index +=
                     2;
 
 
-                operator =
-                    "not in";
+                const right =
+                    this.parseAdditive();
+
+
+                left =
+                    !this.contains(
+                        right,
+                        left
+                    );
+
+
+                continue;
             }
 
 
+            /*
+             * "in"
+             */
+
             if (
-                !operator
+                this.matchIdentifier(
+                    "in"
+                )
+            ) {
+
+                const right =
+                    this.parseAdditive();
+
+
+                left =
+                    this.contains(
+                        right,
+                        left
+                    );
+
+
+                continue;
+            }
+
+
+            const operator =
+                this.current()
+                    .value;
+
+
+            if (
+                ![
+                    "==",
+                    "!=",
+                    "<",
+                    ">",
+                    "<=",
+                    ">="
+                ].includes(
+                    operator
+                )
             ) {
 
                 break;
             }
 
 
-            left = {
-
-                type:
-                    "binary",
-
-                operator,
-
-                left,
-
-                right:
-                    this.parseAdditive()
-            };
-        }
+            this.index +=
+                1;
 
 
-        return left;
-    }
+            const right =
+                this.parseAdditive();
 
 
-
-    parseAdditive() {
-
-        let left =
-            this.parseMultiplicative();
-
-
-        while (
-            true
-        ) {
-
-            let operator =
-                null;
-
-
-            if (
-                this.matchOperator(
-                    "+"
-                )
+            switch (
+                operator
             ) {
 
-                operator =
-                    "+";
+                case "==":
 
-            } else if (
-                this.matchOperator(
-                    "-"
-                )
-            ) {
-
-                operator =
-                    "-";
-            }
-
-
-            if (
-                !operator
-            ) {
-
-                break;
-            }
-
-
-            left = {
-
-                type:
-                    "binary",
-
-                operator,
-
-                left,
-
-                right:
-                    this.parseMultiplicative()
-            };
-        }
-
-
-        return left;
-    }
-
-
-
-    parseMultiplicative() {
-
-        let left =
-            this.parseUnary();
-
-
-        while (
-            true
-        ) {
-
-            let operator =
-                null;
-
-
-            for (
-                const candidate
-                of [
-                    "*",
-                    "/",
-                    "//",
-                    "%"
-                ]
-            ) {
-
-                if (
-                    this.matchOperator(
-                        candidate
-                    )
-                ) {
-
-                    operator =
-                        candidate;
+                    left =
+                        left ===
+                        right;
 
                     break;
-                }
+
+
+                case "!=":
+
+                    left =
+                        left !==
+                        right;
+
+                    break;
+
+
+                case "<":
+
+                    left =
+                        left <
+                        right;
+
+                    break;
+
+
+                case ">":
+
+                    left =
+                        left >
+                        right;
+
+                    break;
+
+
+                case "<=":
+
+                    left =
+                        left <=
+                        right;
+
+                    break;
+
+
+                case ">=":
+
+                    left =
+                        left >=
+                        right;
+
+                    break;
             }
-
-
-            if (
-                !operator
-            ) {
-
-                break;
-            }
-
-
-            left = {
-
-                type:
-                    "binary",
-
-                operator,
-
-                left,
-
-                right:
-                    this.parseUnary()
-            };
         }
 
 
         return left;
-    }
-
-
-
-    parseUnary() {
-
-        if (
-            this.matchOperator(
-                "+"
-            )
-        ) {
-
-            return {
-
-                type:
-                    "unary",
-
-                operator:
-                    "+",
-
-                argument:
-                    this.parseUnary()
-            };
-        }
-
-
-        if (
-            this.matchOperator(
-                "-"
-            )
-        ) {
-
-            return {
-
-                type:
-                    "unary",
-
-                operator:
-                    "-",
-
-                argument:
-                    this.parseUnary()
-            };
-        }
-
-
-        return this.parsePostfix();
-    }
-
-
-
-    parsePostfix() {
-
-        let expression =
-            this.parsePrimary();
-
-
-        while (
-            true
-        ) {
-
-            if (
-                this.matchOperator(
-                    "("
-                )
-            ) {
-
-                const args =
-                    [];
-
-
-                if (
-                    !this.checkOperator(
-                        ")"
-                    )
-                ) {
-
-                    do {
-
-                        args.push(
-                            this.parseOr()
-                        );
-
-                    } while (
-                        this.matchOperator(
-                            ","
-                        ) &&
-                        !this.checkOperator(
-                            ")"
-                        )
-                    );
-                }
-
-
-                this.expectOperator(
-                    ")"
-                );
-
-
-                expression = {
-
-                    type:
-                        "call",
-
-                    callee:
-                        expression,
-
-                    args
-                };
-
-
-                continue;
-            }
-
-
-            if (
-                this.matchOperator(
-                    "["
-                )
-            ) {
-
-                const index =
-                    this.parseOr();
-
-
-                this.expectOperator(
-                    "]"
-                );
-
-
-                expression = {
-
-                    type:
-                        "subscript",
-
-                    object:
-                        expression,
-
-                    index
-                };
-
-
-                continue;
-            }
-
-
-            break;
-        }
-
-
-        return expression;
-    }
-
-
-
-    parsePrimary() {
-
-        const token =
-            this.peek();
-
-
-        if (
-            token.type ===
-            "number"
-        ) {
-
-            this.index +=
-                1;
-
-
-            return {
-
-                type:
-                    "literal",
-
-                value:
-                    token.value
-            };
-        }
-
-
-        if (
-            token.type ===
-            "string"
-        ) {
-
-            this.index +=
-                1;
-
-
-            return {
-
-                type:
-                    "literal",
-
-                value:
-                    token.value
-            };
-        }
-
-
-        if (
-            token.type ===
-            "identifier"
-        ) {
-
-            this.index +=
-                1;
-
-
-            if (
-                token.value ===
-                "True"
-            ) {
-
-                return {
-
-                    type:
-                        "literal",
-
-                    value:
-                        true
-                };
-            }
-
-
-            if (
-                token.value ===
-                "False"
-            ) {
-
-                return {
-
-                    type:
-                        "literal",
-
-                    value:
-                        false
-                };
-            }
-
-
-            if (
-                token.value ===
-                "None"
-            ) {
-
-                return {
-
-                    type:
-                        "literal",
-
-                    value:
-                        null
-                };
-            }
-
-
-            return {
-
-                type:
-                    "identifier",
-
-                name:
-                    token.value
-            };
-        }
-
-
-        if (
-            this.matchOperator(
-                "("
-            )
-        ) {
-
-            const expression =
-                this.parseOr();
-
-
-            this.expectOperator(
-                ")"
-            );
-
-
-            return expression;
-        }
-
-
-        if (
-            this.matchOperator(
-                "["
-            )
-        ) {
-
-            const values =
-                [];
-
-
-            if (
-                !this.checkOperator(
-                    "]"
-                )
-            ) {
-
-                do {
-
-                    values.push(
-                        this.parseOr()
-                    );
-
-                } while (
-                    this.matchOperator(
-                        ","
-                    ) &&
-                    !this.checkOperator(
-                        "]"
-                    )
-                );
-            }
-
-
-            this.expectOperator(
-                "]"
-            );
-
-
-            return {
-
-                type:
-                    "list",
-
-                values
-            };
-        }
-
-
-        if (
-            this.matchOperator(
-                "{"
-            )
-        ) {
-
-            const entries =
-                [];
-
-
-            if (
-                !this.checkOperator(
-                    "}"
-                )
-            ) {
-
-                do {
-
-                    const key =
-                        this.parseOr();
-
-
-                    this.expectOperator(
-                        ":"
-                    );
-
-
-                    const value =
-                        this.parseOr();
-
-
-                    entries.push({
-                        key,
-                        value
-                    });
-
-                } while (
-                    this.matchOperator(
-                        ","
-                    ) &&
-                    !this.checkOperator(
-                        "}"
-                    )
-                );
-            }
-
-
-            this.expectOperator(
-                "}"
-            );
-
-
-            return {
-
-                type:
-                    "dictionary",
-
-                entries
-            };
-        }
-
-
-        throw this.error(
-            "Expression incomplète."
-        );
-    }
-
-
-
-    peek(
-        offset = 0
-    ) {
-
-        return (
-            this.tokens[
-                this.index +
-                offset
-            ] ||
-            {
-                type:
-                    "eof",
-
-                value:
-                    null
-            }
-        );
-    }
-
-
-
-    isEnd() {
-
-        return (
-            this.peek().type ===
-            "eof"
-        );
-    }
-
-
-
-    checkOperator(
-        value,
-        offset = 0
-    ) {
-
-        const token =
-            this.peek(
-                offset
-            );
-
-
-        return (
-            token.type ===
-                "operator" &&
-            token.value ===
-                value
-        );
-    }
-
-
-
-    matchOperator(value) {
-
-        if (
-            !this.checkOperator(
-                value
-            )
-        ) {
-
-            return false;
-        }
-
-
-        this.index +=
-            1;
-
-
-        return true;
-    }
-
-
-
-    expectOperator(value) {
-
-        if (
-            !this.matchOperator(
-                value
-            )
-        ) {
-
-            throw this.error(
-                `« ${value} » attendu.`
-            );
-        }
-    }
-
-
-
-    checkKeyword(
-        value,
-        offset = 0
-    ) {
-
-        const token =
-            this.peek(
-                offset
-            );
-
-
-        return (
-            token.type ===
-                "identifier" &&
-            token.value ===
-                value
-        );
-    }
-
-
-
-    matchKeyword(value) {
-
-        if (
-            !this.checkKeyword(
-                value
-            )
-        ) {
-
-            return false;
-        }
-
-
-        this.index +=
-            1;
-
-
-        return true;
-    }
-
-
-
-    error(message) {
-
-        const error =
-            new Error(
-                message
-            );
-
-
-        error.line =
-            this.line;
-
-
-        error.reason =
-            "syntax_error";
-
-
-        return error;
-    }
-
-}
-
-
-
-/* =========================================================
-   INTERPRÉTEUR
-========================================================= */
-
-
-class PytPythonInterpreter {
-
-    constructor(options) {
-
-        this.game =
-            options.game;
-
-        this.robot =
-            options.robot;
-
-        this.world =
-            options.world;
-
-        this.execution =
-            options.execution;
-
-        this.maxInstructions =
-            options.maxInstructions;
-
-        this.maxLoopIterations =
-            options.maxLoopIterations;
-
-        this.maxCallDepth =
-            options.maxCallDepth;
-
-
-        this.globalScope =
-            new PytScope();
-
-
-        const builtins =
-            this.game
-                .createBuiltins();
-
-
-        Object.entries(
-            builtins
-        )
-            .forEach(
-                (
-                    [
-                        name,
-                        fn
-                    ]
-                ) => {
-
-                    this.globalScope
-                        .set(
-                            name,
-                            {
-
-                                __pytCallable:
-                                    true,
-
-                                type:
-                                    "builtin",
-
-                                call:
-                                    fn
-                            }
-                        );
-                }
-            );
-    }
-
-
-
-    async execute(statements) {
-
-        await this.executeBlock(
-            statements,
-            this.globalScope
-        );
-    }
-
-
-
-    async executeBlock(
-        statements,
-        scope
-    ) {
-
-        for (
-            const statement
-            of statements
-        ) {
-
-            this.assertActive();
-
-
-            this.execution
-                .currentLine =
-                statement.line;
-
-
-            this.execution
-                .instructionCount +=
-                1;
-
-
-            if (
-                this.execution
-                    .instructionCount >
-                this.maxInstructions
-            ) {
-
-                const error =
-                    new Error(
-                        "Trop d’instructions exécutées."
-                    );
-
-
-                error.line =
-                    statement.line;
-
-
-                error.reason =
-                    "instruction_limit";
-
-
-                throw error;
-            }
-
-
-            const result =
-                await this.executeStatement(
-                    statement,
-                    scope
-                );
-
-
-            if (
-                result?.type ===
-                "return"
-            ) {
-
-                return result;
-            }
-        }
-
-
-        return null;
-    }
-
-
-
-    async executeStatement(
-        statement,
-        scope
-    ) {
-
-        switch (
-            statement.type
-        ) {
-
-            case "pass":
-
-                return null;
-
-
-            case "assign": {
-
-                const value =
-                    await this.evaluate(
-                        statement.value,
-                        scope
-                    );
-
-
-                if (
-                    statement.operator ===
-                    "="
-                ) {
-
-                    scope.set(
-                        statement.name,
-                        value
-                    );
-
-
-                    return null;
-                }
-
-
-                const current =
-                    scope.get(
-                        statement.name,
-                        statement.line
-                    );
-
-
-                let newValue;
-
-
-                switch (
-                    statement.operator
-                ) {
-
-                    case "+=":
-
-                        newValue =
-                            this.add(
-                                current,
-                                value
-                            );
-
-                        break;
-
-
-                    case "-=":
-
-                        newValue =
-                            Number(
-                                current
-                            ) -
-                            Number(
-                                value
-                            );
-
-                        break;
-
-
-                    case "*=":
-
-                        newValue =
-                            Number(
-                                current
-                            ) *
-                            Number(
-                                value
-                            );
-
-                        break;
-
-
-                    case "/=":
-
-                        if (
-                            Number(
-                                value
-                            ) ===
-                            0
-                        ) {
-
-                            throw this.runtimeError(
-                                "Division par zéro.",
-                                statement.line
-                            );
-                        }
-
-
-                        newValue =
-                            Number(
-                                current
-                            ) /
-                            Number(
-                                value
-                            );
-
-                        break;
-
-
-                    default:
-
-                        newValue =
-                            value;
-                }
-
-
-                scope.set(
-                    statement.name,
-                    newValue
-                );
-
-
-                return null;
-            }
-
-
-            case "expression":
-
-                await this.evaluate(
-                    statement.expression,
-                    scope
-                );
-
-
-                return null;
-
-
-            case "if": {
-
-                for (
-                    const branch
-                    of statement.branches
-                ) {
-
-                    const condition =
-                        await this.evaluate(
-                            branch.condition,
-                            scope
-                        );
-
-
-                    if (
-                        this.truthy(
-                            condition
-                        )
-                    ) {
-
-                        return this.executeBlock(
-                            branch.body,
-                            scope
-                        );
-                    }
-                }
-
-
-                if (
-                    statement.elseBody
-                ) {
-
-                    return this.executeBlock(
-                        statement.elseBody,
-                        scope
-                    );
-                }
-
-
-                return null;
-            }
-
-
-            case "while": {
-
-                let iterations =
-                    0;
-
-
-                while (
-                    true
-                ) {
-
-                    this.assertActive();
-
-
-                    const condition =
-                        await this.evaluate(
-                            statement.condition,
-                            scope
-                        );
-
-
-                    if (
-                        !this.truthy(
-                            condition
-                        )
-                    ) {
-
-                        break;
-                    }
-
-
-                    iterations +=
-                        1;
-
-
-                    if (
-                        iterations >
-                        this.maxLoopIterations
-                    ) {
-
-                        const error =
-                            new Error(
-                                "Cette boucle semble infinie."
-                            );
-
-
-                        error.line =
-                            statement.line;
-
-
-                        error.reason =
-                            "loop_limit";
-
-
-                        throw error;
-                    }
-
-
-                    const result =
-                        await this.executeBlock(
-                            statement.body,
-                            scope
-                        );
-
-
-                    if (
-                        result?.type ===
-                        "return"
-                    ) {
-
-                        return result;
-                    }
-                }
-
-
-                return null;
-            }
-
-
-            case "for": {
-
-                const iterable =
-                    await this.evaluate(
-                        statement.iterable,
-                        scope
-                    );
-
-
-                const values =
-                    this.toIterable(
-                        iterable,
-                        statement.line
-                    );
-
-
-                if (
-                    values.length >
-                    this.maxLoopIterations
-                ) {
-
-                    const error =
-                        new Error(
-                            "La boucle contient trop d’itérations."
-                        );
-
-
-                    error.line =
-                        statement.line;
-
-
-                    error.reason =
-                        "loop_limit";
-
-
-                    throw error;
-                }
-
-
-                for (
-                    const value
-                    of values
-                ) {
-
-                    scope.set(
-                        statement.variable,
-                        value
-                    );
-
-
-                    const result =
-                        await this.executeBlock(
-                            statement.body,
-                            scope
-                        );
-
-
-                    if (
-                        result?.type ===
-                        "return"
-                    ) {
-
-                        return result;
-                    }
-                }
-
-
-                return null;
-            }
-
-
-            case "function": {
-
-                scope.set(
-                    statement.name,
-                    {
-
-                        __pytCallable:
-                            true,
-
-                        type:
-                            "function",
-
-                        name:
-                            statement.name,
-
-                        parameters:
-                            statement.parameters,
-
-                        body:
-                            statement.body,
-
-                        definingScope:
-                            scope
-                    }
-                );
-
-
-                return null;
-            }
-
-
-            case "return": {
-
-                const value =
-                    statement.value
-                        ? await this.evaluate(
-                            statement.value,
-                            scope
-                        )
-                        : null;
-
-
-                return {
-
-                    type:
-                        "return",
-
-                    value
-                };
-            }
-
-
-            default:
-
-                throw this.runtimeError(
-                    `Instruction non prise en charge : ${statement.type}`,
-                    statement.line
-                );
-        }
-    }
-
-
-
-    async evaluate(
-        node,
-        scope
-    ) {
-
-        this.assertActive();
-
-
-        switch (
-            node.type
-        ) {
-
-            case "literal":
-
-                return node.value;
-
-
-            case "identifier":
-
-                return scope.get(
-                    node.name,
-                    this.execution
-                        .currentLine
-                );
-
-
-            case "list": {
-
-                const values =
-                    [];
-
-
-                for (
-                    const value
-                    of node.values
-                ) {
-
-                    values.push(
-                        await this.evaluate(
-                            value,
-                            scope
-                        )
-                    );
-                }
-
-
-                return values;
-            }
-
-
-            case "dictionary": {
-
-                const object =
-                    {};
-
-
-                for (
-                    const entry
-                    of node.entries
-                ) {
-
-                    const key =
-                        await this.evaluate(
-                            entry.key,
-                            scope
-                        );
-
-
-                    const value =
-                        await this.evaluate(
-                            entry.value,
-                            scope
-                        );
-
-
-                    object[
-                        String(
-                            key
-                        )
-                    ] =
-                        value;
-                }
-
-
-                return object;
-            }
-
-
-            case "unary": {
-
-                const value =
-                    await this.evaluate(
-                        node.argument,
-                        scope
-                    );
-
-
-                switch (
-                    node.operator
-                ) {
-
-                    case "not":
-
-                        return (
-                            !this.truthy(
-                                value
-                            )
-                        );
-
-
-                    case "+":
-
-                        return Number(
-                            value
-                        );
-
-
-                    case "-":
-
-                        return -Number(
-                            value
-                        );
-
-
-                    default:
-
-                        return value;
-                }
-            }
-
-
-            case "binary":
-
-                return this.evaluateBinary(
-                    node,
-                    scope
-                );
-
-
-            case "call":
-
-                return this.evaluateCall(
-                    node,
-                    scope
-                );
-
-
-            case "subscript":
-
-                return this.evaluateSubscript(
-                    node,
-                    scope
-                );
-
-
-            default:
-
-                throw this.runtimeError(
-                    `Expression inconnue : ${node.type}`
-                );
-        }
-    }
-
-
-
-    async evaluateBinary(
-        node,
-        scope
-    ) {
-
-        if (
-            node.operator ===
-            "and"
-        ) {
-
-            const left =
-                await this.evaluate(
-                    node.left,
-                    scope
-                );
-
-
-            if (
-                !this.truthy(
-                    left
-                )
-            ) {
-
-                return left;
-            }
-
-
-            return this.evaluate(
-                node.right,
-                scope
-            );
-        }
-
-
-        if (
-            node.operator ===
-            "or"
-        ) {
-
-            const left =
-                await this.evaluate(
-                    node.left,
-                    scope
-                );
-
-
-            if (
-                this.truthy(
-                    left
-                )
-            ) {
-
-                return left;
-            }
-
-
-            return this.evaluate(
-                node.right,
-                scope
-            );
-        }
-
-
-        const left =
-            await this.evaluate(
-                node.left,
-                scope
-            );
-
-
-        const right =
-            await this.evaluate(
-                node.right,
-                scope
-            );
-
-
-        switch (
-            node.operator
-        ) {
-
-            case "==":
-
-                return this.equal(
-                    left,
-                    right
-                );
-
-
-            case "!=":
-
-                return !this.equal(
-                    left,
-                    right
-                );
-
-
-            case "<":
-
-                return (
-                    left <
-                    right
-                );
-
-
-            case ">":
-
-                return (
-                    left >
-                    right
-                );
-
-
-            case "<=":
-
-                return (
-                    left <=
-                    right
-                );
-
-
-            case ">=":
-
-                return (
-                    left >=
-                    right
-                );
-
-
-            case "+":
-
-                return this.add(
-                    left,
-                    right
-                );
-
-
-            case "-":
-
-                return (
-                    Number(left) -
-                    Number(right)
-                );
-
-
-            case "*":
-
-                return (
-                    Number(left) *
-                    Number(right)
-                );
-
-
-            case "/": {
-
-                if (
-                    Number(
-                        right
-                    ) ===
-                    0
-                ) {
-
-                    throw this.runtimeError(
-                        "Division par zéro."
-                    );
-                }
-
-
-                return (
-                    Number(left) /
-                    Number(right)
-                );
-            }
-
-
-            case "//": {
-
-                if (
-                    Number(
-                        right
-                    ) ===
-                    0
-                ) {
-
-                    throw this.runtimeError(
-                        "Division par zéro."
-                    );
-                }
-
-
-                return Math.floor(
-                    Number(left) /
-                    Number(right)
-                );
-            }
-
-
-            case "%": {
-
-                if (
-                    Number(
-                        right
-                    ) ===
-                    0
-                ) {
-
-                    throw this.runtimeError(
-                        "Modulo par zéro."
-                    );
-                }
-
-
-                return (
-                    Number(left) %
-                    Number(right)
-                );
-            }
-
-
-            case "in":
-
-                return this.contains(
-                    right,
-                    left
-                );
-
-
-            case "not in":
-
-                return !this.contains(
-                    right,
-                    left
-                );
-
-
-            default:
-
-                throw this.runtimeError(
-                    `Opérateur inconnu : ${node.operator}`
-                );
-        }
-    }
-
-
-
-    async evaluateCall(
-        node,
-        scope
-    ) {
-
-        const callable =
-            await this.evaluate(
-                node.callee,
-                scope
-            );
-
-
-        if (
-            !callable ||
-            callable.__pytCallable !==
-                true
-        ) {
-
-            throw this.runtimeError(
-                "Cette valeur n’est pas une fonction."
-            );
-        }
-
-
-        const args =
-            [];
-
-
-        for (
-            const argument
-            of node.args
-        ) {
-
-            args.push(
-                await this.evaluate(
-                    argument,
-                    scope
-                )
-            );
-        }
-
-
-        if (
-            callable.type ===
-            "builtin"
-        ) {
-
-            return callable.call(
-                ...args
-            );
-        }
-
-
-        if (
-            callable.type ===
-            "function"
-        ) {
-
-            if (
-                args.length !==
-                callable.parameters.length
-            ) {
-
-                throw this.runtimeError(
-                    `${callable.name}() attend ${callable.parameters.length} argument(s), mais ${args.length} ont été fournis.`
-                );
-            }
-
-
-            this.execution
-                .callDepth +=
-                1;
-
-
-            if (
-                this.execution
-                    .callDepth >
-                this.maxCallDepth
-            ) {
-
-                throw this.runtimeError(
-                    "Trop d’appels de fonctions imbriqués."
-                );
-            }
-
-
-            const functionScope =
-                new PytScope(
-                    callable.definingScope
-                );
-
-
-            callable.parameters
-                .forEach(
-                    (
-                        name,
-                        index
-                    ) => {
-
-                        functionScope.set(
-                            name,
-                            args[index]
-                        );
-                    }
-                );
-
-
-            try {
-
-                const result =
-                    await this.executeBlock(
-                        callable.body,
-                        functionScope
-                    );
-
-
-                return (
-                    result?.type ===
-                    "return"
-                        ? result.value
-                        : null
-                );
-
-            } finally {
-
-                this.execution
-                    .callDepth -=
-                    1;
-            }
-        }
-
-
-        return null;
-    }
-
-
-
-    async evaluateSubscript(
-        node,
-        scope
-    ) {
-
-        const object =
-            await this.evaluate(
-                node.object,
-                scope
-            );
-
-
-        const index =
-            await this.evaluate(
-                node.index,
-                scope
-            );
-
-
-        if (
-            Array.isArray(
-                object
-            ) ||
-            typeof object ===
-                "string"
-        ) {
-
-            let position =
-                Number(
-                    index
-                );
-
-
-            if (
-                !Number.isInteger(
-                    position
-                )
-            ) {
-
-                throw this.runtimeError(
-                    "L’indice d’une liste doit être un entier."
-                );
-            }
-
-
-            if (
-                position <
-                0
-            ) {
-
-                position =
-                    object.length +
-                    position;
-            }
-
-
-            if (
-                position <
-                    0 ||
-                position >=
-                    object.length
-            ) {
-
-                throw this.runtimeError(
-                    "Indice hors de la liste."
-                );
-            }
-
-
-            return object[
-                position
-            ];
-        }
-
-
-        if (
-            object &&
-            typeof object ===
-                "object"
-        ) {
-
-            const key =
-                String(
-                    index
-                );
-
-
-            if (
-                !Object.prototype
-                    .hasOwnProperty
-                    .call(
-                        object,
-                        key
-                    )
-            ) {
-
-                throw this.runtimeError(
-                    `La clé "${key}" n’existe pas dans ce dictionnaire.`
-                );
-            }
-
-
-            return object[
-                key
-            ];
-        }
-
-
-        throw this.runtimeError(
-            "Cette valeur ne peut pas être indexée."
-        );
-    }
-
-
-
-    add(
-        left,
-        right
-    ) {
-
-        if (
-            typeof left ===
-                "string" ||
-            typeof right ===
-                "string"
-        ) {
-
-            return (
-                String(
-                    left
-                ) +
-                String(
-                    right
-                )
-            );
-        }
-
-
-        if (
-            Array.isArray(
-                left
-            ) &&
-            Array.isArray(
-                right
-            )
-        ) {
-
-            return [
-                ...left,
-                ...right
-            ];
-        }
-
-
-        return (
-            Number(
-                left
-            ) +
-            Number(
-                right
-            )
-        );
-    }
-
-
-
-    equal(
-        left,
-        right
-    ) {
-
-        if (
-            typeof left !==
-            typeof right
-        ) {
-
-            return (
-                left ==
-                right
-            );
-        }
-
-
-        if (
-            typeof left ===
-                "object" &&
-            left !==
-                null &&
-            right !==
-                null
-        ) {
-
-            return (
-                JSON.stringify(
-                    left
-                ) ===
-                JSON.stringify(
-                    right
-                )
-            );
-        }
-
-
-        return (
-            left ===
-            right
-        );
     }
 
 
 
     contains(
         container,
-        item
+        value
     ) {
 
         if (
             Array.isArray(
                 container
-            )
-        ) {
-
-            return container.some(
-                value =>
-                    this.equal(
-                        value,
-                        item
-                    )
-            );
-        }
-
-
-        if (
+            ) ||
             typeof container ===
-            "string"
+                "string"
         ) {
 
-            return container.includes(
-                String(
-                    item
-                )
-            );
+            return container
+                .includes(
+                    value
+                );
         }
 
 
@@ -7321,9 +1222,7 @@ class PytPythonInterpreter {
                 .hasOwnProperty
                 .call(
                     container,
-                    String(
-                        item
-                    )
+                    value
                 );
         }
 
@@ -7333,88 +1232,1105 @@ class PytPythonInterpreter {
 
 
 
-    toIterable(
-        value,
-        line
-    ) {
+    parseAdditive() {
 
-        if (
-            Array.isArray(
-                value
+        let left =
+            this.parseMultiplicative();
+
+
+        while (
+            [
+                "+",
+                "-"
+            ].includes(
+                this.current()
+                    .value
             )
         ) {
 
-            return [
-                ...value
-            ];
+            const operator =
+                this.next()
+                    .value;
+
+
+            const right =
+                this.parseMultiplicative();
+
+
+            if (
+                operator ===
+                "+"
+            ) {
+
+                left =
+                    left +
+                    right;
+
+            } else {
+
+                left =
+                    left -
+                    right;
+            }
         }
 
 
-        if (
-            typeof value ===
-            "string"
+        return left;
+    }
+
+
+
+    parseMultiplicative() {
+
+        let left =
+            this.parsePower();
+
+
+        while (
+            [
+                "*",
+                "/",
+                "//",
+                "%"
+            ].includes(
+                this.current()
+                    .value
+            )
         ) {
 
-            return [
-                ...value
-            ];
+            const operator =
+                this.next()
+                    .value;
+
+
+            const right =
+                this.parsePower();
+
+
+            switch (
+                operator
+            ) {
+
+                case "*":
+
+                    left =
+                        left *
+                        right;
+
+                    break;
+
+
+                case "/":
+
+                    left =
+                        left /
+                        right;
+
+                    break;
+
+
+                case "//":
+
+                    left =
+                        Math.floor(
+                            left /
+                            right
+                        );
+
+                    break;
+
+
+                case "%":
+
+                    left =
+                        left %
+                        right;
+
+                    break;
+            }
         }
 
 
+        return left;
+    }
+
+
+
+    parsePower() {
+
+        let left =
+            this.parseUnary();
+
+
         if (
-            value &&
-            typeof value ===
-                "object"
+            this.matchValue(
+                "**"
+            )
         ) {
 
-            return Object.keys(
-                value
+            const right =
+                this.parsePower();
+
+
+            left =
+                left **
+                right;
+        }
+
+
+        return left;
+    }
+
+
+
+    parseUnary() {
+
+        if (
+            this.matchValue(
+                "-"
+            )
+        ) {
+
+            return -Number(
+                this.parseUnary()
             );
         }
 
 
-        throw this.runtimeError(
-            "Cette valeur ne peut pas être parcourue avec for.",
-            line
+        if (
+            this.matchValue(
+                "+"
+            )
+        ) {
+
+            return Number(
+                this.parseUnary()
+            );
+        }
+
+
+        return this.parsePostfix();
+    }
+
+
+
+    parsePostfix() {
+
+        let value =
+            this.parsePrimary();
+
+
+        while (
+            true
+        ) {
+
+            /*
+             * CALL
+             */
+
+            if (
+                this.matchValue(
+                    "("
+                )
+            ) {
+
+                const args =
+                    [];
+
+
+                if (
+                    !this.matchValue(
+                        ")"
+                    )
+                ) {
+
+                    do {
+
+                        args.push(
+                            this.parseOr()
+                        );
+
+                    } while (
+                        this.matchValue(
+                            ","
+                        )
+                    );
+
+
+                    this.expectValue(
+                        ")"
+                    );
+                }
+
+
+                value =
+                    this.interpreter
+                        .callValue(
+                            value,
+                            args
+                        );
+
+
+                continue;
+            }
+
+
+            /*
+             * INDEX
+             */
+
+            if (
+                this.matchValue(
+                    "["
+                )
+            ) {
+
+                const index =
+                    this.parseOr();
+
+
+                this.expectValue(
+                    "]"
+                );
+
+
+                if (
+                    value ===
+                        null ||
+                    value ===
+                        undefined
+                ) {
+
+                    throw new Error(
+                        "Index utilisé sur une valeur vide."
+                    );
+                }
+
+
+                value =
+                    value[
+                        index
+                    ];
+
+
+                continue;
+            }
+
+
+            break;
+        }
+
+
+        return value;
+    }
+
+
+
+    parsePrimary() {
+
+        const token =
+            this.next();
+
+
+        if (
+            token.type ===
+            "number"
+        ) {
+
+            return token.value;
+        }
+
+
+        if (
+            token.type ===
+            "string"
+        ) {
+
+            return token.value;
+        }
+
+
+        if (
+            token.type ===
+            "identifier"
+        ) {
+
+            switch (
+                token.value
+            ) {
+
+                case "True":
+
+                    return true;
+
+
+                case "False":
+
+                    return false;
+
+
+                case "None":
+
+                    return null;
+            }
+
+
+            return this.scope
+                .get(
+                    token.value
+                );
+        }
+
+
+        /*
+         * Parenthèses
+         */
+
+        if (
+            token.value ===
+            "("
+        ) {
+
+            const value =
+                this.parseOr();
+
+
+            this.expectValue(
+                ")"
+            );
+
+
+            return value;
+        }
+
+
+        /*
+         * Liste
+         */
+
+        if (
+            token.value ===
+            "["
+        ) {
+
+            const values =
+                [];
+
+
+            if (
+                !this.matchValue(
+                    "]"
+                )
+            ) {
+
+                do {
+
+                    values.push(
+                        this.parseOr()
+                    );
+
+                } while (
+                    this.matchValue(
+                        ","
+                    )
+                );
+
+
+                this.expectValue(
+                    "]"
+                );
+            }
+
+
+            return values;
+        }
+
+
+        /*
+         * Dictionnaire
+         */
+
+        if (
+            token.value ===
+            "{"
+        ) {
+
+            const object =
+                {};
+
+
+            if (
+                !this.matchValue(
+                    "}"
+                )
+            ) {
+
+                do {
+
+                    const key =
+                        this.parseOr();
+
+
+                    this.expectValue(
+                        ":"
+                    );
+
+
+                    const value =
+                        this.parseOr();
+
+
+                    object[
+                        key
+                    ] =
+                        value;
+
+                } while (
+                    this.matchValue(
+                        ","
+                    )
+                );
+
+
+                this.expectValue(
+                    "}"
+                );
+            }
+
+
+            return object;
+        }
+
+
+        throw new Error(
+            "Expression incomplète."
+        );
+    }
+}
+
+
+
+/* =========================================================
+   INTERPRÉTEUR PYTHON SIMPLIFIÉ
+========================================================= */
+
+class PytInterpreter {
+
+    constructor(
+        game,
+        source
+    ) {
+
+        this.game =
+            game;
+
+
+        this.source =
+            String(
+                source ||
+                ""
+            );
+
+
+        this.globalScope =
+            new PytScope();
+
+
+        this.currentLine =
+            0;
+
+
+        this.maxLoopIterations =
+            600;
+
+
+        this.installBuiltins();
+    }
+
+
+
+    /* =====================================================
+       BUILTINS
+    ===================================================== */
+
+    installBuiltins() {
+
+        const bind =
+            (
+                name,
+                callback
+            ) => {
+
+                this.globalScope
+                    .set(
+                        name,
+                        callback
+                    );
+            };
+
+
+        /*
+         * Déplacement officiel.
+         */
+
+        bind(
+            "forward",
+            distance =>
+                this.game
+                    .apiForward(
+                        distance
+                    )
+        );
+
+
+        bind(
+            "backward",
+            distance =>
+                this.game
+                    .apiBackward(
+                        distance
+                    )
+        );
+
+
+        bind(
+            "left",
+            degrees =>
+                this.game
+                    .apiLeft(
+                        degrees
+                    )
+        );
+
+
+        bind(
+            "right",
+            degrees =>
+                this.game
+                    .apiRight(
+                        degrees
+                    )
+        );
+
+
+        /*
+         * Anciens alias pour ne pas casser
+         * les niveaux déjà créés.
+         */
+
+        bind(
+            "avancer",
+            distance =>
+                this.game
+                    .apiForward(
+                        distance
+                    )
+        );
+
+
+        bind(
+            "reculer",
+            distance =>
+                this.game
+                    .apiBackward(
+                        distance
+                    )
+        );
+
+
+        bind(
+            "tourner_gauche",
+            degrees =>
+                this.game
+                    .apiLeft(
+                        degrees ??
+                        90
+                    )
+        );
+
+
+        bind(
+            "tourner_droite",
+            degrees =>
+                this.game
+                    .apiRight(
+                        degrees ??
+                        90
+                    )
+        );
+
+
+        /*
+         * Turtle supplémentaire.
+         */
+
+        bind(
+            "setheading",
+            degrees =>
+                this.game
+                    .apiSetHeading(
+                        degrees
+                    )
+        );
+
+
+        bind(
+            "goto",
+            (
+                x,
+                y
+            ) =>
+                this.game
+                    .apiGoto(
+                        x,
+                        y
+                    )
+        );
+
+
+        /*
+         * Informations environnement.
+         */
+
+        bind(
+            "front_is_clear",
+            () =>
+                this.game
+                    .frontIsClear()
+        );
+
+
+        bind(
+            "devant_libre",
+            () =>
+                this.game
+                    .frontIsClear()
+        );
+
+
+        bind(
+            "on_object",
+            () =>
+                this.game
+                    .robotOnObject()
+        );
+
+
+        bind(
+            "sur_objet",
+            () =>
+                this.game
+                    .robotOnObject()
+        );
+
+
+        bind(
+            "position_x",
+            () =>
+                this.game
+                    .getRobotX()
+        );
+
+
+        bind(
+            "position_y",
+            () =>
+                this.game
+                    .getRobotY()
+        );
+
+
+        bind(
+            "xcor",
+            () =>
+                this.game
+                    .getRobotX()
+        );
+
+
+        bind(
+            "ycor",
+            () =>
+                this.game
+                    .getRobotY()
+        );
+
+
+        bind(
+            "direction",
+            () =>
+                this.game
+                    .getRobotDirection()
+        );
+
+
+        bind(
+            "inventory_contains",
+            item =>
+                this.game
+                    .inventoryContains(
+                        item
+                    )
+        );
+
+
+        bind(
+            "inventaire_contient",
+            item =>
+                this.game
+                    .inventoryContains(
+                        item
+                    )
+        );
+
+
+        /*
+         * Python.
+         */
+
+        bind(
+            "range",
+            (
+                start,
+                stop,
+                step
+            ) =>
+                this.makeRange(
+                    start,
+                    stop,
+                    step
+                )
+        );
+
+
+        bind(
+            "len",
+            value => {
+
+                if (
+                    value ===
+                        null ||
+                    value ===
+                        undefined
+                ) {
+
+                    return 0;
+                }
+
+
+                if (
+                    typeof value.length ===
+                    "number"
+                ) {
+
+                    return value.length;
+                }
+
+
+                if (
+                    typeof value ===
+                    "object"
+                ) {
+
+                    return Object.keys(
+                        value
+                    ).length;
+                }
+
+
+                return 0;
+            }
+        );
+
+
+        bind(
+            "print",
+            (...values) => {
+
+                const text =
+                    values
+                        .map(
+                            value =>
+                                this.pythonString(
+                                    value
+                                )
+                        )
+                        .join(
+                            " "
+                        );
+
+
+                this.game
+                    .programOutput
+                    .push(
+                        text
+                    );
+
+
+                return null;
+            }
+        );
+
+
+        bind(
+            "int",
+            value =>
+                parseInt(
+                    value,
+                    10
+                )
+        );
+
+
+        bind(
+            "float",
+            value =>
+                Number(
+                    value
+                )
+        );
+
+
+        bind(
+            "str",
+            value =>
+                this.pythonString(
+                    value
+                )
+        );
+
+
+        bind(
+            "round",
+            (
+                value,
+                digits = 0
+            ) => {
+
+                const factor =
+                    10 **
+                    Number(
+                        digits
+                    );
+
+
+                return Math.round(
+                    Number(
+                        value
+                    ) *
+                    factor
+                ) /
+                factor;
+            }
+        );
+
+
+        bind(
+            "min",
+            (...values) => {
+
+                const flattened =
+                    (
+                        values.length ===
+                            1 &&
+                        Array.isArray(
+                            values[0]
+                        )
+                    )
+                        ? values[0]
+                        : values;
+
+
+                return Math.min(
+                    ...flattened
+                );
+            }
+        );
+
+
+        bind(
+            "max",
+            (...values) => {
+
+                const flattened =
+                    (
+                        values.length ===
+                            1 &&
+                        Array.isArray(
+                            values[0]
+                        )
+                    )
+                        ? values[0]
+                        : values;
+
+
+                return Math.max(
+                    ...flattened
+                );
+            }
         );
     }
 
 
 
-    truthy(value) {
+    makeRange(
+        start,
+        stop,
+        step
+    ) {
 
         if (
-            value ===
-                null ||
-            value ===
-                false
+            stop ===
+            undefined
         ) {
 
-            return false;
+            stop =
+                start;
+
+            start =
+                0;
         }
 
 
         if (
-            typeof value ===
-            "number"
+            step ===
+                undefined ||
+            step ===
+                null
         ) {
 
-            return (
-                value !==
-                0
+            step =
+                1;
+        }
+
+
+        start =
+            Number(
+                start
+            );
+
+
+        stop =
+            Number(
+                stop
+            );
+
+
+        step =
+            Number(
+                step
+            );
+
+
+        if (
+            step ===
+            0
+        ) {
+
+            throw new Error(
+                "range() ne peut pas avoir un pas de 0."
             );
         }
 
 
+        const values =
+            [];
+
+
+        let guard =
+            0;
+
+
         if (
-            typeof value ===
-            "string"
+            step >
+            0
         ) {
 
-            return (
-                value.length >
-                0
-            );
+            for (
+                let value = start;
+                value < stop;
+                value += step
+            ) {
+
+                values.push(
+                    value
+                );
+
+
+                guard +=
+                    1;
+
+
+                if (
+                    guard >
+                    10000
+                ) {
+
+                    break;
+                }
+            }
+
+        } else {
+
+            for (
+                let value = start;
+                value > stop;
+                value += step
+            ) {
+
+                values.push(
+                    value
+                );
+
+
+                guard +=
+                    1;
+
+
+                if (
+                    guard >
+                    10000
+                ) {
+
+                    break;
+                }
+            }
+        }
+
+
+        return values;
+    }
+
+
+
+    pythonString(value) {
+
+        if (
+            value ===
+            true
+        ) {
+
+            return "True";
+        }
+
+
+        if (
+            value ===
+            false
+        ) {
+
+            return "False";
+        }
+
+
+        if (
+            value ===
+            null ||
+            value ===
+            undefined
+        ) {
+
+            return "None";
         }
 
 
@@ -7424,11 +2340,3016 @@ class PytPythonInterpreter {
             )
         ) {
 
-            return (
-                value.length >
-                0
+            return `[${value
+                .map(
+                    item =>
+                        this.pythonString(
+                            item
+                        )
+                )
+                .join(", ")}]`;
+        }
+
+
+        if (
+            typeof value ===
+            "object"
+        ) {
+
+            return JSON.stringify(
+                value
             );
         }
+
+
+        return String(
+            value
+        );
+    }
+
+
+
+    /* =====================================================
+       PRÉPARATION DU CODE
+    ===================================================== */
+
+    stripComment(line) {
+
+        let quote =
+            null;
+
+
+        let escaped =
+            false;
+
+
+        for (
+            let i = 0;
+            i < line.length;
+            i += 1
+        ) {
+
+            const char =
+                line[i];
+
+
+            if (
+                escaped
+            ) {
+
+                escaped =
+                    false;
+
+                continue;
+            }
+
+
+            if (
+                char ===
+                "\\"
+            ) {
+
+                escaped =
+                    true;
+
+                continue;
+            }
+
+
+            if (
+                quote
+            ) {
+
+                if (
+                    char ===
+                    quote
+                ) {
+
+                    quote =
+                        null;
+                }
+
+
+                continue;
+            }
+
+
+            if (
+                char ===
+                    "'" ||
+                char ===
+                    '"'
+            ) {
+
+                quote =
+                    char;
+
+                continue;
+            }
+
+
+            if (
+                char ===
+                "#"
+            ) {
+
+                return line.slice(
+                    0,
+                    i
+                );
+            }
+        }
+
+
+        return line;
+    }
+
+
+
+    bracketDepth(text) {
+
+        let depth =
+            0;
+
+
+        let quote =
+            null;
+
+
+        let escaped =
+            false;
+
+
+        for (
+            const char
+            of text
+        ) {
+
+            if (
+                escaped
+            ) {
+
+                escaped =
+                    false;
+
+                continue;
+            }
+
+
+            if (
+                char ===
+                "\\"
+            ) {
+
+                escaped =
+                    true;
+
+                continue;
+            }
+
+
+            if (
+                quote
+            ) {
+
+                if (
+                    char ===
+                    quote
+                ) {
+
+                    quote =
+                        null;
+                }
+
+
+                continue;
+            }
+
+
+            if (
+                char ===
+                    "'" ||
+                char ===
+                    '"'
+            ) {
+
+                quote =
+                    char;
+
+                continue;
+            }
+
+
+            if (
+                "([{".includes(
+                    char
+                )
+            ) {
+
+                depth +=
+                    1;
+            }
+
+
+            if (
+                ")]}".includes(
+                    char
+                )
+            ) {
+
+                depth -=
+                    1;
+            }
+        }
+
+
+        return depth;
+    }
+
+
+
+    prepareLines() {
+
+        const raw =
+            this.source
+                .replace(
+                    /\r\n?/g,
+                    "\n"
+                )
+                .split(
+                    "\n"
+                );
+
+
+        const prepared =
+            [];
+
+
+        let buffer =
+            null;
+
+
+        let bufferLine =
+            0;
+
+
+        let bufferIndent =
+            0;
+
+
+        raw.forEach(
+            (
+                rawLine,
+                index
+            ) => {
+
+                const withoutComment =
+                    this.stripComment(
+                        rawLine
+                    );
+
+
+                if (
+                    buffer !==
+                    null
+                ) {
+
+                    buffer +=
+                        " " +
+                        withoutComment
+                            .trim();
+
+
+                    if (
+                        this.bracketDepth(
+                            buffer
+                        ) <=
+                        0
+                    ) {
+
+                        prepared.push({
+
+                            line:
+                                bufferLine,
+
+                            indent:
+                                bufferIndent,
+
+                            text:
+                                buffer.trim()
+                        });
+
+
+                        buffer =
+                            null;
+                    }
+
+
+                    return;
+                }
+
+
+                const trimmed =
+                    withoutComment
+                        .trim();
+
+
+                if (
+                    trimmed ===
+                    ""
+                ) {
+
+                    continue;
+                }
+
+
+                const spaces =
+                    withoutComment
+                        .match(
+                            /^[ \t]*/
+                        )[0]
+                        .replace(
+                            /\t/g,
+                            "    "
+                        )
+                        .length;
+
+
+                if (
+                    this.bracketDepth(
+                        trimmed
+                    ) >
+                    0
+                ) {
+
+                    buffer =
+                        trimmed;
+
+
+                    bufferLine =
+                        index +
+                        1;
+
+
+                    bufferIndent =
+                        spaces;
+
+
+                    return;
+                }
+
+
+                prepared.push({
+
+                    line:
+                        index +
+                        1,
+
+                    indent:
+                        spaces,
+
+                    text:
+                        trimmed
+                });
+            }
+        );
+
+
+        if (
+            buffer !==
+            null
+        ) {
+
+            throw new Error(
+                "Parenthèse, liste ou dictionnaire non terminé."
+            );
+        }
+
+
+        return prepared;
+    }
+
+
+
+    /* =====================================================
+       ARBRE D'INDENTATION
+    ===================================================== */
+
+    buildTree() {
+
+        const lines =
+            this.prepareLines();
+
+
+        const root =
+            {
+
+                indent:
+                    -1,
+
+                children:
+                    []
+            };
+
+
+        const stack =
+            [
+                root
+            ];
+
+
+        for (
+            const line
+            of lines
+        ) {
+
+            while (
+                stack.length >
+                    1 &&
+                line.indent <=
+                    stack[
+                        stack.length -
+                        1
+                    ].indent
+            ) {
+
+                stack.pop();
+            }
+
+
+            const parent =
+                stack[
+                    stack.length -
+                    1
+                ];
+
+
+            const node =
+                {
+
+                    ...line,
+
+                    children:
+                        []
+                };
+
+
+            parent.children.push(
+                node
+            );
+
+
+            if (
+                line.text.endsWith(
+                    ":"
+                )
+            ) {
+
+                stack.push(
+                    node
+                );
+            }
+        }
+
+
+        return root.children;
+    }
+
+
+
+    /* =====================================================
+       EXÉCUTION
+    ===================================================== */
+
+    execute() {
+
+        const nodes =
+            this.buildTree();
+
+
+        this.executeNodes(
+            nodes,
+            this.globalScope
+        );
+
+
+        return {
+
+            output:
+                this.game
+                    .programOutput
+                    .slice()
+        };
+    }
+
+
+
+    executeNodes(
+        nodes,
+        scope
+    ) {
+
+        for (
+            let index = 0;
+            index < nodes.length;
+            index += 1
+        ) {
+
+            const node =
+                nodes[
+                    index
+                ];
+
+
+            this.currentLine =
+                node.line;
+
+
+            const text =
+                node.text;
+
+
+            /*
+             * IF / ELIF / ELSE
+             */
+
+            if (
+                /^if\b/.test(
+                    text
+                )
+            ) {
+
+                const chain =
+                    [
+                        node
+                    ];
+
+
+                let nextIndex =
+                    index +
+                    1;
+
+
+                while (
+                    nextIndex <
+                        nodes.length &&
+                    /^(?:elif\b|else\s*:)/.test(
+                        nodes[
+                            nextIndex
+                        ].text
+                    )
+                ) {
+
+                    chain.push(
+                        nodes[
+                            nextIndex
+                        ]
+                    );
+
+
+                    nextIndex +=
+                        1;
+                }
+
+
+                this.executeIfChain(
+                    chain,
+                    scope
+                );
+
+
+                index =
+                    nextIndex -
+                    1;
+
+
+                continue;
+            }
+
+
+            /*
+             * ELIF / ELSE isolé
+             */
+
+            if (
+                /^(?:elif\b|else\s*:)/.test(
+                    text
+                )
+            ) {
+
+                continue;
+            }
+
+
+            /*
+             * FOR
+             */
+
+            if (
+                /^for\b/.test(
+                    text
+                )
+            ) {
+
+                this.executeFor(
+                    node,
+                    scope
+                );
+
+
+                continue;
+            }
+
+
+            /*
+             * WHILE
+             */
+
+            if (
+                /^while\b/.test(
+                    text
+                )
+            ) {
+
+                this.executeWhile(
+                    node,
+                    scope
+                );
+
+
+                continue;
+            }
+
+
+            /*
+             * DEF
+             */
+
+            if (
+                /^def\b/.test(
+                    text
+                )
+            ) {
+
+                this.executeDefinition(
+                    node,
+                    scope
+                );
+
+
+                continue;
+            }
+
+
+            /*
+             * RETURN
+             */
+
+            if (
+                /^return(?:\s|$)/.test(
+                    text
+                )
+            ) {
+
+                const expression =
+                    text
+                        .replace(
+                            /^return\b/,
+                            ""
+                        )
+                        .trim();
+
+
+                const value =
+                    expression
+                        ? this.evaluate(
+                            expression,
+                            scope
+                        )
+                        : null;
+
+
+                throw new PytReturnSignal(
+                    value
+                );
+            }
+
+
+            /*
+             * BREAK
+             */
+
+            if (
+                text ===
+                "break"
+            ) {
+
+                throw new PytBreakSignal();
+            }
+
+
+            /*
+             * PASS
+             */
+
+            if (
+                text ===
+                "pass"
+            ) {
+
+                continue;
+            }
+
+
+            this.executeSimpleStatement(
+                text,
+                scope
+            );
+        }
+    }
+
+
+
+    executeIfChain(
+        chain,
+        scope
+    ) {
+
+        for (
+            const node
+            of chain
+        ) {
+
+            const text =
+                node.text;
+
+
+            if (
+                /^if\b/.test(
+                    text
+                )
+            ) {
+
+                const expression =
+                    text
+                        .replace(
+                            /^if\b/,
+                            ""
+                        )
+                        .replace(
+                            /:\s*$/,
+                            ""
+                        )
+                        .trim();
+
+
+                if (
+                    Boolean(
+                        this.evaluate(
+                            expression,
+                            scope
+                        )
+                    )
+                ) {
+
+                    this.executeNodes(
+                        node.children,
+                        scope
+                    );
+
+
+                    return;
+                }
+
+
+                continue;
+            }
+
+
+            if (
+                /^elif\b/.test(
+                    text
+                )
+            ) {
+
+                const expression =
+                    text
+                        .replace(
+                            /^elif\b/,
+                            ""
+                        )
+                        .replace(
+                            /:\s*$/,
+                            ""
+                        )
+                        .trim();
+
+
+                if (
+                    Boolean(
+                        this.evaluate(
+                            expression,
+                            scope
+                        )
+                    )
+                ) {
+
+                    this.executeNodes(
+                        node.children,
+                        scope
+                    );
+
+
+                    return;
+                }
+
+
+                continue;
+            }
+
+
+            if (
+                /^else\s*:/.test(
+                    text
+                )
+            ) {
+
+                this.executeNodes(
+                    node.children,
+                    scope
+                );
+
+
+                return;
+            }
+        }
+    }
+
+
+
+    executeFor(
+        node,
+        scope
+    ) {
+
+        const match =
+            node.text.match(
+                /^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
+            );
+
+
+        if (
+            !match
+        ) {
+
+            throw new Error(
+                "Boucle for invalide."
+            );
+        }
+
+
+        const variable =
+            match[1];
+
+
+        const iterable =
+            this.evaluate(
+                match[2],
+                scope
+            );
+
+
+        if (
+            iterable ===
+                null ||
+            iterable ===
+                undefined ||
+            typeof iterable[
+                Symbol.iterator
+            ] !==
+                "function"
+        ) {
+
+            throw new Error(
+                "La valeur utilisée dans for n'est pas parcourable."
+            );
+        }
+
+
+        let iterations =
+            0;
+
+
+        for (
+            const value
+            of iterable
+        ) {
+
+            iterations +=
+                1;
+
+
+            if (
+                iterations >
+                this.maxLoopIterations
+            ) {
+
+                throw new Error(
+                    "La boucle for effectue trop d'itérations."
+                );
+            }
+
+
+            scope.set(
+                variable,
+                value
+            );
+
+
+            try {
+
+                this.executeNodes(
+                    node.children,
+                    scope
+                );
+
+            } catch (
+                signal
+            ) {
+
+                if (
+                    signal instanceof
+                    PytBreakSignal
+                ) {
+
+                    break;
+                }
+
+
+                throw signal;
+            }
+        }
+    }
+
+
+
+    executeWhile(
+        node,
+        scope
+    ) {
+
+        const expression =
+            node.text
+                .replace(
+                    /^while\b/,
+                    ""
+                )
+                .replace(
+                    /:\s*$/,
+                    ""
+                )
+                .trim();
+
+
+        let iterations =
+            0;
+
+
+        while (
+            Boolean(
+                this.evaluate(
+                    expression,
+                    scope
+                )
+            )
+        ) {
+
+            iterations +=
+                1;
+
+
+            if (
+                iterations >
+                this.maxLoopIterations
+            ) {
+
+                throw new Error(
+                    "La boucle while semble infinie."
+                );
+            }
+
+
+            try {
+
+                this.executeNodes(
+                    node.children,
+                    scope
+                );
+
+            } catch (
+                signal
+            ) {
+
+                if (
+                    signal instanceof
+                    PytBreakSignal
+                ) {
+
+                    break;
+                }
+
+
+                throw signal;
+            }
+        }
+    }
+
+
+
+    executeDefinition(
+        node,
+        scope
+    ) {
+
+        const match =
+            node.text.match(
+                /^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:$/
+            );
+
+
+        if (
+            !match
+        ) {
+
+            throw new Error(
+                "Définition de fonction invalide."
+            );
+        }
+
+
+        const name =
+            match[1];
+
+
+        const params =
+            match[2]
+                .split(
+                    ","
+                )
+                .map(
+                    param =>
+                        param.trim()
+                )
+                .filter(
+                    Boolean
+                );
+
+
+        scope.set(
+            name,
+            {
+
+                __pytFunction:
+                    true,
+
+                name,
+
+                params,
+
+                body:
+                    node.children,
+
+                closure:
+                    scope
+            }
+        );
+    }
+
+
+
+    executeSimpleStatement(
+        text,
+        scope
+    ) {
+
+        /*
+         * Affectation augmentée.
+         */
+
+        const augmented =
+            text.match(
+                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/
+            );
+
+
+        if (
+            augmented
+        ) {
+
+            const name =
+                augmented[1];
+
+
+            const operator =
+                augmented[2];
+
+
+            const right =
+                this.evaluate(
+                    augmented[3],
+                    scope
+                );
+
+
+            const left =
+                scope.get(
+                    name
+                );
+
+
+            switch (
+                operator
+            ) {
+
+                case "+=":
+
+                    scope.set(
+                        name,
+                        left +
+                        right
+                    );
+
+                    return;
+
+
+                case "-=":
+
+                    scope.set(
+                        name,
+                        left -
+                        right
+                    );
+
+                    return;
+
+
+                case "*=":
+
+                    scope.set(
+                        name,
+                        left *
+                        right
+                    );
+
+                    return;
+
+
+                case "/=":
+
+                    scope.set(
+                        name,
+                        left /
+                        right
+                    );
+
+                    return;
+
+
+                case "%=":
+
+                    scope.set(
+                        name,
+                        left %
+                        right
+                    );
+
+                    return;
+            }
+        }
+
+
+        /*
+         * Affectation simple.
+         */
+
+        const assignment =
+            text.match(
+                /^([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$/
+            );
+
+
+        if (
+            assignment
+        ) {
+
+            const name =
+                assignment[1];
+
+
+            const value =
+                this.evaluate(
+                    assignment[2],
+                    scope
+                );
+
+
+            scope.set(
+                name,
+                value
+            );
+
+
+            return;
+        }
+
+
+        /*
+         * Expression / appel.
+         */
+
+        this.evaluate(
+            text,
+            scope
+        );
+    }
+
+
+
+    evaluate(
+        expression,
+        scope
+    ) {
+
+        const parser =
+            new PytExpressionParser(
+                expression,
+                scope,
+                this
+            );
+
+
+        return parser.parse();
+    }
+
+
+
+    callValue(
+        value,
+        args
+    ) {
+
+        if (
+            typeof value ===
+            "function"
+        ) {
+
+            return value(
+                ...args
+            );
+        }
+
+
+        if (
+            value &&
+            value.__pytFunction
+        ) {
+
+            return this.callUserFunction(
+                value,
+                args
+            );
+        }
+
+
+        throw new Error(
+            "Cette valeur n'est pas une fonction."
+        );
+    }
+
+
+
+    callUserFunction(
+        definition,
+        args
+    ) {
+
+        const scope =
+            new PytScope(
+                definition.closure
+            );
+
+
+        definition.params
+            .forEach(
+                (
+                    param,
+                    index
+                ) => {
+
+                    scope.set(
+                        param,
+                        args[
+                            index
+                        ]
+                    );
+                }
+            );
+
+
+        try {
+
+            this.executeNodes(
+                definition.body,
+                scope
+            );
+
+        } catch (
+            signal
+        ) {
+
+            if (
+                signal instanceof
+                PytReturnSignal
+            ) {
+
+                return signal.value;
+            }
+
+
+            throw signal;
+        }
+
+
+        return null;
+    }
+}
+
+
+
+/* =========================================================
+   MOTEUR DE JEU
+========================================================= */
+
+class PytGame {
+
+    constructor() {
+
+        this.canvas =
+            null;
+
+
+        this.ctx =
+            null;
+
+
+        this.levelData =
+            null;
+
+
+        this.mapWidth =
+            8;
+
+
+        this.mapHeight =
+            6;
+
+
+        this.robot =
+            null;
+
+
+        this.startState =
+            null;
+
+
+        this.logicalObjects =
+            [];
+
+
+        this.logicalTargets =
+            [];
+
+
+        this.visualObjects =
+            [];
+
+
+        this.visualTargets =
+            [];
+
+
+        this.visualRobot =
+            null;
+
+
+        this.actionQueue =
+            [];
+
+
+        this.programOutput =
+            [];
+
+
+        this.runtimeIssues =
+            [];
+
+
+        this.stats =
+            {};
+
+
+        this.executing =
+            false;
+
+
+        this.animationFrame =
+            null;
+
+
+        this.boardLayout =
+            null;
+
+
+        this.bindEvents();
+
+        this.initCanvas();
+    }
+
+
+
+    /* =====================================================
+       INITIALISATION
+    ===================================================== */
+
+    initCanvas() {
+
+        this.canvas =
+            document.getElementById(
+                "game-canvas"
+            );
+
+
+        if (
+            !this.canvas
+        ) {
+
+            return;
+        }
+
+
+        this.ctx =
+            this.canvas.getContext(
+                "2d"
+            );
+
+
+        this.ctx.imageSmoothingEnabled =
+            false;
+
+
+        this.render();
+    }
+
+
+
+    bindEvents() {
+
+        window.addEventListener(
+            "pyt:load-level",
+            event => {
+
+                this.loadLevel(
+                    event.detail
+                        ?.data ||
+                    event.detail ||
+                    {}
+                );
+            }
+        );
+
+
+        window.addEventListener(
+            "pyt:reload-world",
+            event => {
+
+                this.loadLevel(
+                    event.detail
+                        ?.data ||
+                    this.levelData ||
+                    {}
+                );
+            }
+        );
+
+
+        window.addEventListener(
+            "pyt:run-code",
+            event => {
+
+                this.executeSource(
+                    event.detail
+                        ?.code ||
+                    ""
+                );
+            }
+        );
+
+
+        /*
+         * Correction du branchement visuel
+         * des lignes d'erreur.
+         */
+
+        window.addEventListener(
+            "pyt:code-error-line",
+            event => {
+
+                const line =
+                    Number(
+                        event.detail
+                            ?.line
+                    );
+
+
+                if (
+                    line >
+                    0
+                ) {
+
+                    window.pytUI
+                        ?.renderCodeError(
+                            line
+                        );
+                }
+            }
+        );
+
+
+        window.addEventListener(
+            "resize",
+            () => {
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    /* =====================================================
+       CHARGEMENT NIVEAU
+    ===================================================== */
+
+    loadLevel(data) {
+
+        this.stopAnimation();
+
+
+        this.levelData =
+            this.clone(
+                data ||
+                {}
+            );
+
+
+        this.mapWidth =
+            Number(
+                this.levelData
+                    ?.map
+                    ?.width ??
+                this.levelData
+                    ?.width ??
+                8
+            );
+
+
+        this.mapHeight =
+            Number(
+                this.levelData
+                    ?.map
+                    ?.height ??
+                this.levelData
+                    ?.height ??
+                6
+            );
+
+
+        if (
+            !Number.isFinite(
+                this.mapWidth
+            ) ||
+            this.mapWidth <
+                1
+        ) {
+
+            this.mapWidth =
+                8;
+        }
+
+
+        if (
+            !Number.isFinite(
+                this.mapHeight
+            ) ||
+            this.mapHeight <
+                1
+        ) {
+
+            this.mapHeight =
+                6;
+        }
+
+
+        this.startState =
+            this.extractStart(
+                this.levelData
+            );
+
+
+        this.robot =
+            this.createRobot(
+                this.startState
+            );
+
+
+        this.logicalObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+
+        this.logicalTargets =
+            this.extractTargets(
+                this.levelData
+            );
+
+
+        this.visualObjects =
+            this.clone(
+                this.logicalObjects
+            );
+
+
+        this.visualTargets =
+            this.clone(
+                this.logicalTargets
+            );
+
+
+        this.visualRobot =
+            {
+
+                x:
+                    this.robot.x,
+
+                y:
+                    this.robot.y,
+
+                direction:
+                    this.robot.direction,
+
+                inventory:
+                    []
+            };
+
+
+        this.resetStats();
+
+
+        this.actionQueue =
+            [];
+
+
+        this.programOutput =
+            [];
+
+
+        this.runtimeIssues =
+            [];
+
+
+        this.executing =
+            false;
+
+
+        this.updateStatus(
+            "Prêt"
+        );
+
+
+        this.render();
+    }
+
+
+
+    extractStart(data) {
+
+        const candidates = [
+
+            data.robotStart,
+
+            data.start,
+
+            data.robot?.start,
+
+            data.robot,
+
+            data.map?.start,
+
+            data.map?.robotStart
+        ];
+
+
+        let source =
+            {};
+
+
+        for (
+            const candidate
+            of candidates
+        ) {
+
+            if (
+                candidate &&
+                typeof candidate ===
+                    "object"
+            ) {
+
+                source =
+                    candidate;
+
+                break;
+            }
+        }
+
+
+        return {
+
+            x:
+                Number(
+                    source.x ??
+                    source.col ??
+                    source.column ??
+                    0
+                ),
+
+            y:
+                Number(
+                    source.y ??
+                    source.row ??
+                    source.line ??
+                    0
+                ),
+
+            direction:
+                this.normalizeDirection(
+                    source.direction ??
+                    source.heading ??
+                    "E"
+                )
+        };
+    }
+
+
+
+    extractObjects(data) {
+
+        const source =
+            data.objects ??
+            data.map?.objects ??
+            [];
+
+
+        if (
+            !Array.isArray(
+                source
+            )
+        ) {
+
+            return [];
+        }
+
+
+        return source.map(
+            (
+                object,
+                index
+            ) => ({
+
+                ...this.clone(
+                    object
+                ),
+
+                id:
+                    object.id ??
+                    `object-${index + 1}`,
+
+                x:
+                    Number(
+                        object.x ??
+                        object.col ??
+                        0
+                    ),
+
+                y:
+                    Number(
+                        object.y ??
+                        object.row ??
+                        0
+                    )
+            })
+        );
+    }
+
+
+
+    extractTargets(data) {
+
+        const source =
+            data.targets ??
+            data.map?.targets ??
+            [];
+
+
+        if (
+            !Array.isArray(
+                source
+            )
+        ) {
+
+            return [];
+        }
+
+
+        return source.map(
+            (
+                target,
+                index
+            ) => ({
+
+                ...this.clone(
+                    target
+                ),
+
+                id:
+                    target.id ??
+                    `target-${index + 1}`,
+
+                x:
+                    Number(
+                        target.x ??
+                        target.col ??
+                        0
+                    ),
+
+                y:
+                    Number(
+                        target.y ??
+                        target.row ??
+                        0
+                    )
+            })
+        );
+    }
+
+
+
+    createRobot(start) {
+
+        let robot =
+            null;
+
+
+        /*
+         * On conserve robot.js comme objet principal
+         * lorsque PytRobot existe.
+         */
+
+        if (
+            typeof window.PytRobot ===
+            "function"
+        ) {
+
+            try {
+
+                robot =
+                    new window.PytRobot(
+                        {
+
+                            x:
+                                start.x,
+
+                            y:
+                                start.y,
+
+                            direction:
+                                start.direction
+                        }
+                    );
+
+            } catch (
+                firstError
+            ) {
+
+                try {
+
+                    robot =
+                        new window.PytRobot(
+                            start.x,
+                            start.y,
+                            start.direction
+                        );
+
+                } catch (
+                secondError
+                ) {
+
+                    robot =
+                        null;
+                }
+            }
+        }
+
+
+        if (
+            !robot
+        ) {
+
+            robot =
+                {};
+        }
+
+
+        /*
+         * Normalisation de l'état.
+         */
+
+        robot.x =
+            start.x;
+
+
+        robot.y =
+            start.y;
+
+
+        robot.direction =
+            start.direction;
+
+
+        robot.inventory =
+            [];
+
+
+        robot.visited =
+            [
+                {
+                    x:
+                        start.x,
+
+                    y:
+                        start.y
+                }
+            ];
+
+
+        return robot;
+    }
+
+
+
+    resetStats() {
+
+        this.stats = {
+
+            moves:
+                0,
+
+            forward:
+                0,
+
+            backward:
+                0,
+
+            turns:
+                0,
+
+            collisions:
+                0,
+
+            picked:
+                [],
+
+            deposited:
+                [],
+
+            pushed:
+                [],
+
+            buttons:
+                [],
+
+            doors:
+                [],
+
+            cleaned:
+                [],
+
+            recharged:
+                false
+        };
+    }
+
+
+
+    /* =====================================================
+       PROGRAMME
+    ===================================================== */
+
+    async executeSource(source) {
+
+        if (
+            this.executing ||
+            !this.levelData
+        ) {
+
+            return;
+        }
+
+
+        this.executing =
+            true;
+
+
+        this.updateStatus(
+            "Analyse du programme..."
+        );
+
+
+        /*
+         * Repartir du monde initial.
+         */
+
+        this.resetLogicalWorld();
+
+
+        this.programOutput =
+            [];
+
+
+        this.actionQueue =
+            [];
+
+
+        this.runtimeIssues =
+            [];
+
+
+        let syntaxError =
+            null;
+
+
+        let errorLine =
+            0;
+
+
+        try {
+
+            const interpreter =
+                new PytInterpreter(
+                    this,
+                    source
+                );
+
+
+            interpreter.execute();
+
+        } catch (
+            error
+        ) {
+
+            syntaxError =
+                error;
+
+
+            errorLine =
+                Number(
+                    error?.line ??
+                    error?.lineNumber ??
+                    0
+                );
+
+
+            /*
+             * Si le parser connaît la ligne actuelle.
+             */
+
+            if (
+                errorLine ===
+                0
+            ) {
+
+                try {
+
+                    const interpreterLine =
+                        /ligne\s+(\d+)/i
+                            .exec(
+                                String(
+                                    error.message
+                                )
+                            );
+
+
+                    if (
+                        interpreterLine
+                    ) {
+
+                        errorLine =
+                            Number(
+                                interpreterLine[1]
+                            );
+                    }
+
+                } catch (
+                ignored
+                ) {
+
+                    /*
+                     * Rien.
+                     */
+                }
+            }
+        }
+
+
+        /*
+         * Important :
+         * même avec une erreur tardive,
+         * les actions déjà créées seront jouées.
+         */
+
+        this.prepareVisualPlayback();
+
+
+        this.updateStatus(
+            "Exécution..."
+        );
+
+
+        await this.playActionQueue();
+
+
+        /*
+         * Une erreur de syntaxe/runtime
+         * reste un échec après les actions déjà valides.
+         */
+
+        if (
+            syntaxError
+        ) {
+
+            this.finishExecution({
+
+                success:
+                    false,
+
+                reason:
+                    "runtime_error",
+
+                message:
+                    syntaxError.message ||
+                    "Le programme contient une erreur.",
+
+                error:
+                    syntaxError.message ||
+                    String(
+                        syntaxError
+                    ),
+
+                errorLine,
+
+                output:
+                    this.programOutput
+                        .slice()
+            });
+
+
+            return;
+        }
+
+
+        /*
+         * Validation du résultat.
+         */
+
+        const validation =
+            this.validateLevel(
+                source
+            );
+
+
+        this.finishExecution({
+
+            ...validation,
+
+            output:
+                this.programOutput
+                    .slice()
+        });
+    }
+
+
+
+    resetLogicalWorld() {
+
+        this.robot.x =
+            this.startState.x;
+
+
+        this.robot.y =
+            this.startState.y;
+
+
+        this.robot.direction =
+            this.startState.direction;
+
+
+        this.robot.inventory =
+            [];
+
+
+        this.robot.visited =
+            [
+                {
+
+                    x:
+                        this.robot.x,
+
+                    y:
+                        this.robot.y
+                }
+            ];
+
+
+        this.logicalObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+
+        this.logicalTargets =
+            this.extractTargets(
+                this.levelData
+            );
+
+
+        this.resetStats();
+    }
+
+
+
+    prepareVisualPlayback() {
+
+        this.visualRobot = {
+
+            x:
+                this.startState.x,
+
+            y:
+                this.startState.y,
+
+            direction:
+                this.startState.direction,
+
+            inventory:
+                []
+        };
+
+
+        this.visualObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+
+        this.visualTargets =
+            this.extractTargets(
+                this.levelData
+            );
+
+
+        this.render();
+    }
+
+
+
+    finishExecution(result) {
+
+        this.executing =
+            false;
+
+
+        this.updateStatus(
+            result.success
+                ? "Mission réussie"
+                : "À corriger"
+        );
+
+
+        this.render();
+
+
+        window.dispatchEvent(
+            new CustomEvent(
+                "pyt:execution-result",
+                {
+
+                    detail:
+                        result
+                }
+            )
+        );
+    }
+
+
+
+    /* =====================================================
+       API MOUVEMENT
+    ===================================================== */
+
+    apiForward(distance = 1) {
+
+        const count =
+            this.normalizeDistance(
+                distance
+            );
+
+
+        for (
+            let i = 0;
+            i < count;
+            i += 1
+        ) {
+
+            this.tryMove(
+                1,
+                "forward"
+            );
+        }
+
+
+        return null;
+    }
+
+
+
+    apiBackward(distance = 1) {
+
+        const count =
+            this.normalizeDistance(
+                distance
+            );
+
+
+        for (
+            let i = 0;
+            i < count;
+            i += 1
+        ) {
+
+            this.tryMove(
+                -1,
+                "backward"
+            );
+        }
+
+
+        return null;
+    }
+
+
+
+    normalizeDistance(value) {
+
+        const number =
+            Number(
+                value ??
+                1
+            );
+
+
+        if (
+            !Number.isFinite(
+                number
+            )
+        ) {
+
+            throw new Error(
+                "La distance doit être un nombre."
+            );
+        }
+
+
+        if (
+            number <
+            0
+        ) {
+
+            throw new Error(
+                "Utilise backward() pour reculer."
+            );
+        }
+
+
+        if (
+            !Number.isInteger(
+                number
+            )
+        ) {
+
+            throw new Error(
+                "Les déplacements se font case par case avec un nombre entier."
+            );
+        }
+
+
+        if (
+            number >
+            100
+        ) {
+
+            throw new Error(
+                "Déplacement trop long."
+            );
+        }
+
+
+        return number;
+    }
+
+
+
+    apiLeft(degrees = 90) {
+
+        return this.turnBy(
+            -Number(
+                degrees ??
+                90
+            )
+        );
+    }
+
+
+
+    apiRight(degrees = 90) {
+
+        return this.turnBy(
+            Number(
+                degrees ??
+                90
+            )
+        );
+    }
+
+
+
+    turnBy(degrees) {
+
+        if (
+            !Number.isFinite(
+                degrees
+            )
+        ) {
+
+            throw new Error(
+                "L'angle doit être un nombre."
+            );
+        }
+
+
+        if (
+            degrees %
+            90 !==
+            0
+        ) {
+
+            throw new Error(
+                "Dans PYT, les rotations doivent être des multiples de 90°."
+            );
+        }
+
+
+        const turns =
+            Math.abs(
+                degrees /
+                90
+            );
+
+
+        const direction =
+            degrees >=
+                0
+                ? 1
+                : -1;
+
+
+        for (
+            let i = 0;
+            i < turns;
+            i += 1
+        ) {
+
+            const from =
+                this.robot.direction;
+
+
+            const to =
+                this.rotateDirection(
+                    from,
+                    direction
+                );
+
+
+            this.robot.direction =
+                to;
+
+
+            this.actionQueue.push({
+
+                type:
+                    "turn",
+
+                from,
+
+                to,
+
+                direction
+            });
+
+
+            this.stats.turns +=
+                1;
+        }
+
+
+        return null;
+    }
+
+
+
+    apiSetHeading(degrees) {
+
+        const normalized =
+            (
+                Number(
+                    degrees
+                ) %
+                360 +
+                360
+            ) %
+            360;
+
+
+        const map = {
+
+            0:
+                "E",
+
+            90:
+                "S",
+
+            180:
+                "W",
+
+            270:
+                "N"
+        };
+
+
+        if (
+            !Object.prototype
+                .hasOwnProperty
+                .call(
+                    map,
+                    normalized
+                )
+        ) {
+
+            throw new Error(
+                "setheading() utilise ici 0, 90, 180 ou 270."
+            );
+        }
+
+
+        const from =
+            this.robot.direction;
+
+
+        const to =
+            map[
+                normalized
+            ];
+
+
+        this.robot.direction =
+            to;
+
+
+        this.actionQueue.push({
+
+            type:
+                "turn",
+
+            from,
+
+            to,
+
+            direction:
+                0
+        });
+
+
+        return null;
+    }
+
+
+
+    apiGoto(
+        targetX,
+        targetY
+    ) {
+
+        targetX =
+            Number(
+                targetX
+            );
+
+
+        targetY =
+            Number(
+                targetY
+            );
+
+
+        if (
+            !Number.isInteger(
+                targetX
+            ) ||
+            !Number.isInteger(
+                targetY
+            )
+        ) {
+
+            throw new Error(
+                "goto() utilise des coordonnées entières."
+            );
+        }
+
+
+        /*
+         * Déplacement grille simple :
+         * horizontal puis vertical.
+         */
+
+        while (
+            this.robot.x !==
+            targetX
+        ) {
+
+            const desired =
+                this.robot.x <
+                targetX
+                    ? "E"
+                    : "W";
+
+
+            this.turnToDirection(
+                desired
+            );
+
+
+            if (
+                !this.tryMove(
+                    1,
+                    "forward"
+                )
+            ) {
+
+                break;
+            }
+        }
+
+
+        while (
+            this.robot.y !==
+            targetY
+        ) {
+
+            const desired =
+                this.robot.y <
+                targetY
+                    ? "S"
+                    : "N";
+
+
+            this.turnToDirection(
+                desired
+            );
+
+
+            if (
+                !this.tryMove(
+                    1,
+                    "forward"
+                )
+            ) {
+
+                break;
+            }
+        }
+
+
+        return null;
+    }
+
+
+
+    turnToDirection(direction) {
+
+        let guard =
+            0;
+
+
+        while (
+            this.robot.direction !==
+                direction &&
+            guard <
+                4
+        ) {
+
+            this.turnBy(
+                90
+            );
+
+
+            guard +=
+                1;
+        }
+    }
+
+
+
+    /* =====================================================
+       DÉPLACEMENT LOGIQUE
+    ===================================================== */
+
+    tryMove(
+        sign,
+        mode
+    ) {
+
+        const vector =
+            this.getDirectionVector(
+                this.robot.direction
+            );
+
+
+        const dx =
+            vector.x *
+            sign;
+
+
+        const dy =
+            vector.y *
+            sign;
+
+
+        const from = {
+
+            x:
+                this.robot.x,
+
+            y:
+                this.robot.y
+        };
+
+
+        const target = {
+
+            x:
+                from.x +
+                dx,
+
+            y:
+                from.y +
+                dy
+        };
+
+
+        /*
+         * Hors carte.
+         */
+
+        if (
+            !this.inBounds(
+                target.x,
+                target.y
+            )
+        ) {
+
+            this.registerCollision(
+                from,
+                target
+            );
+
+
+            return false;
+        }
+
+
+        /*
+         * Objet poussable.
+         */
+
+        const pushable =
+            this.findPushableAt(
+                target.x,
+                target.y
+            );
+
+
+        if (
+            pushable
+        ) {
+
+            const objectTarget = {
+
+                x:
+                    target.x +
+                    dx,
+
+                y:
+                    target.y +
+                    dy
+            };
+
+
+            if (
+                !this.inBounds(
+                    objectTarget.x,
+                    objectTarget.y
+                ) ||
+                this.isBlockedCell(
+                    objectTarget.x,
+                    objectTarget.y,
+                    pushable.id
+                )
+            ) {
+
+                this.registerCollision(
+                    from,
+                    target
+                );
+
+
+                return false;
+            }
+
+
+            const oldObject = {
+
+                x:
+                    pushable.x,
+
+                y:
+                    pushable.y
+            };
+
+
+            pushable.x =
+                objectTarget.x;
+
+
+            pushable.y =
+                objectTarget.y;
+
+
+            this.stats.pushed
+                .push(
+                    pushable.id
+                );
+
+
+            this.actionQueue.push({
+
+                type:
+                    "push",
+
+                objectId:
+                    pushable.id,
+
+                from:
+                    oldObject,
+
+                to:
+                    {
+
+                        x:
+                            pushable.x,
+
+                        y:
+                            pushable.y
+                    }
+            });
+        }
+
+
+        /*
+         * Mur / obstacle.
+         */
+
+        if (
+            this.isBlockedCell(
+                target.x,
+                target.y
+            )
+        ) {
+
+            this.registerCollision(
+                from,
+                target
+            );
+
+
+            return false;
+        }
+
+
+        /*
+         * Mouvement logique.
+         */
+
+        this.robot.x =
+            target.x;
+
+
+        this.robot.y =
+            target.y;
+
+
+        this.robot.visited
+            .push(
+                {
+
+                    x:
+                        target.x,
+
+                    y:
+                        target.y
+                }
+            );
+
+
+        this.stats.moves +=
+            1;
+
+
+        if (
+            mode ===
+            "backward"
+        ) {
+
+            this.stats.backward +=
+                1;
+
+        } else {
+
+            this.stats.forward +=
+                1;
+        }
+
+
+        this.actionQueue.push({
+
+            type:
+                "move",
+
+            mode,
+
+            from,
+
+            to:
+                target,
+
+            direction:
+                this.robot.direction
+        });
+
+
+        /*
+         * Interactions automatiques.
+         */
+
+        this.applyAutomaticInteractions();
 
 
         return true;
@@ -7436,79 +5357,736 @@ class PytPythonInterpreter {
 
 
 
-    assertActive() {
+    registerCollision(
+        from,
+        target
+    ) {
 
-        this.game
-            .assertExecutionActive();
+        this.stats.collisions +=
+            1;
+
+
+        this.runtimeIssues
+            .push({
+
+                type:
+                    "collision",
+
+                x:
+                    target.x,
+
+                y:
+                    target.y
+            });
+
+
+        this.actionQueue.push({
+
+            type:
+                "bump",
+
+            from,
+
+            target,
+
+            direction:
+                this.robot.direction
+        });
     }
 
 
 
-    runtimeError(
-        message,
-        line = null
-    ) {
+    /* =====================================================
+       INTERACTIONS AUTOMATIQUES
+    ===================================================== */
 
-        return this.game
-            .runtimeError(
-                message,
-                line
+    applyAutomaticInteractions() {
+
+        const x =
+            this.robot.x;
+
+
+        const y =
+            this.robot.y;
+
+
+        /*
+         * Objets présents sur la case.
+         */
+
+        const objects =
+            this.logicalObjects
+                .filter(
+                    object =>
+                        object.x ===
+                            x &&
+                        object.y ===
+                            y
+                );
+
+
+        for (
+            const object
+            of objects
+        ) {
+
+            const type =
+                this.normalize(
+                    object.type ??
+                    object.id
+                );
+
+
+            /*
+             * Bouton.
+             */
+
+            if (
+                this.isButtonType(
+                    type
+                )
+            ) {
+
+                if (
+                    !object.activated
+                ) {
+
+                    object.activated =
+                        true;
+
+
+                    this.stats.buttons
+                        .push(
+                            object.id
+                        );
+
+
+                    this.actionQueue.push({
+
+                        type:
+                            "button",
+
+                        objectId:
+                            object.id,
+
+                        x,
+
+                        y
+                    });
+                }
+
+
+                continue;
+            }
+
+
+            /*
+             * Recharge.
+             */
+
+            if (
+                this.isChargerType(
+                    type
+                )
+            ) {
+
+                this.stats.recharged =
+                    true;
+
+
+                this.actionQueue.push({
+
+                    type:
+                        "recharge",
+
+                    objectId:
+                        object.id,
+
+                    x,
+
+                    y
+                });
+
+
+                continue;
+            }
+
+
+            /*
+             * Nettoyage.
+             */
+
+            if (
+                object.cleanable ===
+                    true ||
+                this.isDirtyType(
+                    type
+                )
+            ) {
+
+                if (
+                    !object.cleaned
+                ) {
+
+                    object.cleaned =
+                        true;
+
+
+                    this.stats.cleaned
+                        .push(
+                            object.id
+                        );
+
+
+                    this.actionQueue.push({
+
+                        type:
+                            "clean",
+
+                        objectId:
+                            object.id,
+
+                        x,
+
+                        y
+                    });
+                }
+
+
+                continue;
+            }
+
+
+            /*
+             * Porte.
+             */
+
+            if (
+                this.isDoorType(
+                    type
+                )
+            ) {
+
+                if (
+                    !object.open
+                ) {
+
+                    object.open =
+                        true;
+
+
+                    this.stats.doors
+                        .push(
+                            object.id
+                        );
+
+
+                    this.actionQueue.push({
+
+                        type:
+                            "door",
+
+                        objectId:
+                            object.id,
+
+                        x,
+
+                        y
+                    });
+                }
+
+
+                continue;
+            }
+
+
+            /*
+             * Ramassage.
+             */
+
+            if (
+                this.isAutoPickupObject(
+                    object
+                )
+            ) {
+
+                object.collected =
+                    true;
+
+
+                const inventoryItem = {
+
+                    id:
+                        object.id,
+
+                    type:
+                        object.type ??
+                        object.id,
+
+                    original:
+                        this.clone(
+                            object
+                        )
+                };
+
+
+                this.robot.inventory
+                    .push(
+                        inventoryItem
+                    );
+
+
+                this.stats.picked
+                    .push(
+                        object.id
+                    );
+
+
+                this.actionQueue.push({
+
+                    type:
+                        "pickup",
+
+                    objectId:
+                        object.id,
+
+                    item:
+                        inventoryItem,
+
+                    x,
+
+                    y
+                });
+            }
+        }
+
+
+        /*
+         * Retirer les objets ramassés.
+         */
+
+        this.logicalObjects =
+            this.logicalObjects
+                .filter(
+                    object =>
+                        !object.collected
+                );
+
+
+        /*
+         * Dépôt automatique.
+         */
+
+        this.tryAutomaticDeposit();
+    }
+
+
+
+    tryAutomaticDeposit() {
+
+        if (
+            !Array.isArray(
+                this.robot.inventory
+            ) ||
+            this.robot.inventory
+                .length ===
+                0
+        ) {
+
+            return;
+        }
+
+
+        const target =
+            this.logicalTargets
+                .find(
+                    item =>
+                        item.x ===
+                            this.robot.x &&
+                        item.y ===
+                            this.robot.y &&
+                        this.isDepositTarget(
+                            item
+                        )
+                );
+
+
+        if (
+            !target
+        ) {
+
+            return;
+        }
+
+
+        const expected =
+            target.object ??
+            target.objectId ??
+            target.requiredObject ??
+            target.accepts ??
+            null;
+
+
+        let index =
+            0;
+
+
+        if (
+            expected
+        ) {
+
+            index =
+                this.robot.inventory
+                    .findIndex(
+                        item =>
+                            this.objectMatches(
+                                item,
+                                expected
+                            )
+                    );
+
+
+            if (
+                index <
+                0
+            ) {
+
+                return;
+            }
+        }
+
+
+        const item =
+            this.robot.inventory
+                .splice(
+                    index,
+                    1
+                )[0];
+
+
+        this.stats.deposited
+            .push(
+                {
+
+                    object:
+                        item.id,
+
+                    target:
+                        target.id
+                }
             );
+
+
+        target.completed =
+            true;
+
+
+        this.actionQueue.push({
+
+            type:
+                "deposit",
+
+            item,
+
+            targetId:
+                target.id,
+
+            x:
+                target.x,
+
+            y:
+                target.y
+        });
     }
 
-}
 
 
+    /* =====================================================
+       TYPES D'OBJETS
+    ===================================================== */
 
-/* =========================================================
-   PORTÉE DES VARIABLES
-========================================================= */
+    isPushableObject(object) {
 
-
-class PytScope {
-
-    constructor(
-        parent = null
-    ) {
-
-        this.parent =
-            parent;
+        const type =
+            this.normalize(
+                object.type ??
+                object.id
+            );
 
 
-        this.values =
-            new Map();
-    }
+        if (
+            object.pushable ===
+            true
+        ) {
+
+            return true;
+        }
 
 
+        if (
+            object.pushable ===
+            false
+        ) {
 
-    set(
-        name,
-        value
-    ) {
+            return false;
+        }
 
-        this.values.set(
-            name,
-            value
+
+        return [
+            "caisse",
+            "box",
+            "crate",
+            "caisse_bois"
+        ].includes(
+            type
         );
     }
 
 
 
-    hasOwn(name) {
+    isAutoPickupObject(object) {
 
-        return this.values
-            .has(
-                name
+        if (
+            object.pickable ===
+            false
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            this.isPushableObject(
+                object
+            )
+        ) {
+
+            return false;
+        }
+
+
+        const type =
+            this.normalize(
+                object.type ??
+                object.id
             );
+
+
+        const pickableTypes = [
+
+            "book",
+            "livre",
+            "livre_rouge",
+            "livre_bleu",
+
+            "key",
+            "cle",
+
+            "apple",
+            "pomme",
+
+            "cup",
+            "tasse",
+
+            "plate",
+            "assiette",
+
+            "bottle",
+            "bouteille",
+            "bouteille_rouge",
+            "bouteille_bleue",
+            "bouteille_verte",
+            "bouteille_jaune",
+
+            "watering_can",
+            "arrosoir",
+
+            "toy",
+            "jouet",
+
+            "charger_item",
+            "chargeur",
+
+            "float",
+            "bouee",
+
+            "toolbox",
+            "boite_outils"
+        ];
+
+
+        return (
+            object.pickable ===
+                true ||
+            pickableTypes.includes(
+                type
+            )
+        );
     }
 
 
 
-    has(name) {
+    isButtonType(type) {
+
+        return [
+            "button",
+            "bouton",
+            "switch",
+            "interrupteur"
+        ].includes(
+            type
+        );
+    }
+
+
+
+    isDoorType(type) {
+
+        return [
+            "door",
+            "porte"
+        ].includes(
+            type
+        );
+    }
+
+
+
+    isChargerType(type) {
+
+        return [
+            "charger",
+            "recharge",
+            "station_recharge",
+            "charging_station"
+        ].includes(
+            type
+        );
+    }
+
+
+
+    isDirtyType(type) {
+
+        return [
+            "dirty",
+            "salete",
+            "mud",
+            "boue",
+            "tache"
+        ].includes(
+            type
+        );
+    }
+
+
+
+    isDepositTarget(target) {
+
+        const type =
+            this.normalize(
+                target.type ??
+                target.id
+            );
+
+
+        return [
+            "deposit",
+            "depot",
+            "drop",
+            "destination_objet"
+        ].includes(
+            type
+        );
+    }
+
+
+
+    /* =====================================================
+       COLLISIONS
+    ===================================================== */
+
+    getBlockedCells() {
+
+        const source =
+            this.levelData
+                ?.blocked ??
+            this.levelData
+                ?.map
+                ?.blocked ??
+            [];
+
+
+        return Array.isArray(
+            source
+        )
+            ? source
+            : [];
+    }
+
+
+
+    cellMatches(
+        cell,
+        x,
+        y
+    ) {
 
         if (
-            this.hasOwn(
-                name
+            Array.isArray(
+                cell
+            )
+        ) {
+
+            return (
+                Number(
+                    cell[0]
+                ) ===
+                    x &&
+                Number(
+                    cell[1]
+                ) ===
+                    y
+            );
+        }
+
+
+        if (
+            cell &&
+            typeof cell ===
+                "object"
+        ) {
+
+            return (
+                Number(
+                    cell.x ??
+                    cell.col
+                ) ===
+                    x &&
+                Number(
+                    cell.y ??
+                    cell.row
+                ) ===
+                    y
+            );
+        }
+
+
+        return false;
+    }
+
+
+
+    isBlockedCell(
+        x,
+        y,
+        ignoreObjectId = null
+    ) {
+
+        if (
+            !this.inBounds(
+                x,
+                y
             )
         ) {
 
@@ -7516,593 +6094,2967 @@ class PytScope {
         }
 
 
-        return (
-            this.parent
-                ? this.parent.has(
-                    name
+        if (
+            this.getBlockedCells()
+                .some(
+                    cell =>
+                        this.cellMatches(
+                            cell,
+                            x,
+                            y
+                        )
                 )
-                : false
+        ) {
+
+            return true;
+        }
+
+
+        const solidObject =
+            this.logicalObjects
+                .find(
+                    object => {
+
+                        if (
+                            object.id ===
+                            ignoreObjectId
+                        ) {
+
+                            return false;
+                        }
+
+
+                        if (
+                            object.x !==
+                                x ||
+                            object.y !==
+                                y
+                        ) {
+
+                            return false;
+                        }
+
+
+                        const type =
+                            this.normalize(
+                                object.type ??
+                                object.id
+                            );
+
+
+                        /*
+                         * Ces objets n'empêchent pas
+                         * Pyt d'entrer sur la case.
+                         */
+
+                        if (
+                            this.isAutoPickupObject(
+                                object
+                            ) ||
+                            this.isButtonType(
+                                type
+                            ) ||
+                            this.isDoorType(
+                                type
+                            ) ||
+                            this.isChargerType(
+                                type
+                            ) ||
+                            this.isDirtyType(
+                                type
+                            )
+                        ) {
+
+                            return false;
+                        }
+
+
+                        if (
+                            this.isPushableObject(
+                                object
+                            )
+                        ) {
+
+                            return true;
+                        }
+
+
+                        return (
+                            object.solid ===
+                            true
+                        );
+                    }
+                );
+
+
+        return Boolean(
+            solidObject
         );
     }
 
 
 
-    get(
-        name,
-        line = null
+    findPushableAt(
+        x,
+        y
     ) {
 
+        return this.logicalObjects
+            .find(
+                object =>
+                    object.x ===
+                        x &&
+                    object.y ===
+                        y &&
+                    this.isPushableObject(
+                        object
+                    )
+            ) ||
+            null;
+    }
+
+
+
+    frontIsClear() {
+
+        const vector =
+            this.getDirectionVector(
+                this.robot.direction
+            );
+
+
+        const x =
+            this.robot.x +
+            vector.x;
+
+
+        const y =
+            this.robot.y +
+            vector.y;
+
+
         if (
-            this.values.has(
-                name
+            !this.inBounds(
+                x,
+                y
             )
         ) {
 
-            return this.values.get(
-                name
-            );
+            return false;
         }
+
+
+        const pushable =
+            this.findPushableAt(
+                x,
+                y
+            );
 
 
         if (
-            this.parent
+            pushable
         ) {
 
-            return this.parent.get(
-                name,
-                line
+            return !this.isBlockedCell(
+                x +
+                    vector.x,
+                y +
+                    vector.y,
+                pushable.id
             );
         }
 
 
-        const error =
-            new Error(
-                `Le nom "${name}" n’est pas défini.`
+        return !this.isBlockedCell(
+            x,
+            y
+        );
+    }
+
+
+
+    robotOnObject() {
+
+        return this.logicalObjects
+            .some(
+                object =>
+                    object.x ===
+                        this.robot.x &&
+                    object.y ===
+                        this.robot.y
+            );
+    }
+
+
+
+    inventoryContains(value) {
+
+        return this.robot.inventory
+            .some(
+                item =>
+                    this.objectMatches(
+                        item,
+                        value
+                    )
+            );
+    }
+
+
+
+    objectMatches(
+        item,
+        expected
+    ) {
+
+        const expectedValue =
+            this.normalize(
+                expected
             );
 
 
-        error.line =
-            line;
+        return [
 
+            item.id,
 
-        error.reason =
-            "name_error";
+            item.type,
 
+            item.original?.id,
 
-        throw error;
+            item.original?.type
+
+        ]
+            .filter(
+                Boolean
+            )
+            .map(
+                value =>
+                    this.normalize(
+                        value
+                    )
+            )
+            .includes(
+                expectedValue
+            );
     }
 
-}
+
+
+    /* =====================================================
+       ROBOT INFOS
+    ===================================================== */
+
+    getRobotX() {
+
+        return this.robot.x;
+    }
+
+
+    getRobotY() {
+
+        return this.robot.y;
+    }
+
+
+    getRobotDirection() {
+
+        return this.robot.direction;
+    }
 
 
 
-/* =========================================================
-   ANALYSE DU CODE
-========================================================= */
+    /* =====================================================
+       DIRECTIONS
+    ===================================================== */
+
+    normalizeDirection(direction) {
+
+        const value =
+            String(
+                direction ||
+                "E"
+            )
+                .toUpperCase();
 
 
-class PytCodeAnalyzer {
+        const aliases = {
 
-    static analyze(
-        source,
-        ast
-    ) {
+            NORTH:
+                "N",
 
-        const features = {
+            NORD:
+                "N",
 
-            assignments:
-                0,
+            UP:
+                "N",
 
-            stringLiterals:
-                0,
+            EAST:
+                "E",
 
-            listLiterals:
-                0,
+            EST:
+                "E",
 
-            dictionaryLiterals:
-                0,
+            RIGHT:
+                "E",
 
-            ifStatements:
-                0,
+            SOUTH:
+                "S",
 
-            elseBranches:
-                0,
+            SUD:
+                "S",
 
-            forLoops:
-                0,
+            DOWN:
+                "S",
 
-            whileLoops:
-                0,
+            WEST:
+                "W",
 
-            functions:
-                0,
+            OUEST:
+                "W",
 
-            functionParameters:
-                0,
-
-            userFunctionCalls:
-                0,
-
-            actionCalls:
-                0,
-
-            turnCalls:
-                0,
-
-            pickupCalls:
-                0,
-
-            membershipTests:
-                0,
-
-            subscripts:
-                0,
-
-            rangeCalls:
-                0
+            LEFT:
+                "W"
         };
 
 
-        const functionNames =
-            new Set();
+        const normalized =
+            aliases[
+                value
+            ] ||
+            value;
+
+
+        return [
+            "N",
+            "E",
+            "S",
+            "W"
+        ].includes(
+            normalized
+        )
+            ? normalized
+            : "E";
+    }
 
 
 
-        const collectFunctions =
-            statements => {
+    rotateDirection(
+        direction,
+        amount
+    ) {
 
-                statements.forEach(
-                    statement => {
-
-                        if (
-                            statement.type ===
-                            "function"
-                        ) {
-
-                            functionNames.add(
-                                statement.name
-                            );
-                        }
+        const directions = [
+            "N",
+            "E",
+            "S",
+            "W"
+        ];
 
 
-                        if (
-                            statement.body
-                        ) {
-
-                            collectFunctions(
-                                statement.body
-                            );
-                        }
+        let index =
+            directions.indexOf(
+                this.normalizeDirection(
+                    direction
+                )
+            );
 
 
-                        if (
-                            statement.branches
-                        ) {
-
-                            statement.branches
-                                .forEach(
-                                    branch => {
-
-                                        collectFunctions(
-                                            branch.body
-                                        );
-                                    }
-                                );
-                        }
+        index =
+            (
+                index +
+                amount +
+                directions.length
+            ) %
+            directions.length;
 
 
-                        if (
-                            statement.elseBody
-                        ) {
+        return directions[
+            index
+        ];
+    }
 
-                            collectFunctions(
-                                statement.elseBody
-                            );
-                        }
+
+
+    getDirectionVector(direction) {
+
+        switch (
+            this.normalizeDirection(
+                direction
+            )
+        ) {
+
+            case "N":
+
+                return {
+
+                    x:
+                        0,
+
+                    y:
+                        -1
+                };
+
+
+            case "S":
+
+                return {
+
+                    x:
+                        0,
+
+                    y:
+                        1
+                };
+
+
+            case "W":
+
+                return {
+
+                    x:
+                        -1,
+
+                    y:
+                        0
+                };
+
+
+            default:
+
+                return {
+
+                    x:
+                        1,
+
+                    y:
+                        0
+                };
+        }
+    }
+
+
+
+    inBounds(
+        x,
+        y
+    ) {
+
+        return (
+            x >=
+                0 &&
+            y >=
+                0 &&
+            x <
+                this.mapWidth &&
+            y <
+                this.mapHeight
+        );
+    }
+
+
+
+    /* =====================================================
+       ANIMATION
+    ===================================================== */
+
+    async playActionQueue() {
+
+        for (
+            const action
+            of this.actionQueue
+        ) {
+
+            switch (
+                action.type
+            ) {
+
+                case "move":
+
+                    await this.animateMove(
+                        action
+                    );
+
+                    break;
+
+
+                case "turn":
+
+                    await this.animateTurn(
+                        action
+                    );
+
+                    break;
+
+
+                case "bump":
+
+                    await this.animateBump(
+                        action
+                    );
+
+                    break;
+
+
+                case "pickup":
+
+                    await this.animatePickup(
+                        action
+                    );
+
+                    break;
+
+
+                case "push":
+
+                    await this.animatePush(
+                        action
+                    );
+
+                    break;
+
+
+                case "deposit":
+
+                    await this.animateDeposit(
+                        action
+                    );
+
+                    break;
+
+
+                case "button":
+
+                    await this.animateSimpleInteraction(
+                        action,
+                        "button"
+                    );
+
+                    break;
+
+
+                case "door":
+
+                    await this.animateSimpleInteraction(
+                        action,
+                        "door"
+                    );
+
+                    break;
+
+
+                case "clean":
+
+                    await this.animateClean(
+                        action
+                    );
+
+                    break;
+
+
+                case "recharge":
+
+                    await this.animateSimpleInteraction(
+                        action,
+                        "recharge"
+                    );
+
+                    break;
+            }
+        }
+
+
+        /*
+         * Synchronisation visuelle finale.
+         */
+
+        this.visualRobot = {
+
+            x:
+                this.robot.x,
+
+            y:
+                this.robot.y,
+
+            direction:
+                this.robot.direction,
+
+            inventory:
+                this.clone(
+                    this.robot.inventory
+                )
+        };
+
+
+        this.visualObjects =
+            this.clone(
+                this.logicalObjects
+            );
+
+
+        this.visualTargets =
+            this.clone(
+                this.logicalTargets
+            );
+
+
+        this.render();
+    }
+
+
+
+    animateMove(action) {
+
+        const duration =
+            500;
+
+
+        const from =
+            action.from;
+
+
+        const to =
+            action.to;
+
+
+        this.visualRobot.direction =
+            action.direction;
+
+
+        window.pytApp
+            ?.playSfx(
+                "step"
+            );
+
+
+        return this.animate(
+            duration,
+            progress => {
+
+                const eased =
+                    this.easeInOut(
+                        progress
+                    );
+
+
+                this.visualRobot.x =
+                    from.x +
+                    (
+                        to.x -
+                        from.x
+                    ) *
+                    eased;
+
+
+                this.visualRobot.y =
+                    from.y +
+                    (
+                        to.y -
+                        from.y
+                    ) *
+                    eased;
+
+
+                this.render(
+                    {
+
+                        moving:
+                            true
                     }
                 );
-            };
+            }
+        ).then(
+            () => {
+
+                this.visualRobot.x =
+                    to.x;
+
+
+                this.visualRobot.y =
+                    to.y;
+
+
+                this.render();
+            }
+        );
+    }
 
 
 
-        const walkExpression =
-            expression => {
+    animateTurn(action) {
+
+        window.pytApp
+            ?.playSfx(
+                "turn"
+            );
+
+
+        return this.wait(
+            170
+        ).then(
+            () => {
+
+                this.visualRobot.direction =
+                    action.to;
+
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animateBump(action) {
+
+        window.pytApp
+            ?.playSfx(
+                "bump"
+            );
+
+
+        const vector =
+            this.getDirectionVector(
+                action.direction
+            );
+
+
+        return this.animate(
+            180,
+            progress => {
+
+                const amount =
+                    Math.sin(
+                        progress *
+                        Math.PI
+                    ) *
+                    0.12;
+
+
+                this.visualRobot.x =
+                    action.from.x +
+                    vector.x *
+                    amount;
+
+
+                this.visualRobot.y =
+                    action.from.y +
+                    vector.y *
+                    amount;
+
+
+                this.render();
+
+            }
+        ).then(
+            () => {
+
+                this.visualRobot.x =
+                    action.from.x;
+
+
+                this.visualRobot.y =
+                    action.from.y;
+
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animatePickup(action) {
+
+        window.pytApp
+            ?.playSfx(
+                "pickup"
+            );
+
+
+        const object =
+            this.visualObjects
+                .find(
+                    item =>
+                        item.id ===
+                        action.objectId
+                );
+
+
+        if (
+            object
+        ) {
+
+            object._pickup =
+                true;
+        }
+
+
+        return this.animate(
+            260,
+            progress => {
 
                 if (
-                    !expression
+                    object
+                ) {
+
+                    object._pickupProgress =
+                        progress;
+                }
+
+
+                this.render();
+
+            }
+        ).then(
+            () => {
+
+                this.visualObjects =
+                    this.visualObjects
+                        .filter(
+                            item =>
+                                item.id !==
+                                action.objectId
+                        );
+
+
+                this.visualRobot.inventory
+                    .push(
+                        this.clone(
+                            action.item
+                        )
+                    );
+
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animatePush(action) {
+
+        window.pytApp
+            ?.playSfx(
+                "push"
+            );
+
+
+        const object =
+            this.visualObjects
+                .find(
+                    item =>
+                        item.id ===
+                        action.objectId
+                );
+
+
+        if (
+            !object
+        ) {
+
+            return Promise.resolve();
+        }
+
+
+        return this.animate(
+            360,
+            progress => {
+
+                const eased =
+                    this.easeInOut(
+                        progress
+                    );
+
+
+                object.x =
+                    action.from.x +
+                    (
+                        action.to.x -
+                        action.from.x
+                    ) *
+                    eased;
+
+
+                object.y =
+                    action.from.y +
+                    (
+                        action.to.y -
+                        action.from.y
+                    ) *
+                    eased;
+
+
+                this.render();
+
+            }
+        ).then(
+            () => {
+
+                object.x =
+                    action.to.x;
+
+
+                object.y =
+                    action.to.y;
+
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animateDeposit(action) {
+
+        window.pytApp
+            ?.playSfx(
+                "drop"
+            );
+
+
+        this.visualRobot.inventory =
+            this.visualRobot.inventory
+                .filter(
+                    item =>
+                        item.id !==
+                        action.item.id
+                );
+
+
+        this.visualObjects.push({
+
+            ...this.clone(
+                action.item.original
+            ),
+
+            id:
+                `${action.item.id}-deposited`,
+
+            x:
+                action.x,
+
+            y:
+                action.y,
+
+            deposited:
+                true,
+
+            pickable:
+                false
+        });
+
+
+        return this.animate(
+            250,
+            () => {
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animateSimpleInteraction(
+        action,
+        sound
+    ) {
+
+        window.pytApp
+            ?.playSfx(
+                sound
+            );
+
+
+        return this.animate(
+            220,
+            progress => {
+
+                this.render(
+                    {
+
+                        interaction:
+                            progress
+                    }
+                );
+            }
+        );
+    }
+
+
+
+    animateClean(action) {
+
+        const object =
+            this.visualObjects
+                .find(
+                    item =>
+                        item.id ===
+                        action.objectId
+                );
+
+
+        return this.animate(
+            260,
+            progress => {
+
+                if (
+                    object
+                ) {
+
+                    object._cleanProgress =
+                        progress;
+                }
+
+
+                this.render();
+
+            }
+        ).then(
+            () => {
+
+                this.visualObjects =
+                    this.visualObjects
+                        .filter(
+                            item =>
+                                item.id !==
+                                action.objectId
+                        );
+
+
+                this.render();
+            }
+        );
+    }
+
+
+
+    animate(
+        duration,
+        update
+    ) {
+
+        return new Promise(
+            resolve => {
+
+                const start =
+                    performance.now();
+
+
+                const frame =
+                    now => {
+
+                        const progress =
+                            Math.min(
+                                1,
+                                (
+                                    now -
+                                    start
+                                ) /
+                                duration
+                            );
+
+
+                        update(
+                            progress
+                        );
+
+
+                        if (
+                            progress >=
+                            1
+                        ) {
+
+                            this.animationFrame =
+                                null;
+
+
+                            resolve();
+
+                            return;
+                        }
+
+
+                        this.animationFrame =
+                            requestAnimationFrame(
+                                frame
+                            );
+                    };
+
+
+                this.animationFrame =
+                    requestAnimationFrame(
+                        frame
+                    );
+            }
+        );
+    }
+
+
+
+    wait(duration) {
+
+        return new Promise(
+            resolve => {
+
+                window.setTimeout(
+                    resolve,
+                    duration
+                );
+            }
+        );
+    }
+
+
+
+    easeInOut(value) {
+
+        return value <
+            0.5
+            ? 2 *
+                value *
+                value
+            : 1 -
+                Math.pow(
+                    -2 *
+                        value +
+                        2,
+                    2
+                ) /
+                2;
+    }
+
+
+
+    stopAnimation() {
+
+        if (
+            this.animationFrame
+        ) {
+
+            cancelAnimationFrame(
+                this.animationFrame
+            );
+
+
+            this.animationFrame =
+                null;
+        }
+    }
+
+
+
+    /* =====================================================
+       VALIDATION
+    ===================================================== */
+
+    validateLevel(source) {
+
+        const goal =
+            this.levelData
+                ?.goal ||
+            {};
+
+
+        /*
+         * 1. Concepts obligatoires.
+         */
+
+        const missingConcepts =
+            PytCodeAnalyzer
+                .missingConcepts(
+                    source,
+                    this.levelData
+                        ?.requiredConcepts
+                );
+
+
+        if (
+            missingConcepts.length >
+            0
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "concept_missing",
+
+                message:
+                    "Ton programme atteint peut-être une partie de l’objectif, mais il n’utilise pas encore toutes les notions demandées dans ce chapitre.",
+
+                missingConcepts
+            };
+        }
+
+
+        /*
+         * 2. Destination finale.
+         */
+
+        const destination =
+            this.extractGoalPosition(
+                goal
+            ) ||
+            this.findDestinationTarget();
+
+
+        if (
+            destination &&
+            (
+                this.robot.x !==
+                    destination.x ||
+                this.robot.y !==
+                    destination.y
+            )
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "wrong_destination",
+
+                wrongDestination:
+                    true,
+
+                message:
+                    "Pyt n’est pas arrivé à la bonne destination."
+            };
+        }
+
+
+        /*
+         * 3. Objet à ramasser.
+         */
+
+        const requiredObject =
+            goal.requiredObject ??
+            goal.required_object ??
+            goal.pickup ??
+            null;
+
+
+        if (
+            requiredObject
+        ) {
+
+            const picked =
+                this.stats.picked
+                    .some(
+                        id =>
+                            this.normalize(
+                                id
+                            ) ===
+                            this.normalize(
+                                requiredObject
+                            )
+                    ) ||
+                this.robot.inventory
+                    .some(
+                        item =>
+                            this.objectMatches(
+                                item,
+                                requiredObject
+                            )
+                    ) ||
+                this.stats.deposited
+                    .some(
+                        entry =>
+                            this.normalize(
+                                entry.object
+                            ) ===
+                            this.normalize(
+                                requiredObject
+                            )
+                    );
+
+
+            if (
+                !picked
+            ) {
+
+                return {
+
+                    success:
+                        false,
+
+                    reason:
+                        "object_missing",
+
+                    message:
+                        "Il manque encore un objet important pour terminer la mission."
+                };
+            }
+        }
+
+
+        /*
+         * 4. Dépôts.
+         */
+
+        const depositTargets =
+            this.logicalTargets
+                .filter(
+                    target =>
+                        this.isDepositTarget(
+                            target
+                        )
+                );
+
+
+        const unfinishedDeposit =
+            depositTargets
+                .find(
+                    target => {
+
+                        if (
+                            target.optional ===
+                            true
+                        ) {
+
+                            return false;
+                        }
+
+
+                        return !target.completed;
+                    }
+                );
+
+
+        if (
+            unfinishedDeposit
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "deposit_missing",
+
+                message:
+                    "Un objet n’a pas encore été déposé au bon endroit."
+            };
+        }
+
+
+        /*
+         * 5. Boutons.
+         */
+
+        const requiredButtons =
+            Number(
+                goal.buttons ??
+                goal.requiredButtons ??
+                0
+            );
+
+
+        if (
+            requiredButtons >
+                0 &&
+            this.stats.buttons.length <
+                requiredButtons
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "objective_incomplete",
+
+                message:
+                    "Il reste encore un mécanisme à activer."
+            };
+        }
+
+
+        /*
+         * 6. Nettoyage.
+         */
+
+        const requiredCleaned =
+            Number(
+                goal.cleaned ??
+                goal.requiredCleaned ??
+                0
+            );
+
+
+        if (
+            requiredCleaned >
+                0 &&
+            this.stats.cleaned.length <
+                requiredCleaned
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "objective_incomplete",
+
+                message:
+                    "La mission de nettoyage n’est pas encore terminée."
+            };
+        }
+
+
+        /*
+         * 7. Recharge.
+         */
+
+        if (
+            goal.recharge ===
+                true &&
+            !this.stats.recharged
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "objective_incomplete",
+
+                message:
+                    "Pyt doit encore atteindre sa station de recharge."
+            };
+        }
+
+
+        /*
+         * 8. Nombre minimum de déplacements.
+         *
+         * Utilisable lorsqu'un niveau doit empêcher
+         * un raccourci pédagogique.
+         */
+
+        const minimumMoves =
+            Number(
+                goal.minimum_moves ??
+                goal.minimumMoves ??
+                0
+            );
+
+
+        if (
+            minimumMoves >
+                0 &&
+            this.stats.moves <
+                minimumMoves
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "objective_incomplete",
+
+                message:
+                    "Le trajet n’est pas encore complet."
+            };
+        }
+
+
+        /*
+         * 9. Pas de collision si demandé.
+         */
+
+        if (
+            goal.noCollisions ===
+                true &&
+            this.stats.collisions >
+                0
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "objective_incomplete",
+
+                message:
+                    "Pyt a bien avancé, mais il a rencontré un obstacle pendant son trajet."
+            };
+        }
+
+
+        /*
+         * 10. Succès.
+         */
+
+        return {
+
+            success:
+                true,
+
+            reason:
+                "success",
+
+            message:
+                "Mission réussie !"
+        };
+    }
+
+
+
+    extractGoalPosition(goal) {
+
+        const candidates = [
+
+            goal.position,
+
+            goal.destination,
+
+            goal.target,
+
+            (
+                Number.isFinite(
+                    Number(
+                        goal.x
+                    )
+                ) &&
+                Number.isFinite(
+                    Number(
+                        goal.y
+                    )
+                )
+                    ? goal
+                    : null
+            )
+        ];
+
+
+        for (
+            const candidate
+            of candidates
+        ) {
+
+            if (
+                !candidate
+            ) {
+
+                continue;
+            }
+
+
+            const x =
+                Number(
+                    candidate.x ??
+                    candidate.col
+                );
+
+
+            const y =
+                Number(
+                    candidate.y ??
+                    candidate.row
+                );
+
+
+            if (
+                Number.isFinite(
+                    x
+                ) &&
+                Number.isFinite(
+                    y
+                )
+            ) {
+
+                return {
+
+                    x,
+
+                    y
+                };
+            }
+        }
+
+
+        return null;
+    }
+
+
+
+    findDestinationTarget() {
+
+        const target =
+            this.logicalTargets
+                .find(
+                    item => {
+
+                        const type =
+                            this.normalize(
+                                item.type ??
+                                item.id
+                            );
+
+
+                        return [
+                            "goal",
+                            "objectif",
+                            "destination",
+                            "finish",
+                            "arrivee"
+                        ].includes(
+                            type
+                        );
+                    }
+                );
+
+
+        if (
+            !target
+        ) {
+
+            return null;
+        }
+
+
+        return {
+
+            x:
+                target.x,
+
+            y:
+                target.y
+        };
+    }
+
+
+
+    /* =====================================================
+       RENDU
+    ===================================================== */
+
+    render(options = {}) {
+
+        if (
+            !this.ctx ||
+            !this.canvas
+        ) {
+
+            return;
+        }
+
+
+        const ctx =
+            this.ctx;
+
+
+        const width =
+            this.canvas.width;
+
+
+        const height =
+            this.canvas.height;
+
+
+        ctx.save();
+
+        ctx.imageSmoothingEnabled =
+            false;
+
+
+        ctx.clearRect(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        /*
+         * Fond global.
+         */
+
+        this.drawRoomBackground(
+            ctx,
+            width,
+            height
+        );
+
+
+        if (
+            !this.levelData
+        ) {
+
+            ctx.restore();
+
+            return;
+        }
+
+
+        this.boardLayout =
+            this.calculateBoardLayout(
+                width,
+                height
+            );
+
+
+        /*
+         * Plateau logique.
+         */
+
+        this.drawBoardFloor(
+            ctx
+        );
+
+
+        /*
+         * Grille claire.
+         */
+
+        this.drawGrid(
+            ctx
+        );
+
+
+        /*
+         * Zones objectif / dépôt.
+         */
+
+        this.drawTargets(
+            ctx
+        );
+
+
+        /*
+         * Décor défini dans levels.js.
+         */
+
+        this.drawDecorations(
+            ctx
+        );
+
+
+        /*
+         * Obstacles logiques.
+         */
+
+        this.drawBlockedCells(
+            ctx
+        );
+
+
+        /*
+         * Objets interactifs.
+         */
+
+        this.drawObjects(
+            ctx
+        );
+
+
+        /*
+         * Robot.
+         */
+
+        this.drawRobot(
+            ctx,
+            options
+        );
+
+
+        /*
+         * Bord du plateau.
+         */
+
+        this.drawBoardBorder(
+            ctx
+        );
+
+
+        ctx.restore();
+    }
+
+
+
+    drawRoomBackground(
+        ctx,
+        width,
+        height
+    ) {
+
+        const room =
+            this.normalize(
+                this.levelData
+                    ?.room ||
+                window.pytUI
+                    ?.getChapterData(
+                        window.pytApp
+                            ?.currentChapter ||
+                        1
+                    )
+                    ?.room ||
+                "entree"
+            );
+
+
+        /*
+         * Bord extérieur.
+         */
+
+        ctx.fillStyle =
+            "#10111a";
+
+
+        ctx.fillRect(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        if (
+            window.PYTArt
+        ) {
+
+            /*
+             * Grande pièce complète.
+             *
+             * furniture:false :
+             * on laisse les vraies décorations de levels.js
+             * définir les obstacles du niveau.
+             */
+
+            window.PYTArt
+                .drawRoomScene(
+                    ctx,
+                    room,
+                    16,
+                    16,
+                    width -
+                        32,
+                    height -
+                        32,
+                    {
+
+                        furniture:
+                            false
+                    }
+                );
+        }
+    }
+
+
+
+    calculateBoardLayout(
+        canvasWidth,
+        canvasHeight
+    ) {
+
+        /*
+         * On laisse une vraie bordure de pièce
+         * autour du plateau.
+         */
+
+        const marginX =
+            78;
+
+
+        const marginTop =
+            78;
+
+
+        const marginBottom =
+            60;
+
+
+        const availableWidth =
+            canvasWidth -
+            marginX *
+                2;
+
+
+        const availableHeight =
+            canvasHeight -
+            marginTop -
+            marginBottom;
+
+
+        const tileSize =
+            Math.floor(
+                Math.min(
+                    availableWidth /
+                        this.mapWidth,
+                    availableHeight /
+                        this.mapHeight
+                )
+            );
+
+
+        const boardWidth =
+            tileSize *
+            this.mapWidth;
+
+
+        const boardHeight =
+            tileSize *
+            this.mapHeight;
+
+
+        return {
+
+            tileSize,
+
+            width:
+                boardWidth,
+
+            height:
+                boardHeight,
+
+            x:
+                Math.round(
+                    (
+                        canvasWidth -
+                        boardWidth
+                    ) /
+                    2
+                ),
+
+            y:
+                Math.round(
+                    marginTop +
+                    (
+                        availableHeight -
+                        boardHeight
+                    ) /
+                    2
+                )
+        };
+    }
+
+
+
+    drawBoardFloor(ctx) {
+
+        const layout =
+            this.boardLayout;
+
+
+        const room =
+            this.normalize(
+                this.levelData
+                    ?.room ||
+                "entree"
+            );
+
+
+        /*
+         * Ombre plateau.
+         */
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.28)";
+
+
+        ctx.fillRect(
+            layout.x +
+                8,
+            layout.y +
+                9,
+            layout.width,
+            layout.height
+        );
+
+
+        /*
+         * Une légère couche claire sous la grille
+         * rend chaque case beaucoup plus lisible.
+         */
+
+        ctx.save();
+
+        ctx.globalAlpha =
+            0.18;
+
+
+        ctx.fillStyle =
+            room ===
+                "garage"
+                ? "#e1e2e4"
+                : room ===
+                    "cave_a_vin"
+                    ? "#d6d1d6"
+                    : "#fff0cd";
+
+
+        ctx.fillRect(
+            layout.x,
+            layout.y,
+            layout.width,
+            layout.height
+        );
+
+
+        ctx.restore();
+
+
+        /*
+         * Légère alternance de cases.
+         */
+
+        for (
+            let row = 0;
+            row < this.mapHeight;
+            row += 1
+        ) {
+
+            for (
+                let column = 0;
+                column < this.mapWidth;
+                column += 1
+            ) {
+
+                if (
+                    (
+                        row +
+                        column
+                    ) %
+                    2 ===
+                    0
+                ) {
+
+                    continue;
+                }
+
+
+                const cell =
+                    this.cellRect(
+                        column,
+                        row
+                    );
+
+
+                ctx.save();
+
+                ctx.globalAlpha =
+                    0.055;
+
+
+                ctx.fillStyle =
+                    "#000000";
+
+
+                ctx.fillRect(
+                    cell.x,
+                    cell.y,
+                    cell.size,
+                    cell.size
+                );
+
+
+                ctx.restore();
+            }
+        }
+    }
+
+
+
+    drawGrid(ctx) {
+
+        if (
+            !window.PYTArt
+        ) {
+
+            return;
+        }
+
+
+        for (
+            let row = 0;
+            row < this.mapHeight;
+            row += 1
+        ) {
+
+            for (
+                let column = 0;
+                column < this.mapWidth;
+                column += 1
+            ) {
+
+                const cell =
+                    this.cellRect(
+                        column,
+                        row
+                    );
+
+
+                window.PYTArt
+                    .drawGridCell(
+                        ctx,
+                        cell.x,
+                        cell.y,
+                        cell.size,
+                        {
+
+                            alpha:
+                                0.48,
+
+                            color:
+                                "#fff3d7"
+                        }
+                    );
+            }
+        }
+    }
+
+
+
+    drawTargets(ctx) {
+
+        const targets =
+            this.executing
+                ? this.visualTargets
+                : this.logicalTargets;
+
+
+        for (
+            const target
+            of targets
+        ) {
+
+            const cell =
+                this.cellRect(
+                    target.x,
+                    target.y
+                );
+
+
+            const type =
+                this.normalize(
+                    target.type ??
+                    target.id
+                );
+
+
+            if (
+                this.isDepositTarget(
+                    target
+                )
+            ) {
+
+                window.PYTArt
+                    ?.drawDeposit(
+                        ctx,
+                        cell.x,
+                        cell.y,
+                        cell.size
+                    );
+
+            } else if (
+                [
+                    "goal",
+                    "objectif",
+                    "destination",
+                    "finish",
+                    "arrivee"
+                ].includes(
+                    type
+                )
+            ) {
+
+                window.PYTArt
+                    ?.drawGoal(
+                        ctx,
+                        cell.x,
+                        cell.y,
+                        cell.size
+                    );
+            }
+        }
+
+
+        /*
+         * Goal défini directement dans goal.position.
+         */
+
+        const position =
+            this.extractGoalPosition(
+                this.levelData
+                    ?.goal ||
+                {}
+            );
+
+
+        if (
+            position &&
+            !targets.some(
+                target =>
+                    target.x ===
+                        position.x &&
+                    target.y ===
+                        position.y
+            )
+        ) {
+
+            const cell =
+                this.cellRect(
+                    position.x,
+                    position.y
+                );
+
+
+            window.PYTArt
+                ?.drawGoal(
+                    ctx,
+                    cell.x,
+                    cell.y,
+                    cell.size
+                );
+        }
+    }
+
+
+
+    drawDecorations(ctx) {
+
+        const decorations =
+            this.levelData
+                ?.decorations ??
+            this.levelData
+                ?.map
+                ?.decorations ??
+            [];
+
+
+        if (
+            !Array.isArray(
+                decorations
+            )
+        ) {
+
+            return;
+        }
+
+
+        for (
+            const decoration
+            of decorations
+        ) {
+
+            const x =
+                Number(
+                    decoration.x ??
+                    decoration.col
+                );
+
+
+            const y =
+                Number(
+                    decoration.y ??
+                    decoration.row
+                );
+
+
+            if (
+                !Number.isFinite(
+                    x
+                ) ||
+                !Number.isFinite(
+                    y
+                )
+            ) {
+
+                continue;
+            }
+
+
+            const cell =
+                this.cellRect(
+                    x,
+                    y
+                );
+
+
+            const scale =
+                Number(
+                    decoration.scale ??
+                    0.94
+                );
+
+
+            const size =
+                cell.size *
+                scale;
+
+
+            const offset =
+                (
+                    cell.size -
+                    size
+                ) /
+                2;
+
+
+            window.PYTArt
+                ?.draw(
+                    ctx,
+                    decoration.type ??
+                    decoration.id ??
+                    "unknown",
+                    cell.x +
+                        offset,
+                    cell.y +
+                        offset,
+                    size,
+                    decoration
+                );
+        }
+    }
+
+
+
+    drawBlockedCells(ctx) {
+
+        const blocked =
+            this.getBlockedCells();
+
+
+        blocked.forEach(
+            cell => {
+
+                let x;
+                let y;
+
+
+                if (
+                    Array.isArray(
+                        cell
+                    )
+                ) {
+
+                    x =
+                        Number(
+                            cell[0]
+                        );
+
+                    y =
+                        Number(
+                            cell[1]
+                        );
+
+                } else {
+
+                    x =
+                        Number(
+                            cell.x ??
+                            cell.col
+                        );
+
+                    y =
+                        Number(
+                            cell.y ??
+                            cell.row
+                        );
+                }
+
+
+                if (
+                    !Number.isFinite(
+                        x
+                    ) ||
+                    !Number.isFinite(
+                        y
+                    )
                 ) {
 
                     return;
                 }
 
 
-                switch (
-                    expression.type
-                ) {
-
-                    case "literal":
-
-                        if (
-                            typeof expression.value ===
-                            "string"
-                        ) {
-
-                            features.stringLiterals +=
-                                1;
-                        }
-
-
-                        break;
-
-
-                    case "list":
-
-                        features.listLiterals +=
-                            1;
-
-
-                        expression.values
-                            .forEach(
-                                walkExpression
-                            );
-
-
-                        break;
-
-
-                    case "dictionary":
-
-                        features.dictionaryLiterals +=
-                            1;
-
-
-                        expression.entries
-                            .forEach(
-                                entry => {
-
-                                    walkExpression(
-                                        entry.key
-                                    );
-
-
-                                    walkExpression(
-                                        entry.value
-                                    );
-                                }
-                            );
-
-
-                        break;
-
-
-                    case "binary":
-
-                        if (
-                            expression.operator ===
-                                "in" ||
-                            expression.operator ===
-                                "not in"
-                        ) {
-
-                            features.membershipTests +=
-                                1;
-                        }
-
-
-                        walkExpression(
-                            expression.left
-                        );
-
-
-                        walkExpression(
-                            expression.right
-                        );
-
-
-                        break;
-
-
-                    case "unary":
-
-                        walkExpression(
-                            expression.argument
-                        );
-
-
-                        break;
-
-
-                    case "subscript":
-
-                        features.subscripts +=
-                            1;
-
-
-                        walkExpression(
-                            expression.object
-                        );
-
-
-                        walkExpression(
-                            expression.index
-                        );
-
-
-                        break;
-
-
-                    case "call": {
-
-                        if (
-                            expression.callee
-                                ?.type ===
-                                "identifier"
-                        ) {
-
-                            const name =
-                                expression.callee
-                                    .name;
-
-
-                            const actions = [
-
-                                "avancer",
-                                "tourner_gauche",
-                                "tourner_droite",
-                                "ramasser",
-                                "deposer"
-                            ];
-
-
-                            if (
-                                actions.includes(
-                                    name
-                                )
-                            ) {
-
-                                features.actionCalls +=
-                                    1;
-                            }
-
-
-                            if (
-                                name ===
-                                    "tourner_gauche" ||
-                                name ===
-                                    "tourner_droite"
-                            ) {
-
-                                features.turnCalls +=
-                                    1;
-                            }
-
-
-                            if (
-                                name ===
-                                "ramasser"
-                            ) {
-
-                                features.pickupCalls +=
-                                    1;
-                            }
-
-
-                            if (
-                                name ===
-                                "range"
-                            ) {
-
-                                features.rangeCalls +=
-                                    1;
-                            }
-
-
-                            if (
-                                functionNames.has(
-                                    name
-                                )
-                            ) {
-
-                                features.userFunctionCalls +=
-                                    1;
-                            }
-                        }
-
-
-                        walkExpression(
-                            expression.callee
-                        );
-
-
-                        expression.args
-                            .forEach(
-                                walkExpression
-                            );
-
-
-                        break;
-                    }
-                }
-            };
-
-
-
-        const walkStatement =
-            statement => {
-
-                switch (
-                    statement.type
-                ) {
-
-                    case "assign":
-
-                        features.assignments +=
-                            1;
-
-
-                        walkExpression(
-                            statement.value
-                        );
-
-
-                        break;
-
-
-                    case "expression":
-
-                        walkExpression(
-                            statement.expression
-                        );
-
-
-                        break;
-
-
-                    case "if":
-
-                        features.ifStatements +=
-                            1;
-
-
-                        if (
-                            statement.elseBody
-                        ) {
-
-                            features.elseBranches +=
-                                1;
-                        }
-
-
-                        statement.branches
-                            .forEach(
-                                branch => {
-
-                                    walkExpression(
-                                        branch.condition
-                                    );
-
-
-                                    branch.body
-                                        .forEach(
-                                            walkStatement
-                                        );
-                                }
-                            );
-
-
-                        statement.elseBody
-                            ?.forEach(
-                                walkStatement
-                            );
-
-
-                        break;
-
-
-                    case "for":
-
-                        features.forLoops +=
-                            1;
-
-
-                        walkExpression(
-                            statement.iterable
-                        );
-
-
-                        statement.body
-                            .forEach(
-                                walkStatement
-                            );
-
-
-                        break;
-
-
-                    case "while":
-
-                        features.whileLoops +=
-                            1;
-
-
-                        walkExpression(
-                            statement.condition
-                        );
-
-
-                        statement.body
-                            .forEach(
-                                walkStatement
-                            );
-
-
-                        break;
-
-
-                    case "function":
-
-                        features.functions +=
-                            1;
-
-
-                        features.functionParameters +=
-                            statement
-                                .parameters
-                                .length;
-
-
-                        statement.body
-                            .forEach(
-                                walkStatement
-                            );
-
-
-                        break;
-
-
-                    case "return":
-
-                        if (
-                            statement.value
-                        ) {
-
-                            walkExpression(
-                                statement.value
-                            );
-                        }
-
-
-                        break;
-                }
-            };
-
-
-
-        collectFunctions(
-            ast
+                const rect =
+                    this.cellRect(
+                        x,
+                        y
+                    );
+
+
+                /*
+                 * Très léger indicateur.
+                 * Le décor doit rester visible.
+                 */
+
+                window.PYTArt
+                    ?.drawBlocked(
+                        ctx,
+                        rect.x,
+                        rect.y,
+                        rect.size
+                    );
+            }
         );
-
-
-        ast.forEach(
-            walkStatement
-        );
-
-
-        return features;
     }
 
+
+
+    drawObjects(ctx) {
+
+        const objects =
+            this.executing
+                ? this.visualObjects
+                : this.logicalObjects;
+
+
+        for (
+            const object
+            of objects
+        ) {
+
+            if (
+                object.hidden ===
+                true
+            ) {
+
+                continue;
+            }
+
+
+            const cell =
+                this.cellRect(
+                    object.x,
+                    object.y
+                );
+
+
+            let size =
+                cell.size *
+                0.74;
+
+
+            let offset =
+                (
+                    cell.size -
+                    size
+                ) /
+                2;
+
+
+            if (
+                this.isPushableObject(
+                    object
+                )
+            ) {
+
+                size =
+                    cell.size *
+                    0.83;
+
+
+                offset =
+                    (
+                        cell.size -
+                        size
+                    ) /
+                    2;
+            }
+
+
+            /*
+             * Petit halo pour les objets ramassables.
+             */
+
+            if (
+                this.isAutoPickupObject(
+                    object
+                )
+            ) {
+
+                ctx.save();
+
+
+                const centerX =
+                    cell.x +
+                    cell.size /
+                    2;
+
+
+                const centerY =
+                    cell.y +
+                    cell.size /
+                    2;
+
+
+                const gradient =
+                    ctx.createRadialGradient(
+                        centerX,
+                        centerY,
+                        0,
+                        centerX,
+                        centerY,
+                        cell.size *
+                            0.48
+                    );
+
+
+                gradient.addColorStop(
+                    0,
+                    "rgba(255,238,150,0.18)"
+                );
+
+
+                gradient.addColorStop(
+                    1,
+                    "rgba(255,238,150,0)"
+                );
+
+
+                ctx.fillStyle =
+                    gradient;
+
+
+                ctx.fillRect(
+                    cell.x,
+                    cell.y,
+                    cell.size,
+                    cell.size
+                );
+
+
+                ctx.restore();
+            }
+
+
+            let artType =
+                this.getObjectArtType(
+                    object
+                );
+
+
+            let drawY =
+                cell.y +
+                offset;
+
+
+            let drawSize =
+                size;
+
+
+            if (
+                object._pickup
+            ) {
+
+                const progress =
+                    Number(
+                        object._pickupProgress ||
+                        0
+                    );
+
+
+                drawY -=
+                    cell.size *
+                    progress *
+                    0.3;
+
+
+                drawSize *=
+                    1 -
+                    progress *
+                    0.55;
+            }
+
+
+            if (
+                object._cleanProgress
+            ) {
+
+                ctx.save();
+
+                ctx.globalAlpha =
+                    1 -
+                    object._cleanProgress;
+            }
+
+
+            window.PYTArt
+                ?.draw(
+                    ctx,
+                    artType,
+                    cell.x +
+                        (
+                            cell.size -
+                            drawSize
+                        ) /
+                        2,
+                    drawY,
+                    drawSize,
+                    object
+                );
+
+
+            if (
+                object._cleanProgress
+            ) {
+
+                ctx.restore();
+            }
+        }
+    }
+
+
+
+    getObjectArtType(object) {
+
+        const raw =
+            this.normalize(
+                object.art ??
+                object.type ??
+                object.id ??
+                ""
+            );
+
+
+        /*
+         * IDs particuliers.
+         */
+
+        if (
+            raw.includes(
+                "livre_rouge"
+            )
+        ) {
+
+            return "livre_rouge";
+        }
+
+
+        if (
+            raw.includes(
+                "livre_bleu"
+            )
+        ) {
+
+            return "livre_bleu";
+        }
+
+
+        if (
+            raw.includes(
+                "bouteille_rouge"
+            )
+        ) {
+
+            return "bouteille_rouge";
+        }
+
+
+        if (
+            raw.includes(
+                "bouteille_bleue"
+            )
+        ) {
+
+            return "bouteille_bleue";
+        }
+
+
+        if (
+            raw.includes(
+                "bouteille_verte"
+            )
+        ) {
+
+            return "bouteille_verte";
+        }
+
+
+        if (
+            raw.includes(
+                "bouteille_jaune"
+            )
+        ) {
+
+            return "bouteille_jaune";
+        }
+
+
+        if (
+            raw.includes(
+                "boite_outils"
+            )
+        ) {
+
+            return "boite_outils";
+        }
+
+
+        /*
+         * Suppression d'un numéro final :
+         * jouet_1 → jouet
+         */
+
+        return raw
+            .replace(
+                /_\d+$/,
+                ""
+            );
+    }
+
+
+
+    drawRobot(
+        ctx,
+        options = {}
+    ) {
+
+        const robot =
+            this.visualRobot ||
+            this.robot;
+
+
+        if (
+            !robot
+        ) {
+
+            return;
+        }
+
+
+        const cell =
+            this.cellRect(
+                robot.x,
+                robot.y
+            );
+
+
+        const size =
+            cell.size *
+            0.76;
+
+
+        const offset =
+            (
+                cell.size -
+                size
+            ) /
+                2;
+
+
+        if (
+            window.PYTArt
+        ) {
+
+            window.PYTArt
+                .drawPyt(
+                    ctx,
+                    cell.x +
+                        offset,
+                    cell.y +
+                        offset -
+                        cell.size *
+                        0.06,
+                    size,
+                    robot.direction,
+                    {
+
+                        bob:
+                            Boolean(
+                                options.moving
+                            ),
+
+                        happy:
+                            false
+                    }
+                );
+        }
+    }
+
+
+
+    drawBoardBorder(ctx) {
+
+        const layout =
+            this.boardLayout;
+
+
+        ctx.save();
+
+
+        /*
+         * Bord sombre.
+         */
+
+        ctx.strokeStyle =
+            "rgba(15,13,24,0.78)";
+
+
+        ctx.lineWidth =
+            5;
+
+
+        ctx.strokeRect(
+            layout.x -
+                3,
+            layout.y -
+                3,
+            layout.width +
+                6,
+            layout.height +
+                6
+        );
+
+
+        /*
+         * Petit highlight.
+         */
+
+        ctx.strokeStyle =
+            "rgba(255,239,205,0.30)";
+
+
+        ctx.lineWidth =
+            2;
+
+
+        ctx.strokeRect(
+            layout.x,
+            layout.y,
+            layout.width,
+            layout.height
+        );
+
+
+        ctx.restore();
+    }
+
+
+
+    /* =====================================================
+       CASES
+    ===================================================== */
+
+    cellRect(
+        x,
+        y
+    ) {
+
+        const layout =
+            this.boardLayout ||
+            this.calculateBoardLayout(
+                this.canvas?.width ||
+                960,
+                this.canvas?.height ||
+                640
+            );
+
+
+        const size =
+            layout.tileSize;
+
+
+        return {
+
+            x:
+                layout.x +
+                Number(
+                    x
+                ) *
+                size,
+
+            y:
+                layout.y +
+                Number(
+                    y
+                ) *
+                size,
+
+            size
+        };
+    }
+
+
+
+    /* =====================================================
+       STATUS
+    ===================================================== */
+
+    updateStatus(text) {
+
+        const status =
+            document.getElementById(
+                "game-status"
+            );
+
+
+        if (
+            status
+        ) {
+
+            status.textContent =
+                text;
+        }
+    }
+
+
+
+    /* =====================================================
+       UTILS
+    ===================================================== */
+
+    normalize(value) {
+
+        return String(
+            value ??
+            ""
+        )
+            .normalize("NFD")
+            .replace(
+                /[\u0300-\u036f]/g,
+                ""
+            )
+            .toLowerCase()
+            .trim()
+            .replace(
+                /[\s-]+/g,
+                "_"
+            );
+    }
+
+
+
+    clone(value) {
+
+        if (
+            value ===
+                undefined
+        ) {
+
+            return undefined;
+        }
+
+
+        return JSON.parse(
+            JSON.stringify(
+                value
+            )
+        );
+    }
 }
 
 
 
 /* =========================================================
-   EXPORT
+   EXPORT / START
 ========================================================= */
-
-
-window.PytGame =
-    PytGame;
-
 
 function startPytGame() {
 
@@ -8114,9 +9066,38 @@ function startPytGame() {
     }
 
 
+    window.PytGame =
+        PytGame;
+
+
+    window.PytInterpreter =
+        PytInterpreter;
+
+
+    window.PytCodeAnalyzer =
+        PytCodeAnalyzer;
+
+
     window.pytGame =
         new PytGame();
 }
 
 
-startPytGame();
+
+if (
+    document.readyState ===
+    "loading"
+) {
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        startPytGame,
+        {
+            once: true
+        }
+    );
+
+} else {
+
+    startPytGame();
+}

@@ -1,44 +1,169 @@
 "use strict";
 
 /* =========================================================
-   PYT
-   robot.js
+   PYT - robot.js
+   =========================================================
 
-   Gestion complète de Pyt :
-   - position
+   MOTEUR LOGIQUE DU ROBOT PYT
+
+   ---------------------------------------------------------
+
+   Ce fichier NE dessine rien.
+
+   Il gère uniquement :
+
+   - position logique
    - direction
-   - déplacements
-   - animation ~0,5 s par case
-   - collisions
+   - cap
    - inventaire
-   - ramassage
-   - dépôt
    - historique
    - cases visitées
+   - énergie
+   - état du robot
+   - utilitaires de déplacement
+   - compatibilité avec game.js
+   - compatibilité avec l'ancienne API française
+
+   ---------------------------------------------------------
+
+   API PRINCIPALE :
+
+       robot.forward()
+       robot.backward()
+       robot.left()
+       robot.right()
+
+   Équivalents historiques :
+
+       robot.avancer()
+       robot.reculer()
+       robot.tournerGauche()
+       robot.tournerDroite()
+
+   ---------------------------------------------------------
+
+   Directions internes :
+
+       N = nord
+       E = est
+       S = sud
+       W = ouest
+
+   Convention des angles :
+
+       0   = Est
+       90  = Sud
+       180 = Ouest
+       270 = Nord
+
 ========================================================= */
 
 
 class PytRobot {
 
-    constructor(options = {}) {
+    /* =====================================================
+       CONSTRUCTEUR
+    ===================================================== */
+
+    constructor(
+        options = {},
+        legacyY = undefined,
+        legacyDirection = undefined
+    ) {
+
+        /*
+         * Compatibilité :
+         *
+         * new PytRobot({
+         *     x: 2,
+         *     y: 3,
+         *     direction: "E"
+         * })
+         *
+         * ou :
+         *
+         * new PytRobot(
+         *     2,
+         *     3,
+         *     "E"
+         * )
+         */
+
+        if (
+            typeof options ===
+            "number"
+        ) {
+
+            options = {
+
+                x:
+                    options,
+
+                y:
+                    Number(
+                        legacyY ??
+                        0
+                    ),
+
+                direction:
+                    legacyDirection ??
+                    "E"
+            };
+        }
+
+
+        if (
+            !options ||
+            typeof options !==
+            "object"
+        ) {
+
+            options =
+                {};
+        }
+
 
         /* =================================================
-           CONFIGURATION
+           IDENTITÉ
         ================================================= */
 
-        this.stepDuration =
-            Number(options.stepDuration) || 500;
-
-        this.turnDuration =
-            Number(options.turnDuration) || 180;
+        this.name =
+            options.name ||
+            "Pyt";
 
 
         /* =================================================
-           MONDE
+           POSITION
         ================================================= */
 
-        this.world =
-            options.world || null;
+        this.x =
+            this.toInteger(
+                options.x ??
+                options.col ??
+                options.column ??
+                0
+            );
+
+
+        this.y =
+            this.toInteger(
+                options.y ??
+                options.row ??
+                options.line ??
+                0
+            );
+
+
+        /* =================================================
+           DIRECTION
+        ================================================= */
+
+        this.direction =
+            this.normalizeDirection(
+                options.direction ??
+                options.heading ??
+                "E"
+            );
 
 
         /* =================================================
@@ -46,191 +171,612 @@ class PytRobot {
         ================================================= */
 
         this.initialState = {
-            x: 0,
-            y: 0,
-            direction: "E"
+
+            x:
+                this.x,
+
+            y:
+                this.y,
+
+            direction:
+                this.direction
         };
 
 
         /* =================================================
-           ÉTAT ACTUEL
+           INVENTAIRE
         ================================================= */
 
-        this.x = 0;
-        this.y = 0;
+        this.inventory =
+            Array.isArray(
+                options.inventory
+            )
+                ? this.clone(
+                    options.inventory
+                )
+                : [];
 
-        this.direction = "E";
 
-        this.inventory = [];
+        /* =================================================
+           CASES VISITÉES
+        ================================================= */
 
-        this.visited = new Set();
+        this.visited = [
 
-        this.history = [];
+            {
 
-        this.moveCount = 0;
+                x:
+                    this.x,
 
-        this.running = false;
+                y:
+                    this.y
+            }
+        ];
 
-        this.cancelVersion = 0;
+
+        /* =================================================
+           HISTORIQUE
+        ================================================= */
+
+        this.history =
+            [];
+
+
+        /* =================================================
+           ÉNERGIE
+        ================================================= */
+
+        this.maxEnergy =
+            this.normalizeEnergy(
+                options.maxEnergy ??
+                100
+            );
+
+
+        this.energy =
+            this.clamp(
+                Number(
+                    options.energy ??
+                    this.maxEnergy
+                ),
+                0,
+                this.maxEnergy
+            );
+
+
+        /* =================================================
+           ÉTAT
+        ================================================= */
+
+        this.active =
+            true;
+
+
+        this.moving =
+            false;
+
+
+        this.blocked =
+            false;
+
+
+        this.lastAction =
+            null;
+
+
+        /* =================================================
+           MONDE OPTIONNEL
+        ================================================= */
+
+        this.world =
+            options.world ||
+            null;
 
 
         /* =================================================
            CALLBACKS
         ================================================= */
 
-        this.onChange =
-            typeof options.onChange === "function"
-                ? options.onChange
-                : null;
+        this.callbacks = {
 
+            onMove:
+                typeof options.onMove ===
+                "function"
+                    ? options.onMove
+                    : null,
 
-        this.onAction =
-            typeof options.onAction === "function"
-                ? options.onAction
-                : null;
+            onTurn:
+                typeof options.onTurn ===
+                "function"
+                    ? options.onTurn
+                    : null,
 
+            onCollision:
+                typeof options.onCollision ===
+                "function"
+                    ? options.onCollision
+                    : null,
 
-        /* =================================================
-           INITIALISATION
-        ================================================= */
+            onStateChange:
+                typeof options.onStateChange ===
+                "function"
+                    ? options.onStateChange
+                    : null,
 
-        if (options.state) {
+            onPickup:
+                typeof options.onPickup ===
+                "function"
+                    ? options.onPickup
+                    : null,
 
-            this.setInitialState(
-                options.state
-            );
+            onDrop:
+                typeof options.onDrop ===
+                "function"
+                    ? options.onDrop
+                    : null,
 
-        } else {
-
-            this.reset();
-        }
-    }
-
-
-
-    /* =====================================================
-       CONFIGURATION
-    ===================================================== */
-
-    setWorld(world) {
-
-        this.world =
-            world || null;
-
-        return this;
-    }
-
-
-
-    setInitialState(state = {}) {
-
-        this.initialState = {
-
-            x:
-                Number.isFinite(
-                    Number(state.x)
-                )
-                    ? Number(state.x)
-                    : 0,
-
-            y:
-                Number.isFinite(
-                    Number(state.y)
-                )
-                    ? Number(state.y)
-                    : 0,
-
-            direction:
-                this.normalizeDirection(
-                    state.direction || "E"
-                )
+            onRecharge:
+                typeof options.onRecharge ===
+                "function"
+                    ? options.onRecharge
+                    : null
         };
 
 
-        this.reset();
+        this.recordHistory(
+            "spawn",
+            {
 
-        return this;
+                x:
+                    this.x,
+
+                y:
+                    this.y,
+
+                direction:
+                    this.direction
+            }
+        );
     }
 
 
 
-    /* =====================================================
+    /* =========================================================
        RESET
-    ===================================================== */
+    ========================================================= */
 
-    reset() {
+    reset(
+        state = null
+    ) {
 
-        /*
-        Incrémente la version.
-
-        Toute animation encore en cours comprend
-        ainsi qu'elle doit s'arrêter.
-        */
-
-        this.cancelVersion += 1;
+        const source =
+            state &&
+            typeof state ===
+                "object"
+                ? state
+                : this.initialState;
 
 
         this.x =
-            this.initialState.x;
+            this.toInteger(
+                source.x ??
+                0
+            );
+
 
         this.y =
-            this.initialState.y;
+            this.toInteger(
+                source.y ??
+                0
+            );
+
 
         this.direction =
-            this.initialState.direction;
+            this.normalizeDirection(
+                source.direction ??
+                "E"
+            );
 
 
         this.inventory =
             [];
 
 
-        this.visited =
-            new Set();
+        this.visited = [
+
+            {
+
+                x:
+                    this.x,
+
+                y:
+                    this.y
+            }
+        ];
 
 
         this.history =
             [];
 
 
-        this.moveCount =
-            0;
+        this.energy =
+            this.maxEnergy;
 
 
-        this.running =
+        this.active =
+            true;
+
+
+        this.moving =
             false;
 
 
-        this.markVisited(
-            this.x,
-            this.y
+        this.blocked =
+            false;
+
+
+        this.lastAction =
+            null;
+
+
+        this.recordHistory(
+            "reset",
+            this.getState()
         );
 
 
-        this.addHistory({
-            type: "reset",
-            x: this.x,
-            y: this.y,
-            direction: this.direction
-        });
+        this.emitStateChange(
+            "reset"
+        );
 
 
-        this.notifyChange();
-
-
-        return this.getState();
+        return this;
     }
 
 
 
-    /* =====================================================
-       DIRECTIONS
-    ===================================================== */
+    /* =========================================================
+       WORLD
+    ========================================================= */
+
+    setWorld(world) {
+
+        this.world =
+            world ||
+            null;
+
+
+        return this;
+    }
+
+
+
+    getWorld() {
+
+        return this.world;
+    }
+
+
+
+    /* =========================================================
+       STATE
+    ========================================================= */
+
+    getState() {
+
+        return {
+
+            name:
+                this.name,
+
+            x:
+                this.x,
+
+            y:
+                this.y,
+
+            direction:
+                this.direction,
+
+            heading:
+                this.getHeading(),
+
+            energy:
+                this.energy,
+
+            maxEnergy:
+                this.maxEnergy,
+
+            active:
+                this.active,
+
+            moving:
+                this.moving,
+
+            blocked:
+                this.blocked,
+
+            inventory:
+                this.clone(
+                    this.inventory
+                ),
+
+            visited:
+                this.clone(
+                    this.visited
+                ),
+
+            lastAction:
+                this.clone(
+                    this.lastAction
+                )
+        };
+    }
+
+
+
+    setState(state) {
+
+        if (
+            !state ||
+            typeof state !==
+            "object"
+        ) {
+
+            return this;
+        }
+
+
+        if (
+            state.x !==
+            undefined
+        ) {
+
+            this.x =
+                this.toInteger(
+                    state.x
+                );
+        }
+
+
+        if (
+            state.y !==
+            undefined
+        ) {
+
+            this.y =
+                this.toInteger(
+                    state.y
+                );
+        }
+
+
+        if (
+            state.direction !==
+            undefined
+        ) {
+
+            this.direction =
+                this.normalizeDirection(
+                    state.direction
+                );
+        }
+
+
+        if (
+            state.energy !==
+            undefined
+        ) {
+
+            this.energy =
+                this.clamp(
+                    Number(
+                        state.energy
+                    ),
+                    0,
+                    this.maxEnergy
+                );
+        }
+
+
+        if (
+            Array.isArray(
+                state.inventory
+            )
+        ) {
+
+            this.inventory =
+                this.clone(
+                    state.inventory
+                );
+        }
+
+
+        this.emitStateChange(
+            "set-state"
+        );
+
+
+        return this;
+    }
+
+
+
+    /* =========================================================
+       POSITION
+    ========================================================= */
+
+    setPosition(
+        x,
+        y,
+        options = {}
+    ) {
+
+        const from = {
+
+            x:
+                this.x,
+
+            y:
+                this.y
+        };
+
+
+        this.x =
+            this.toInteger(
+                x
+            );
+
+
+        this.y =
+            this.toInteger(
+                y
+            );
+
+
+        if (
+            options.record !==
+            false
+        ) {
+
+            this.markVisited(
+                this.x,
+                this.y
+            );
+
+
+            this.recordHistory(
+                "teleport",
+                {
+
+                    from,
+
+                    to: {
+
+                        x:
+                            this.x,
+
+                        y:
+                            this.y
+                    }
+                }
+            );
+        }
+
+
+        this.emitStateChange(
+            "position"
+        );
+
+
+        return this;
+    }
+
+
+
+    getPosition() {
+
+        return {
+
+            x:
+                this.x,
+
+            y:
+                this.y
+        };
+    }
+
+
+
+    positionEquals(
+        x,
+        y
+    ) {
+
+        return (
+            this.x ===
+                Number(
+                    x
+                ) &&
+            this.y ===
+                Number(
+                    y
+                )
+        );
+    }
+
+
+
+    /* =========================================================
+       DIRECTION
+    ========================================================= */
+
+    setDirection(direction) {
+
+        const from =
+            this.direction;
+
+
+        const to =
+            this.normalizeDirection(
+                direction
+            );
+
+
+        this.direction =
+            to;
+
+
+        this.lastAction = {
+
+            type:
+                "direction",
+
+            from,
+
+            to
+        };
+
+
+        this.recordHistory(
+            "direction",
+            this.lastAction
+        );
+
+
+        this.emitTurn(
+            from,
+            to
+        );
+
+
+        this.emitStateChange(
+            "direction"
+        );
+
+
+        return this.direction;
+    }
+
+
 
     normalizeDirection(direction) {
 
+        if (
+            typeof direction ===
+            "number"
+        ) {
+
+            return this.headingToDirection(
+                direction
+            );
+        }
+
+
         const value =
             String(
-                direction || "E"
+                direction ??
+                "E"
             )
                 .trim()
                 .toUpperCase();
@@ -250,6 +796,9 @@ class PytRobot {
             UP:
                 "N",
 
+            HAUT:
+                "N",
+
 
             E:
                 "E",
@@ -261,6 +810,9 @@ class PytRobot {
                 "E",
 
             RIGHT:
+                "E",
+
+            DROITE:
                 "E",
 
 
@@ -276,6 +828,9 @@ class PytRobot {
             DOWN:
                 "S",
 
+            BAS:
+                "S",
+
 
             W:
                 "W",
@@ -283,1208 +838,21 @@ class PytRobot {
             WEST:
                 "W",
 
-            O:
-                "W",
-
             OUEST:
                 "W",
 
             LEFT:
+                "W",
+
+            GAUCHE:
                 "W"
         };
 
 
-        return (
-            aliases[value] ||
-            "E"
-        );
-    }
-
-
-
-    getDirectionVector(
-        direction =
-            this.direction
-    ) {
-
-        switch (
-            this.normalizeDirection(
-                direction
-            )
-        ) {
-
-            case "N":
-
-                return {
-                    x: 0,
-                    y: -1
-                };
-
-
-            case "S":
-
-                return {
-                    x: 0,
-                    y: 1
-                };
-
-
-            case "W":
-
-                return {
-                    x: -1,
-                    y: 0
-                };
-
-
-            case "E":
-            default:
-
-                return {
-                    x: 1,
-                    y: 0
-                };
-        }
-    }
-
-
-
-    /* =====================================================
-       ROTATIONS
-    ===================================================== */
-
-    async turnLeft() {
-
-        const directions = [
-            "N",
-            "W",
-            "S",
-            "E"
-        ];
-
-
-        const index =
-            directions.indexOf(
-                this.direction
-            );
-
-
-        this.direction =
-            directions[
-                (
-                    index + 1
-                ) %
-                directions.length
-            ];
-
-
-        this.addHistory({
-            type: "turn_left",
-            direction: this.direction
-        });
-
-
-        this.emitAction({
-            type: "turn_left",
-            success: true
-        });
-
-
-        this.notifyChange();
-
-
-        await this.wait(
-            this.turnDuration
-        );
-
-
-        return {
-            success: true,
-            direction:
-                this.direction
-        };
-    }
-
-
-
-    async turnRight() {
-
-        const directions = [
-            "N",
-            "E",
-            "S",
-            "W"
-        ];
-
-
-        const index =
-            directions.indexOf(
-                this.direction
-            );
-
-
-        this.direction =
-            directions[
-                (
-                    index + 1
-                ) %
-                directions.length
-            ];
-
-
-        this.addHistory({
-            type: "turn_right",
-            direction: this.direction
-        });
-
-
-        this.emitAction({
-            type: "turn_right",
-            success: true
-        });
-
-
-        this.notifyChange();
-
-
-        await this.wait(
-            this.turnDuration
-        );
-
-
-        return {
-            success: true,
-            direction:
-                this.direction
-        };
-    }
-
-
-
-    /* =====================================================
-       DÉPLACEMENTS
-    ===================================================== */
-
-    async forward(
-        amount = 1
-    ) {
-
-        let count =
-            Math.floor(
-                Number(amount)
-            );
-
-
-        if (
-            !Number.isFinite(
-                count
-            ) ||
-            count < 0
-        ) {
-
-            return {
-                success: false,
-                reason: "invalid_distance",
-                moved: 0
-            };
-        }
-
-
-        if (count === 0) {
-
-            return {
-                success: true,
-                moved: 0
-            };
-        }
-
-
-        const version =
-            this.cancelVersion;
-
-
-        let moved =
-            0;
-
-
-        this.running =
-            true;
-
-
-        for (
-            let index = 0;
-            index < count;
-            index += 1
-        ) {
-
-            /*
-            Si un reset a été demandé,
-            on stoppe l'ancienne animation.
-            */
-
-            if (
-                version !==
-                this.cancelVersion
-            ) {
-
-                this.running =
-                    false;
-
-
-                return {
-                    success: false,
-                    reason: "cancelled",
-                    moved
-                };
-            }
-
-
-
-            const result =
-                await this.moveOneCell(
-                    version
-                );
-
-
-            if (!result.success) {
-
-                this.running =
-                    false;
-
-
-                return {
-                    success: false,
-                    reason:
-                        result.reason,
-                    moved
-                };
-            }
-
-
-            moved += 1;
-        }
-
-
-        this.running =
-            false;
-
-
-        return {
-            success: true,
-            moved
-        };
-    }
-
-
-
-    async moveOneCell(version) {
-
-        const vector =
-            this.getDirectionVector();
-
-
-        const targetX =
-            this.x +
-            vector.x;
-
-
-        const targetY =
-            this.y +
-            vector.y;
-
-
-        if (
-            !this.isInside(
-                targetX,
-                targetY
-            )
-        ) {
-
-            const result = {
-                type: "move",
-                success: false,
-                reason: "outside_map",
-                x: this.x,
-                y: this.y,
-                targetX,
-                targetY
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        if (
-            this.isBlocked(
-                targetX,
-                targetY
-            )
-        ) {
-
-            const result = {
-                type: "move",
-                success: false,
-                reason: "blocked",
-                x: this.x,
-                y: this.y,
-                targetX,
-                targetY
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        /*
-        On attend avant de valider la prochaine case.
-
-        En pratique le rendu pourra interpoler
-        entre les deux positions dans game.js.
-        */
-
-        const from = {
-            x: this.x,
-            y: this.y
-        };
-
-
-        const to = {
-            x: targetX,
-            y: targetY
-        };
-
-
-        this.emitAction({
-            type: "move_start",
-            success: true,
-            from,
-            to,
-            duration:
-                this.stepDuration
-        });
-
-
-        await this.wait(
-            this.stepDuration
-        );
-
-
-        if (
-            version !==
-            this.cancelVersion
-        ) {
-
-            return {
-                success: false,
-                reason: "cancelled"
-            };
-        }
-
-
-
-        this.x =
-            targetX;
-
-        this.y =
-            targetY;
-
-
-        this.moveCount += 1;
-
-
-        this.markVisited(
-            this.x,
-            this.y
-        );
-
-
-        const result = {
-            type: "move",
-            success: true,
-            from,
-            to,
-            x: this.x,
-            y: this.y
-        };
-
-
-        this.addHistory(
-            result
-        );
-
-
-        this.emitAction(
-            result
-        );
-
-
-        this.notifyChange();
-
-
-        return result;
-    }
-
-
-
-    /* =====================================================
-       COLLISIONS
-    ===================================================== */
-
-    isInside(
-        x,
-        y
-    ) {
-
-        const width =
-            Number(
-                this.world
-                    ?.map
-                    ?.width ??
-                this.world
-                    ?.width ??
-                0
-            );
-
-
-        const height =
-            Number(
-                this.world
-                    ?.map
-                    ?.height ??
-                this.world
-                    ?.height ??
-                0
-            );
-
-
-        if (
-            width <= 0 ||
-            height <= 0
-        ) {
-
-            return true;
-        }
-
-
-        return (
-            x >= 0 &&
-            y >= 0 &&
-            x < width &&
-            y < height
-        );
-    }
-
-
-
-    isBlocked(
-        x,
-        y
-    ) {
-
-        const blocked =
-            this.world
-                ?.map
-                ?.blocked ||
-            this.world
-                ?.blocked ||
-            [];
-
-
-        return blocked.some(
-            cell => {
-
-                if (
-                    Array.isArray(
-                        cell
-                    )
-                ) {
-
-                    return (
-                        Number(cell[0]) === x &&
-                        Number(cell[1]) === y
-                    );
-                }
-
-
-                return (
-                    Number(cell?.x) === x &&
-                    Number(cell?.y) === y
-                );
-            }
-        );
-    }
-
-
-
-    frontIsFree() {
-
-        const vector =
-            this.getDirectionVector();
-
-
-        const x =
-            this.x +
-            vector.x;
-
-
-        const y =
-            this.y +
-            vector.y;
-
-
-        return (
-            this.isInside(
-                x,
-                y
-            ) &&
-            !this.isBlocked(
-                x,
-                y
-            )
-        );
-    }
-
-
-
-    /* =====================================================
-       OBJETS
-    ===================================================== */
-
-    getWorldObjects() {
-
-        if (
-            !this.world
-        ) {
-            return [];
-        }
-
-
-        if (
-            !Array.isArray(
-                this.world.objects
-            )
-        ) {
-
-            this.world.objects =
-                [];
-        }
-
-
-        return this.world.objects;
-    }
-
-
-
-    getObjectsAt(
-        x = this.x,
-        y = this.y
-    ) {
-
-        return this
-            .getWorldObjects()
-            .filter(
-                object =>
-                    Number(
-                        object.x
-                    ) ===
-                        Number(x) &&
-                    Number(
-                        object.y
-                    ) ===
-                        Number(y)
-            );
-    }
-
-
-
-    getPickableObjectsAt(
-        x = this.x,
-        y = this.y
-    ) {
-
-        return this
-            .getObjectsAt(
-                x,
-                y
-            )
-            .filter(
-                object =>
-                    object.pickable !==
-                    false
-            );
-    }
-
-
-
-    isOnObject(
-        objectName = null
-    ) {
-
-        const objects =
-            this.getObjectsAt();
-
-
-        if (
-            objectName === null ||
-            objectName === undefined
-        ) {
-
-            return (
-                objects.length >
-                0
-            );
-        }
-
-
-        const target =
-            this.normalizeObjectName(
-                objectName
-            );
-
-
-        return objects.some(
-            object => {
-
-                return (
-                    this.normalizeObjectName(
-                        object.id
-                    ) ===
-                        target ||
-
-                    this.normalizeObjectName(
-                        object.type
-                    ) ===
-                        target ||
-
-                    this.normalizeObjectName(
-                        object.label
-                    ) ===
-                        target
-                );
-            }
-        );
-    }
-
-
-
-    /* =====================================================
-       RAMASSER
-    ===================================================== */
-
-    async pickUp(
-        objectName = null
-    ) {
-
-        const objects =
-            this.getPickableObjectsAt();
-
-
-        if (
-            objects.length ===
-            0
-        ) {
-
-            const result = {
-                type: "pickup",
-                success: false,
-                reason: "no_object",
-                x: this.x,
-                y: this.y
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        let object =
-            null;
-
-
-        if (
-            objectName === null ||
-            objectName === undefined
-        ) {
-
-            object =
-                objects[0];
-
-        } else {
-
-            const target =
-                this.normalizeObjectName(
-                    objectName
-                );
-
-
-            object =
-                objects.find(
-                    candidate => {
-
-                        return (
-                            this.normalizeObjectName(
-                                candidate.id
-                            ) ===
-                                target ||
-
-                            this.normalizeObjectName(
-                                candidate.type
-                            ) ===
-                                target ||
-
-                            this.normalizeObjectName(
-                                candidate.label
-                            ) ===
-                                target
-                        );
-                    }
-                );
-        }
-
-
-
-        if (!object) {
-
-            const result = {
-                type: "pickup",
-                success: false,
-                reason:
-                    "wrong_object",
-                requested:
-                    objectName,
-                x: this.x,
-                y: this.y
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        /*
-        On garde une copie dans l'inventaire.
-        */
-
-        const inventoryObject = {
-            ...object
-        };
-
-
-        delete inventoryObject.x;
-        delete inventoryObject.y;
-
-
-        this.inventory.push(
-            inventoryObject
-        );
-
-
-
-        /*
-        Retire l'objet du monde.
-        */
-
-        const index =
-            this.getWorldObjects()
-                .indexOf(
-                    object
-                );
-
-
-        if (
-            index !== -1
-        ) {
-
-            this.getWorldObjects()
-                .splice(
-                    index,
-                    1
-                );
-        }
-
-
-
-        const result = {
-            type: "pickup",
-            success: true,
-            object:
-                inventoryObject.id ||
-                inventoryObject.type,
-            data:
-                inventoryObject,
-            x: this.x,
-            y: this.y
-        };
-
-
-        this.addHistory(
-            result
-        );
-
-
-        this.emitAction(
-            result
-        );
-
-
-        this.notifyChange();
-
-
-        await this.wait(
-            150
-        );
-
-
-        return result;
-    }
-
-
-
-    /* =====================================================
-       INVENTAIRE
-    ===================================================== */
-
-    inventoryContains(
-        objectName
-    ) {
-
-        const target =
-            this.normalizeObjectName(
-                objectName
-            );
-
-
-        return this.inventory.some(
-            object => {
-
-                return (
-                    this.normalizeObjectName(
-                        object.id
-                    ) ===
-                        target ||
-
-                    this.normalizeObjectName(
-                        object.type
-                    ) ===
-                        target ||
-
-                    this.normalizeObjectName(
-                        object.label
-                    ) ===
-                        target
-                );
-            }
-        );
-    }
-
-
-
-    getInventoryObject(
-        objectName
-    ) {
-
-        const target =
-            this.normalizeObjectName(
-                objectName
-            );
-
-
-        return (
-            this.inventory.find(
-                object => {
-
-                    return (
-                        this.normalizeObjectName(
-                            object.id
-                        ) ===
-                            target ||
-
-                        this.normalizeObjectName(
-                            object.type
-                        ) ===
-                            target ||
-
-                        this.normalizeObjectName(
-                            object.label
-                        ) ===
-                            target
-                    );
-                }
-            ) ||
-            null
-        );
-    }
-
-
-
-    /* =====================================================
-       DÉPOSER
-    ===================================================== */
-
-    async drop(
-        objectName = null
-    ) {
-
-        if (
-            this.inventory.length ===
-            0
-        ) {
-
-            const result = {
-                type: "drop",
-                success: false,
-                reason:
-                    "empty_inventory"
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        let object =
-            null;
-
-
-        if (
-            objectName === null ||
-            objectName === undefined
-        ) {
-
-            object =
-                this.inventory[0];
-
-        } else {
-
-            object =
-                this.getInventoryObject(
-                    objectName
-                );
-        }
-
-
-
-        if (!object) {
-
-            const result = {
-                type: "drop",
-                success: false,
-                reason:
-                    "object_not_in_inventory",
-                requested:
-                    objectName
-            };
-
-
-            this.addHistory(
-                result
-            );
-
-
-            this.emitAction(
-                result
-            );
-
-
-            return result;
-        }
-
-
-
-        const inventoryIndex =
-            this.inventory.indexOf(
-                object
-            );
-
-
-        if (
-            inventoryIndex !== -1
-        ) {
-
-            this.inventory.splice(
-                inventoryIndex,
-                1
-            );
-        }
-
-
-
-        const worldObject = {
-
-            ...object,
-
-            x:
-                this.x,
-
-            y:
-                this.y,
-
-            pickable:
-                object.pickable !==
-                false
-        };
-
-
-        this.getWorldObjects()
-            .push(
-                worldObject
-            );
-
-
-
-        const result = {
-            type: "drop",
-            success: true,
-            object:
-                worldObject.id ||
-                worldObject.type,
-            x:
-                this.x,
-            y:
-                this.y
-        };
-
-
-        this.addHistory(
-            result
-        );
-
-
-        this.emitAction(
-            result
-        );
-
-
-        this.notifyChange();
-
-
-        await this.wait(
-            150
-        );
-
-
-        return result;
-    }
-
-
-
-    /* =====================================================
-       CASES VISITÉES
-    ===================================================== */
-
-    markVisited(
-        x,
-        y
-    ) {
-
-        this.visited.add(
-            this.positionKey(
-                x,
-                y
-            )
-        );
-    }
-
-
-
-    hasVisited(
-        x,
-        y
-    ) {
-
-        return this.visited.has(
-            this.positionKey(
-                x,
-                y
-            )
-        );
-    }
-
-
-
-    positionKey(
-        x,
-        y
-    ) {
-
-        return (
-            `${Number(x)},${Number(y)}`
-        );
-    }
-
-
-
-    /* =====================================================
-       INFORMATIONS DE POSITION
-    ===================================================== */
-
-    getX() {
-
-        return this.x;
-    }
-
-
-
-    getY() {
-
-        return this.y;
+        return aliases[
+            value
+        ] ||
+            "E";
     }
 
 
@@ -1496,59 +864,974 @@ class PytRobot {
 
 
 
-    isAt(
+    getDirectionVector(
+        direction = this.direction
+    ) {
+
+        switch (
+            this.normalizeDirection(
+                direction
+            )
+        ) {
+
+            case "N":
+
+                return {
+
+                    x:
+                        0,
+
+                    y:
+                        -1
+                };
+
+
+            case "S":
+
+                return {
+
+                    x:
+                        0,
+
+                    y:
+                        1
+                };
+
+
+            case "W":
+
+                return {
+
+                    x:
+                        -1,
+
+                    y:
+                        0
+                };
+
+
+            case "E":
+
+            default:
+
+                return {
+
+                    x:
+                        1,
+
+                    y:
+                        0
+                };
+        }
+    }
+
+
+
+    rotateDirection(
+        direction,
+        quarterTurns
+    ) {
+
+        const directions = [
+
+            "N",
+            "E",
+            "S",
+            "W"
+        ];
+
+
+        const normalized =
+            this.normalizeDirection(
+                direction
+            );
+
+
+        let index =
+            directions.indexOf(
+                normalized
+            );
+
+
+        index =
+            (
+                index +
+                quarterTurns %
+                4 +
+                4
+            ) %
+            4;
+
+
+        return directions[
+            index
+        ];
+    }
+
+
+
+    /* =========================================================
+       CAP
+    ========================================================= */
+
+    getHeading() {
+
+        const headings = {
+
+            E:
+                0,
+
+            S:
+                90,
+
+            W:
+                180,
+
+            N:
+                270
+        };
+
+
+        return headings[
+            this.direction
+        ];
+    }
+
+
+
+    setHeading(degrees) {
+
+        const direction =
+            this.headingToDirection(
+                degrees
+            );
+
+
+        return this.setDirection(
+            direction
+        );
+    }
+
+
+
+    headingToDirection(degrees) {
+
+        const number =
+            Number(
+                degrees
+            );
+
+
+        if (
+            !Number.isFinite(
+                number
+            )
+        ) {
+
+            return "E";
+        }
+
+
+        const normalized =
+            (
+                number %
+                360 +
+                360
+            ) %
+            360;
+
+
+        /*
+         * Angle le plus proche d'un multiple de 90.
+         */
+
+        const snapped =
+            (
+                Math.round(
+                    normalized /
+                    90
+                ) *
+                90
+            ) %
+            360;
+
+
+        const directions = {
+
+            0:
+                "E",
+
+            90:
+                "S",
+
+            180:
+                "W",
+
+            270:
+                "N"
+        };
+
+
+        return directions[
+            snapped
+        ] ||
+            "E";
+    }
+
+
+
+    /* =========================================================
+       ROTATIONS PRINCIPALES
+    ========================================================= */
+
+    left(degrees = 90) {
+
+        return this.rotate(
+            -Number(
+                degrees ??
+                90
+            )
+        );
+    }
+
+
+
+    right(degrees = 90) {
+
+        return this.rotate(
+            Number(
+                degrees ??
+                90
+            )
+        );
+    }
+
+
+
+    rotate(degrees) {
+
+        const number =
+            Number(
+                degrees
+            );
+
+
+        if (
+            !Number.isFinite(
+                number
+            )
+        ) {
+
+            throw new Error(
+                "L'angle doit être un nombre."
+            );
+        }
+
+
+        if (
+            number %
+            90 !==
+            0
+        ) {
+
+            throw new Error(
+                "Pyt tourne uniquement par multiples de 90°."
+            );
+        }
+
+
+        const quarterTurns =
+            number /
+            90;
+
+
+        const from =
+            this.direction;
+
+
+        const to =
+            this.rotateDirection(
+                from,
+                quarterTurns
+            );
+
+
+        this.direction =
+            to;
+
+
+        this.blocked =
+            false;
+
+
+        this.lastAction = {
+
+            type:
+                "turn",
+
+            degrees:
+                number,
+
+            from,
+
+            to
+        };
+
+
+        this.recordHistory(
+            "turn",
+            this.lastAction
+        );
+
+
+        this.emitTurn(
+            from,
+            to
+        );
+
+
+        this.emitStateChange(
+            "turn"
+        );
+
+
+        return this.direction;
+    }
+
+
+
+    /* =========================================================
+       DÉPLACEMENTS PRINCIPAUX
+    ========================================================= */
+
+    forward(distance = 1) {
+
+        return this.move(
+            distance,
+            1
+        );
+    }
+
+
+
+    backward(distance = 1) {
+
+        return this.move(
+            distance,
+            -1
+        );
+    }
+
+
+
+    move(
+        distance = 1,
+        sign = 1
+    ) {
+
+        const amount =
+            this.normalizeDistance(
+                distance
+            );
+
+
+        const results =
+            [];
+
+
+        for (
+            let step = 0;
+            step < amount;
+            step += 1
+        ) {
+
+            const result =
+                this.moveOneCell(
+                    sign
+                );
+
+
+            results.push(
+                result
+            );
+
+
+            if (
+                !result.success
+            ) {
+
+                break;
+            }
+        }
+
+
+        return {
+
+            success:
+                results.every(
+                    result =>
+                        result.success
+                ),
+
+            completed:
+                results.filter(
+                    result =>
+                        result.success
+                ).length,
+
+            requested:
+                amount,
+
+            steps:
+                results
+        };
+    }
+
+
+
+    moveOneCell(sign = 1) {
+
+        if (
+            !this.active
+        ) {
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "inactive"
+            };
+        }
+
+
+        const vector =
+            this.getDirectionVector(
+                this.direction
+            );
+
+
+        const from = {
+
+            x:
+                this.x,
+
+            y:
+                this.y
+        };
+
+
+        const target = {
+
+            x:
+                this.x +
+                vector.x *
+                sign,
+
+            y:
+                this.y +
+                vector.y *
+                sign
+        };
+
+
+        this.moving =
+            true;
+
+
+        this.blocked =
+            false;
+
+
+        /*
+         * Vérification monde optionnelle.
+         */
+
+        if (
+            !this.canEnter(
+                target.x,
+                target.y
+            )
+        ) {
+
+            this.moving =
+                false;
+
+
+            this.blocked =
+                true;
+
+
+            this.lastAction = {
+
+                type:
+                    "collision",
+
+                from,
+
+                target
+            };
+
+
+            this.recordHistory(
+                "collision",
+                this.lastAction
+            );
+
+
+            this.emitCollision(
+                target
+            );
+
+
+            this.emitStateChange(
+                "collision"
+            );
+
+
+            return {
+
+                success:
+                    false,
+
+                reason:
+                    "blocked",
+
+                from,
+
+                target
+            };
+        }
+
+
+        /*
+         * Déplacement.
+         */
+
+        this.x =
+            target.x;
+
+
+        this.y =
+            target.y;
+
+
+        this.consumeEnergy(
+            1
+        );
+
+
+        this.markVisited(
+            this.x,
+            this.y
+        );
+
+
+        this.lastAction = {
+
+            type:
+                sign >
+                0
+                    ? "forward"
+                    : "backward",
+
+            from,
+
+            to:
+                {
+
+                    x:
+                        this.x,
+
+                    y:
+                        this.y
+                },
+
+            direction:
+                this.direction
+        };
+
+
+        this.recordHistory(
+            "move",
+            this.lastAction
+        );
+
+
+        this.moving =
+            false;
+
+
+        this.emitMove(
+            from,
+            {
+
+                x:
+                    this.x,
+
+                y:
+                    this.y
+            }
+        );
+
+
+        this.emitStateChange(
+            "move"
+        );
+
+
+        return {
+
+            success:
+                true,
+
+            from,
+
+            to:
+                {
+
+                    x:
+                        this.x,
+
+                    y:
+                        this.y
+                }
+        };
+    }
+
+
+
+    normalizeDistance(value) {
+
+        const number =
+            Number(
+                value ??
+                1
+            );
+
+
+        if (
+            !Number.isFinite(
+                number
+            )
+        ) {
+
+            throw new Error(
+                "La distance doit être un nombre."
+            );
+        }
+
+
+        if (
+            number <
+            0
+        ) {
+
+            throw new Error(
+                "La distance ne peut pas être négative."
+            );
+        }
+
+
+        if (
+            !Number.isInteger(
+                number
+            )
+        ) {
+
+            throw new Error(
+                "Pyt se déplace uniquement d'un nombre entier de cases."
+            );
+        }
+
+
+        return number;
+    }
+
+
+
+    /* =========================================================
+       POSITION DEVANT / DERRIÈRE
+    ========================================================= */
+
+    getFrontPosition() {
+
+        const vector =
+            this.getDirectionVector(
+                this.direction
+            );
+
+
+        return {
+
+            x:
+                this.x +
+                vector.x,
+
+            y:
+                this.y +
+                vector.y
+        };
+    }
+
+
+
+    getBackPosition() {
+
+        const vector =
+            this.getDirectionVector(
+                this.direction
+            );
+
+
+        return {
+
+            x:
+                this.x -
+                vector.x,
+
+            y:
+                this.y -
+                vector.y
+        };
+    }
+
+
+
+    frontIsClear() {
+
+        const target =
+            this.getFrontPosition();
+
+
+        return this.canEnter(
+            target.x,
+            target.y
+        );
+    }
+
+
+
+    backIsClear() {
+
+        const target =
+            this.getBackPosition();
+
+
+        return this.canEnter(
+            target.x,
+            target.y
+        );
+    }
+
+
+
+    /* =========================================================
+       COLLISIONS AVEC MONDE OPTIONNEL
+    ========================================================= */
+
+    canEnter(
         x,
         y
     ) {
 
-        return (
-            this.x ===
-                Number(x) &&
-            this.y ===
-                Number(y)
-        );
+        if (
+            !this.world
+        ) {
+
+            return true;
+        }
+
+
+        /*
+         * API préférée.
+         */
+
+        if (
+            typeof this.world.canEnter ===
+            "function"
+        ) {
+
+            return Boolean(
+                this.world.canEnter(
+                    x,
+                    y,
+                    this
+                )
+            );
+        }
+
+
+        /*
+         * Compatibilité.
+         */
+
+        if (
+            typeof this.world.isBlocked ===
+            "function"
+        ) {
+
+            return !Boolean(
+                this.world.isBlocked(
+                    x,
+                    y,
+                    this
+                )
+            );
+        }
+
+
+        if (
+            typeof this.world.frontIsFree ===
+            "function"
+        ) {
+
+            return Boolean(
+                this.world.frontIsFree(
+                    x,
+                    y,
+                    this
+                )
+            );
+        }
+
+
+        return true;
     }
 
 
 
-    /* =====================================================
-       HISTORIQUE
-    ===================================================== */
+    /* =========================================================
+       GOTO LOGIQUE
+    ========================================================= */
 
-    addHistory(action) {
+    goto(
+        targetX,
+        targetY
+    ) {
 
-        this.history.push({
-
-            index:
-                this.history.length,
-
-            timestamp:
-                Date.now(),
-
-            ...action
-        });
-    }
+        targetX =
+            this.toInteger(
+                targetX
+            );
 
 
-
-    getHistory() {
-
-        return this.history.map(
-            action => ({
-                ...action
-            })
-        );
-    }
+        targetY =
+            this.toInteger(
+                targetY
+            );
 
 
+        const actions =
+            [];
 
-    /* =====================================================
-       ÉTAT COMPLET
-    ===================================================== */
 
-    getState() {
+        let guard =
+            0;
+
+
+        /*
+         * Horizontal.
+         */
+
+        while (
+            this.x !==
+                targetX &&
+            guard <
+                1000
+        ) {
+
+            guard +=
+                1;
+
+
+            const desired =
+                this.x <
+                targetX
+                    ? "E"
+                    : "W";
+
+
+            this.turnToward(
+                desired
+            );
+
+
+            const result =
+                this.forward(
+                    1
+                );
+
+
+            actions.push(
+                result
+            );
+
+
+            if (
+                !result.success
+            ) {
+
+                break;
+            }
+        }
+
+
+        /*
+         * Vertical.
+         */
+
+        while (
+            this.y !==
+                targetY &&
+            guard <
+                1000
+        ) {
+
+            guard +=
+                1;
+
+
+            const desired =
+                this.y <
+                targetY
+                    ? "S"
+                    : "N";
+
+
+            this.turnToward(
+                desired
+            );
+
+
+            const result =
+                this.forward(
+                    1
+                );
+
+
+            actions.push(
+                result
+            );
+
+
+            if (
+                !result.success
+            ) {
+
+                break;
+            }
+        }
+
 
         return {
+
+            success:
+                this.x ===
+                    targetX &&
+                this.y ===
+                    targetY,
 
             x:
                 this.x,
@@ -1556,233 +1839,1151 @@ class PytRobot {
             y:
                 this.y,
 
-            direction:
-                this.direction,
-
-            inventory:
-                this.inventory.map(
-                    object => ({
-                        ...object
-                    })
-                ),
-
-            visited:
-                Array.from(
-                    this.visited
-                ),
-
-            history:
-                this.getHistory(),
-
-            moveCount:
-                this.moveCount,
-
-            running:
-                this.running
+            actions
         };
     }
 
 
 
-    /* =====================================================
-       API PYTHON
+    turnToward(direction) {
 
-       game.js utilisera ces méthodes.
-    ===================================================== */
+        const target =
+            this.normalizeDirection(
+                direction
+            );
 
-    createPythonAPI() {
 
-        return {
+        let guard =
+            0;
 
-            avancer:
-                async (
-                    amount = 1
-                ) =>
-                    this.forward(
+
+        while (
+            this.direction !==
+                target &&
+            guard <
+                4
+        ) {
+
+            this.right(
+                90
+            );
+
+
+            guard +=
+                1;
+        }
+
+
+        return this.direction;
+    }
+
+
+
+    /* =========================================================
+       INVENTAIRE
+    ========================================================= */
+
+    pickup(item) {
+
+        if (
+            item ===
+                undefined ||
+            item ===
+                null
+        ) {
+
+            return false;
+        }
+
+
+        const stored =
+            this.clone(
+                item
+            );
+
+
+        this.inventory.push(
+            stored
+        );
+
+
+        this.lastAction = {
+
+            type:
+                "pickup",
+
+            item:
+                stored
+        };
+
+
+        this.recordHistory(
+            "pickup",
+            this.lastAction
+        );
+
+
+        if (
+            typeof this.callbacks
+                .onPickup ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onPickup(
+                    stored,
+                    this
+                );
+        }
+
+
+        this.emitStateChange(
+            "pickup"
+        );
+
+
+        return true;
+    }
+
+
+
+    drop(
+        identifier = null
+    ) {
+
+        if (
+            this.inventory.length ===
+            0
+        ) {
+
+            return null;
+        }
+
+
+        let index =
+            0;
+
+
+        if (
+            identifier !==
+                null &&
+            identifier !==
+                undefined
+        ) {
+
+            index =
+                this.inventory
+                    .findIndex(
+                        item =>
+                            this.itemMatches(
+                                item,
+                                identifier
+                            )
+                    );
+
+
+            if (
+                index <
+                0
+            ) {
+
+                return null;
+            }
+        }
+
+
+        const item =
+            this.inventory
+                .splice(
+                    index,
+                    1
+                )[0];
+
+
+        this.lastAction = {
+
+            type:
+                "drop",
+
+            item
+        };
+
+
+        this.recordHistory(
+            "drop",
+            this.lastAction
+        );
+
+
+        if (
+            typeof this.callbacks
+                .onDrop ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onDrop(
+                    item,
+                    this
+                );
+        }
+
+
+        this.emitStateChange(
+            "drop"
+        );
+
+
+        return item;
+    }
+
+
+
+    hasItem(identifier) {
+
+        return this.inventory
+            .some(
+                item =>
+                    this.itemMatches(
+                        item,
+                        identifier
+                    )
+            );
+    }
+
+
+
+    inventoryContains(identifier) {
+
+        return this.hasItem(
+            identifier
+        );
+    }
+
+
+
+    clearInventory() {
+
+        this.inventory =
+            [];
+
+
+        this.emitStateChange(
+            "inventory-clear"
+        );
+
+
+        return this;
+    }
+
+
+
+    getInventory() {
+
+        return this.clone(
+            this.inventory
+        );
+    }
+
+
+
+    itemMatches(
+        item,
+        identifier
+    ) {
+
+        const expected =
+            this.normalizeText(
+                identifier
+            );
+
+
+        if (
+            !expected
+        ) {
+
+            return false;
+        }
+
+
+        const values = [
+
+            item?.id,
+
+            item?.type,
+
+            item?.name,
+
+            item?.original?.id,
+
+            item?.original?.type,
+
+            typeof item ===
+            "string"
+                ? item
+                : null
+        ];
+
+
+        return values
+            .filter(
+                value =>
+                    value !==
+                        null &&
+                    value !==
+                        undefined
+            )
+            .map(
+                value =>
+                    this.normalizeText(
+                        value
+                    )
+            )
+            .includes(
+                expected
+            );
+    }
+
+
+
+    /* =========================================================
+       ÉNERGIE
+    ========================================================= */
+
+    normalizeEnergy(value) {
+
+        const number =
+            Number(
+                value
+            );
+
+
+        if (
+            !Number.isFinite(
+                number
+            ) ||
+            number <=
+                0
+        ) {
+
+            return 100;
+        }
+
+
+        return number;
+    }
+
+
+
+    consumeEnergy(amount = 1) {
+
+        const value =
+            Math.max(
+                0,
+                Number(
+                    amount
+                ) ||
+                0
+            );
+
+
+        this.energy =
+            this.clamp(
+                this.energy -
+                value,
+                0,
+                this.maxEnergy
+            );
+
+
+        if (
+            this.energy <=
+            0
+        ) {
+
+            this.energy =
+                0;
+        }
+
+
+        return this.energy;
+    }
+
+
+
+    recharge(amount = null) {
+
+        const before =
+            this.energy;
+
+
+        if (
+            amount ===
+                null ||
+            amount ===
+                undefined
+        ) {
+
+            this.energy =
+                this.maxEnergy;
+
+        } else {
+
+            this.energy =
+                this.clamp(
+                    this.energy +
+                    Number(
                         amount
                     ),
+                    0,
+                    this.maxEnergy
+                );
+        }
 
 
-            tourner_gauche:
-                async () =>
-                    this.turnLeft(),
+        this.lastAction = {
 
+            type:
+                "recharge",
 
-            tourner_droite:
-                async () =>
-                    this.turnRight(),
+            before,
 
-
-            ramasser:
-                async (
-                    objectName = null
-                ) =>
-                    this.pickUp(
-                        objectName
-                    ),
-
-
-            deposer:
-                async (
-                    objectName = null
-                ) =>
-                    this.drop(
-                        objectName
-                    ),
-
-
-            devant_libre:
-                () =>
-                    this.frontIsFree(),
-
-
-            sur_objet:
-                (
-                    objectName = null
-                ) =>
-                    this.isOnObject(
-                        objectName
-                    ),
-
-
-            inventaire_contient:
-                objectName =>
-                    this.inventoryContains(
-                        objectName
-                    ),
-
-
-            position_x:
-                () =>
-                    this.getX(),
-
-
-            position_y:
-                () =>
-                    this.getY(),
-
-
-            direction:
-                () =>
-                    this.getDirection()
+            after:
+                this.energy
         };
+
+
+        this.recordHistory(
+            "recharge",
+            this.lastAction
+        );
+
+
+        if (
+            typeof this.callbacks
+                .onRecharge ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onRecharge(
+                    this.energy,
+                    this
+                );
+        }
+
+
+        this.emitStateChange(
+            "recharge"
+        );
+
+
+        return this.energy;
     }
 
 
 
-    /* =====================================================
-       EVENTS
-    ===================================================== */
+    isCharged() {
 
-    notifyChange() {
+        return (
+            this.energy >
+            0
+        );
+    }
+
+
+
+    getEnergyRatio() {
+
+        if (
+            this.maxEnergy <=
+            0
+        ) {
+
+            return 0;
+        }
+
+
+        return this.energy /
+            this.maxEnergy;
+    }
+
+
+
+    /* =========================================================
+       VISITED
+    ========================================================= */
+
+    markVisited(
+        x,
+        y
+    ) {
+
+        this.visited.push({
+
+            x:
+                Number(
+                    x
+                ),
+
+            y:
+                Number(
+                    y
+                )
+        });
+
+
+        return this;
+    }
+
+
+
+    hasVisited(
+        x,
+        y
+    ) {
+
+        return this.visited
+            .some(
+                cell =>
+                    cell.x ===
+                        Number(
+                            x
+                        ) &&
+                    cell.y ===
+                        Number(
+                            y
+                        )
+            );
+    }
+
+
+
+    getVisited() {
+
+        return this.clone(
+            this.visited
+        );
+    }
+
+
+
+    getUniqueVisited() {
+
+        const seen =
+            new Set();
+
+
+        const result =
+            [];
+
+
+        for (
+            const cell
+            of this.visited
+        ) {
+
+            const key =
+                `${cell.x},${cell.y}`;
+
+
+            if (
+                seen.has(
+                    key
+                )
+            ) {
+
+                continue;
+            }
+
+
+            seen.add(
+                key
+            );
+
+
+            result.push({
+
+                x:
+                    cell.x,
+
+                y:
+                    cell.y
+            });
+        }
+
+
+        return result;
+    }
+
+
+
+    /* =========================================================
+       HISTORY
+    ========================================================= */
+
+    recordHistory(
+        type,
+        data = {}
+    ) {
+
+        this.history.push({
+
+            index:
+                this.history.length,
+
+            type,
+
+            data:
+                this.clone(
+                    data
+                )
+        });
+
+
+        return this;
+    }
+
+
+
+    getHistory() {
+
+        return this.clone(
+            this.history
+        );
+    }
+
+
+
+    clearHistory() {
+
+        this.history =
+            [];
+
+
+        return this;
+    }
+
+
+
+    /* =========================================================
+       CALLBACKS
+    ========================================================= */
+
+    setCallback(
+        name,
+        callback
+    ) {
+
+        if (
+            !Object.prototype
+                .hasOwnProperty
+                .call(
+                    this.callbacks,
+                    name
+                )
+        ) {
+
+            return false;
+        }
+
+
+        this.callbacks[
+            name
+        ] =
+            typeof callback ===
+            "function"
+                ? callback
+                : null;
+
+
+        return true;
+    }
+
+
+
+    emitMove(
+        from,
+        to
+    ) {
+
+        if (
+            typeof this.callbacks
+                .onMove ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onMove(
+                    {
+
+                        from:
+                            this.clone(
+                                from
+                            ),
+
+                        to:
+                            this.clone(
+                                to
+                            ),
+
+                        direction:
+                            this.direction,
+
+                        robot:
+                            this
+                    }
+                );
+        }
+    }
+
+
+
+    emitTurn(
+        from,
+        to
+    ) {
+
+        if (
+            typeof this.callbacks
+                .onTurn ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onTurn(
+                    {
+
+                        from,
+
+                        to,
+
+                        robot:
+                            this
+                    }
+                );
+        }
+    }
+
+
+
+    emitCollision(target) {
+
+        if (
+            typeof this.callbacks
+                .onCollision ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onCollision(
+                    {
+
+                        target:
+                            this.clone(
+                                target
+                            ),
+
+                        robot:
+                            this
+                    }
+                );
+        }
+    }
+
+
+
+    emitStateChange(reason) {
+
+        if (
+            typeof this.callbacks
+                .onStateChange ===
+            "function"
+        ) {
+
+            this.callbacks
+                .onStateChange(
+                    {
+
+                        reason,
+
+                        state:
+                            this.getState(),
+
+                        robot:
+                            this
+                    }
+                );
+        }
+
+
+        /*
+         * Événement navigateur optionnel.
+         *
+         * Peut être utile plus tard pour :
+         * - bruitages
+         * - HUD énergie
+         * - debug
+         * - animations
+         */
+
+        try {
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "pyt:robot-state",
+                    {
+
+                        detail: {
+
+                            reason,
+
+                            state:
+                                this.getState()
+                        }
+                    }
+                )
+            );
+
+        } catch (
+            error
+        ) {
+
+            /*
+             * Pas grave si CustomEvent
+             * n'est pas disponible.
+             */
+        }
+    }
+
+
+
+    /* =========================================================
+       COMPATIBILITÉ API FRANÇAISE
+    ========================================================= */
+
+    avancer(distance = 1) {
+
+        return this.forward(
+            distance
+        );
+    }
+
+
+
+    reculer(distance = 1) {
+
+        return this.backward(
+            distance
+        );
+    }
+
+
+
+    tournerGauche(
+        degrees = 90
+    ) {
+
+        return this.left(
+            degrees
+        );
+    }
+
+
+
+    tournerDroite(
+        degrees = 90
+    ) {
+
+        return this.right(
+            degrees
+        );
+    }
+
+
+
+    tourner_gauche(
+        degrees = 90
+    ) {
+
+        return this.left(
+            degrees
+        );
+    }
+
+
+
+    tourner_droite(
+        degrees = 90
+    ) {
+
+        return this.right(
+            degrees
+        );
+    }
+
+
+
+    devantLibre() {
+
+        return this.frontIsClear();
+    }
+
+
+
+    devant_libre() {
+
+        return this.frontIsClear();
+    }
+
+
+
+    positionX() {
+
+        return this.x;
+    }
+
+
+
+    positionY() {
+
+        return this.y;
+    }
+
+
+
+    position_x() {
+
+        return this.x;
+    }
+
+
+
+    position_y() {
+
+        return this.y;
+    }
+
+
+
+    directionActuelle() {
+
+        return this.direction;
+    }
+
+
+
+    inventaireContient(identifier) {
+
+        return this.hasItem(
+            identifier
+        );
+    }
+
+
+
+    inventaire_contient(identifier) {
+
+        return this.hasItem(
+            identifier
+        );
+    }
+
+
+
+    ramasser(item) {
+
+        return this.pickup(
+            item
+        );
+    }
+
+
+
+    deposer(identifier = null) {
+
+        return this.drop(
+            identifier
+        );
+    }
+
+
+
+    /* =========================================================
+       DEBUG
+    ========================================================= */
+
+    debug() {
 
         const state =
             this.getState();
 
 
+        console.table({
+
+            nom:
+                state.name,
+
+            x:
+                state.x,
+
+            y:
+                state.y,
+
+            direction:
+                state.direction,
+
+            heading:
+                state.heading,
+
+            energie:
+                `${state.energy}/${state.maxEnergy}`,
+
+            inventaire:
+                state.inventory.length,
+
+            visites:
+                state.visited.length
+        });
+
+
+        return state;
+    }
+
+
+
+    /* =========================================================
+       UTILS
+    ========================================================= */
+
+    toInteger(value) {
+
+        const number =
+            Number(
+                value
+            );
+
+
         if (
-            this.onChange
+            !Number.isFinite(
+                number
+            )
         ) {
 
-            this.onChange(
-                state
-            );
+            return 0;
         }
 
 
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:robot-change",
-                {
-                    detail: {
-                        robot:
-                            this,
-
-                        state
-                    }
-                }
-            )
+        return Math.round(
+            number
         );
     }
 
 
 
-    emitAction(action) {
-
-        if (
-            this.onAction
-        ) {
-
-            this.onAction(
-                action
-            );
-        }
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:robot-action",
-                {
-                    detail: {
-                        robot:
-                            this,
-
-                        action
-                    }
-                }
-            )
-        );
-    }
-
-
-
-    /* =====================================================
-       UTILITAIRES
-    ===================================================== */
-
-    normalizeObjectName(
-        value
+    clamp(
+        value,
+        min,
+        max
     ) {
 
+        return Math.max(
+            min,
+            Math.min(
+                max,
+                value
+            )
+        );
+    }
+
+
+
+    normalizeText(value) {
+
         return String(
-            value ?? ""
+            value ??
+            ""
         )
             .normalize("NFD")
             .replace(
                 /[\u0300-\u036f]/g,
                 ""
             )
-            .trim()
             .toLowerCase()
+            .trim()
             .replace(
-                /\s+/g,
+                /[\s-]+/g,
                 "_"
             );
     }
 
 
 
-    wait(
-        duration
-    ) {
+    clone(value) {
 
-        return new Promise(
-            resolve => {
+        if (
+            value ===
+            undefined
+        ) {
 
-                window.setTimeout(
-                    resolve,
-                    Math.max(
-                        0,
-                        Number(
-                            duration
-                        ) || 0
-                    )
-                );
-            }
-        );
+            return undefined;
+        }
+
+
+        try {
+
+            return JSON.parse(
+                JSON.stringify(
+                    value
+                )
+            );
+
+        } catch (
+            error
+        ) {
+
+            return value;
+        }
     }
 
 }
+
+
+
+/* =========================================================
+   CONSTANTES PUBLIQUES
+========================================================= */
+
+PytRobot.DIRECTIONS = {
+
+    NORTH:
+        "N",
+
+    EAST:
+        "E",
+
+    SOUTH:
+        "S",
+
+    WEST:
+        "W"
+};
+
+
+PytRobot.HEADINGS = {
+
+    E:
+        0,
+
+    S:
+        90,
+
+    W:
+        180,
+
+    N:
+        270
+};
 
 
 
@@ -1791,4 +2992,8 @@ class PytRobot {
 ========================================================= */
 
 window.PytRobot =
+    PytRobot;
+
+
+window.PYTRobot =
     PytRobot;

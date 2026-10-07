@@ -1,1551 +1,2721 @@
 "use strict";
 
 /* =========================================================
-   PYT
-   levels.js
+   PYT - levels.js
+   =========================================================
+
+   CONTENU DU JEU
 
    9 chapitres
    3 exercices par chapitre
-   27 exercices au total
+   27 exercices
 
-   API Python prévue dans le jeu :
+   ---------------------------------------------------------
 
-   avancer()
-   avancer(nombre)
+   CHAPITRES :
 
-   tourner_gauche()
-   tourner_droite()
+   1. Entrée
+      Séquences et déplacements
 
-   ramasser()
-   ramasser("objet")
+   2. Cuisine
+      Variables
 
-   deposer()
-   deposer("objet")
+   3. Salon
+      Conditions
 
-   devant_libre()
-   sur_objet()
-   sur_objet("objet")
+   4. Chambre
+      Boucles for
 
-   inventaire_contient("objet")
+   5. Garage
+      Fonctions
 
-   position_x()
-   position_y()
-   direction()
+   6. Cave à vin
+      Listes
 
-   print(...)
+   7. Balcon
+      Dictionnaires
+
+   8. Salle d'eau
+      Boucles while
+
+   9. Jardin
+      Mission finale
+
+   ---------------------------------------------------------
+
+   COMMANDES DE DÉPLACEMENT :
+
+       forward(1)
+       backward(1)
+       left(90)
+       right(90)
+
+   ---------------------------------------------------------
+
+   Les interactions sont automatiques :
+
+   - objet traversé → ramassé
+   - zone de dépôt → objet déposé
+   - caisse → poussée si possible
+   - bouton → activé
+   - boue → nettoyée
+   - station → recharge
+   - porte → ouverte
+
 ========================================================= */
 
 
-(() => {
+/* =========================================================
+   HELPERS
+========================================================= */
+
+const PYT_MAP_WIDTH =
+    8;
+
+
+const PYT_MAP_HEIGHT =
+    6;
+
+
+
+function decoration(
+    type,
+    x,
+    y,
+    scale = 0.92,
+    options = {}
+) {
+
+    return {
+
+        type,
+
+        x,
+
+        y,
+
+        scale,
+
+        ...options
+    };
+}
+
+
+
+function object(
+    id,
+    type,
+    x,
+    y,
+    options = {}
+) {
+
+    return {
+
+        id,
+
+        type,
+
+        x,
+
+        y,
+
+        ...options
+    };
+}
+
+
+
+function target(
+    id,
+    type,
+    x,
+    y,
+    options = {}
+) {
+
+    return {
+
+        id,
+
+        type,
+
+        x,
+
+        y,
+
+        ...options
+    };
+}
+
+
+
+function cell(
+    x,
+    y
+) {
+
+    return {
+
+        x,
+
+        y
+    };
+}
+
+
+
+function levelKey(
+    chapter,
+    level
+) {
+
+    return `${chapter}-${level}`;
+}
+
+
+
+/* =========================================================
+   DÉCORS COMMUNS
+========================================================= */
+
+function getRoomDecorations(
+    room,
+    variant = 0
+) {
+
+    switch (
+        room
+    ) {
+
+        /* =================================================
+           ENTRÉE
+        ================================================= */
+
+        case "entree":
+
+            return [
+
+                decoration(
+                    "plante",
+                    0,
+                    0,
+                    0.80
+                ),
+
+                decoration(
+                    "table",
+                    6,
+                    0,
+                    1.18
+                ),
+
+                decoration(
+                    "lampe",
+                    7,
+                    0,
+                    0.62
+                ),
+
+                decoration(
+                    "tapis",
+                    3,
+                    2,
+                    1.45
+                ),
+
+                decoration(
+                    "caisse",
+                    0,
+                    4,
+                    0.66
+                ),
+
+                decoration(
+                    "chaise",
+                    7,
+                    4,
+                    0.72
+                )
+            ];
+
+
+        /* =================================================
+           CUISINE
+        ================================================= */
+
+        case "cuisine":
+
+            return [
+
+                decoration(
+                    "frigo",
+                    0,
+                    0,
+                    1.04
+                ),
+
+                decoration(
+                    "evier",
+                    2,
+                    0,
+                    1.34
+                ),
+
+                decoration(
+                    "four",
+                    6,
+                    0,
+                    0.96
+                ),
+
+                decoration(
+                    "table",
+                    3,
+                    2,
+                    1.55
+                ),
+
+                decoration(
+                    "chaise",
+                    2,
+                    2,
+                    0.63
+                ),
+
+                decoration(
+                    "chaise",
+                    5,
+                    2,
+                    0.63
+                ),
+
+                decoration(
+                    "plante",
+                    7,
+                    4,
+                    0.67
+                ),
+
+                decoration(
+                    "tasse",
+                    4,
+                    2,
+                    0.38
+                )
+            ];
+
+
+        /* =================================================
+           SALON
+        ================================================= */
+
+        case "salon":
+
+            return [
+
+                decoration(
+                    "canape",
+                    0,
+                    1,
+                    1.75
+                ),
+
+                decoration(
+                    "table",
+                    3,
+                    2,
+                    1.16
+                ),
+
+                decoration(
+                    "bibliotheque",
+                    6,
+                    0,
+                    1.20
+                ),
+
+                decoration(
+                    "lampe",
+                    5,
+                    0,
+                    0.63
+                ),
+
+                decoration(
+                    "plante",
+                    7,
+                    4,
+                    0.72
+                ),
+
+                decoration(
+                    "tapis",
+                    3,
+                    3,
+                    1.55
+                ),
+
+                decoration(
+                    "livre",
+                    4,
+                    2,
+                    0.34
+                )
+            ];
+
+
+        /* =================================================
+           CHAMBRE
+        ================================================= */
+
+        case "chambre":
+
+            return [
+
+                decoration(
+                    "lit",
+                    5,
+                    0,
+                    1.82
+                ),
+
+                decoration(
+                    "tapis",
+                    3,
+                    2,
+                    1.50
+                ),
+
+                decoration(
+                    "table",
+                    0,
+                    0,
+                    0.80
+                ),
+
+                decoration(
+                    "lampe",
+                    1,
+                    0,
+                    0.56
+                ),
+
+                decoration(
+                    "plante",
+                    7,
+                    4,
+                    0.69
+                ),
+
+                decoration(
+                    "livre_bleu",
+                    1,
+                    1,
+                    0.35
+                )
+            ];
+
+
+        /* =================================================
+           GARAGE
+        ================================================= */
+
+        case "garage":
+
+            return [
+
+                decoration(
+                    "voiture",
+                    5,
+                    1,
+                    1.95
+                ),
+
+                decoration(
+                    "boite_outils",
+                    7,
+                    0,
+                    0.84
+                ),
+
+                decoration(
+                    "caisse",
+                    0,
+                    0,
+                    0.72
+                ),
+
+                decoration(
+                    "caisse",
+                    0,
+                    1,
+                    0.60
+                ),
+
+                decoration(
+                    "lampe",
+                    7,
+                    4,
+                    0.63
+                )
+            ];
+
+
+        /* =================================================
+           CAVE À VIN
+        ================================================= */
+
+        case "cave_a_vin":
+
+            return [
+
+                decoration(
+                    "casier_vin",
+                    0,
+                    0,
+                    1.30
+                ),
+
+                decoration(
+                    "casier_vin",
+                    6,
+                    0,
+                    1.30
+                ),
+
+                decoration(
+                    "tonneau",
+                    0,
+                    4,
+                    0.88
+                ),
+
+                decoration(
+                    "tonneau",
+                    7,
+                    4,
+                    0.88
+                ),
+
+                decoration(
+                    "table",
+                    3,
+                    2,
+                    1.08
+                ),
+
+                decoration(
+                    "lampe",
+                    4,
+                    0,
+                    0.58
+                ),
+
+                decoration(
+                    "bouteille_rouge",
+                    4,
+                    2,
+                    0.32
+                )
+            ];
+
+
+        /* =================================================
+           BALCON
+        ================================================= */
+
+        case "balcon":
+
+            return [
+
+                decoration(
+                    "table",
+                    3,
+                    2,
+                    1.12
+                ),
+
+                decoration(
+                    "chaise",
+                    2,
+                    2,
+                    0.63
+                ),
+
+                decoration(
+                    "chaise",
+                    5,
+                    2,
+                    0.63
+                ),
+
+                decoration(
+                    "plante",
+                    0,
+                    0,
+                    0.78
+                ),
+
+                decoration(
+                    "fleurs",
+                    7,
+                    0,
+                    0.75
+                ),
+
+                decoration(
+                    "arrosoir",
+                    7,
+                    4,
+                    0.52
+                ),
+
+                decoration(
+                    "lampe",
+                    0,
+                    4,
+                    0.58
+                )
+            ];
+
+
+        /* =================================================
+           SALLE D'EAU
+        ================================================= */
+
+        case "toilette":
+
+            return [
+
+                decoration(
+                    "toilette",
+                    0,
+                    1,
+                    1.00
+                ),
+
+                decoration(
+                    "lavabo",
+                    6,
+                    0,
+                    1.00
+                ),
+
+                decoration(
+                    "plante",
+                    7,
+                    4,
+                    0.60
+                ),
+
+                decoration(
+                    "lampe",
+                    4,
+                    0,
+                    0.50
+                ),
+
+                decoration(
+                    "tapis",
+                    3,
+                    3,
+                    1.20
+                )
+            ];
+
+
+        /* =================================================
+           JARDIN
+        ================================================= */
+
+        case "jardin":
+
+            return [
+
+                decoration(
+                    "arbre",
+                    0,
+                    0,
+                    1.18
+                ),
+
+                decoration(
+                    "arbre",
+                    7,
+                    0,
+                    1.18
+                ),
+
+                decoration(
+                    "buisson",
+                    0,
+                    4,
+                    0.90
+                ),
+
+                decoration(
+                    "fleurs",
+                    1,
+                    0,
+                    0.72
+                ),
+
+                decoration(
+                    "fleurs",
+                    7,
+                    4,
+                    0.72
+                ),
+
+                decoration(
+                    "piscine",
+                    5,
+                    2,
+                    1.75,
+                    {
+
+                        animate:
+                            true
+                    }
+                ),
+
+                decoration(
+                    "transat",
+                    4,
+                    0,
+                    0.73
+                ),
+
+                decoration(
+                    "transat",
+                    5,
+                    0,
+                    0.73
+                ),
+
+                decoration(
+                    "banc",
+                    1,
+                    4,
+                    0.92
+                ),
+
+                decoration(
+                    "fontaine",
+                    3,
+                    0,
+                    0.76
+                )
+            ];
+
+
+        default:
+
+            return [];
+    }
+}
+
+
+
+/* =========================================================
+   DONNÉES
+========================================================= */
+
+const PYT_LEVEL_DATA = {
+
+    version:
+        "8.0",
+
 
     /* =====================================================
-       OUTILS
+       CHAPITRES
     ===================================================== */
 
-    function level(config) {
-
-        return {
-            difficulty:
-                "Facile",
-
-            starterCode:
-                "",
-
-            guideMessage:
-                "Écris un programme pour aider Pyt.",
-
-            firstAttemptMessage:
-                "Ça ne fonctionne pas encore. Tu peux revoir le cours avant de réessayer.",
-
-            hints:
-                [],
-
-            objects:
-                [],
-
-            targets:
-                [],
-
-            requiredConcepts:
-                [],
-
-            map: {
-                width: 8,
-                height: 6,
-                blocked: [],
-                decorations: []
-            },
-
-            robot: {
-                x: 0,
-                y: 0,
-                direction: "E"
-            },
-
-            goal: {
-                rules: []
-            },
-
-            ...config
-        };
-    }
-
-
-
-    function chapter(config) {
-
-        return {
-            subtitle:
-                "",
-
-            theory:
-                [],
-
-            levels:
-                [],
-
-            ...config
-        };
-    }
-
-
-
-    /* =====================================================
-       DONNÉES
-    ===================================================== */
-
-    const chapters = [
+    chapters: [
 
         /* =================================================
            CHAPITRE 1
-           SÉQUENCES
+           ENTRÉE
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 1,
+            chapter:
+                1,
 
             title:
-                "Premiers déplacements",
+                "Premiers pas",
 
             subtitle:
-                "Découvre comment donner des instructions à Pyt.",
+                "Déplacer Pyt dans la maison",
 
             room:
-                "Entrée",
+                "entree",
 
             theory: [
 
                 {
+
                     title:
-                        "Un programme est une suite d’instructions",
+                        "Bienvenue dans PYT",
 
                     body: [
-                        "Python exécute normalement les instructions dans l’ordre, de la première ligne à la dernière.",
-                        "Dans PYT, chaque instruction peut faire avancer ou tourner le robot."
-                    ],
 
-                    code:
-`avancer()
-tourner_droite()
-avancer()`
+                        "Pyt se déplace sur une grille. Chaque case correspond à un déplacement.",
+
+                        "Tu vas écrire de petites instructions Python pour lui indiquer où aller."
+                    ]
                 },
 
-
                 {
+
                     title:
                         "Avancer",
 
                     body:
-                        "La fonction avancer() déplace Pyt d’une case dans la direction qu’il regarde.",
+                        "La commande forward() fait avancer Pyt dans la direction qu’il regarde.",
 
                     code:
-`avancer()`
+`forward(1)
+
+forward(3)`
                 },
 
-
                 {
+
                     title:
                         "Tourner",
 
                     body:
-                        "Pyt peut tourner de 90 degrés vers la gauche ou vers la droite.",
+                        "Pyt peut tourner à gauche ou à droite. Un quart de tour correspond à 90 degrés.",
 
                     code:
-`tourner_gauche()
-tourner_droite()`
+`left(90)
+
+right(90)`
                 },
 
-
                 {
+
                     title:
-                        "Plusieurs cases",
+                        "Reculer",
 
                     body:
-                        "Tu peux aussi donner un nombre à avancer(). Le déplacement reste effectué case par case.",
+                        "backward() déplace Pyt vers l’arrière sans changer la direction dans laquelle il regarde.",
 
                     code:
-`avancer(3)`
+`backward(2)`
+                },
+
+                {
+
+                    title:
+                        "Une instruction après l’autre",
+
+                    body:
+                        "Python exécute les lignes dans l’ordre, de haut en bas.",
+
+                    code:
+`forward(2)
+right(90)
+forward(1)`
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   1-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        1,
+
+                    level:
+                        1,
+
+                    room:
+                        "entree",
 
                     title:
-                        "Vers le tapis",
+                        "Le couloir",
+
+                    difficulty:
+                        "Découverte",
 
                     instruction:
-                        "Amène Pyt jusqu’au tapis violet.",
+                        "Fais avancer Pyt jusqu’à la zone lumineuse.",
+
+                    guideMessage:
+                        "Compte les cases entre Pyt et l’objectif. Utilise forward().",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            0,
+                            4
+                        ),
+
+                        cell(
+                            7,
+                            4
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "entree",
+                            1
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            4
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                4
+                        }
+                    },
+
+                    requiredConcepts: [
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Fais avancer Pyt jusqu'à l'objectif.
+`,
+
+                    hints: [
+
+                        "Pyt regarde vers la droite.",
+
+                        "Compte combien de cases séparent Pyt de l’objectif.",
+
+                        "forward(nombre) permet d’avancer de plusieurs cases."
+                    ]
+                },
+
+
+                /* =========================================
+                   1-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        1,
+
+                    level:
+                        2,
+
+                    room:
+                        "entree",
+
+                    title:
+                        "Tourner dans l’entrée",
 
                     difficulty:
                         "Facile",
 
+                    instruction:
+                        "Rejoins l’objectif situé plus haut dans la pièce.",
+
                     guideMessage:
-                        "Commençons simplement. Fais avancer Pyt jusqu’au tapis violet.",
-
-                    starterCode:
-`# Fais avancer Pyt jusqu'au tapis.
-avancer()`,
-
-                    requiredConcepts: [
-                        "sequence"
-                    ],
+                        "Cette fois, Pyt devra avancer puis changer de direction.",
 
                     map: {
 
-                        width: 7,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [0, 0],
-                            [0, 4],
-                            [6, 0],
-                            [6, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plante",
-                                x: 0,
-                                y: 0
-                            },
-                            {
-                                type: "plante",
-                                x: 6,
-                                y: 4
-                            },
-                            {
-                                type: "tapis",
-                                x: 5,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            2,
+                            2
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "entree",
+                            2
+                        ),
+
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "tapis",
-                            type: "destination",
-                            x: 5,
-                            y: 2,
-                            label: "Tapis violet"
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            4,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 5,
-                                y: 2
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                4,
+
+                            y:
+                                1
+                        }
                     },
 
+                    requiredConcepts: [
+
+                        "forward",
+
+                        "left"
+                    ],
+
+                    starterCode:
+`# Avance, tourne, puis continue vers l'objectif.
+`,
+
                     hints: [
-                        "Pyt regarde déjà vers la droite.",
-                        "Il doit avancer quatre cases."
+
+                        "Commence par rejoindre la colonne de l’objectif.",
+
+                        "Depuis l’est, left(90) fait regarder Pyt vers le nord."
                     ]
-                }),
+                },
 
 
+                /* =========================================
+                   1-3
+                ========================================= */
 
-                level({
+                {
 
-                    level: 2,
+                    chapter:
+                        1,
+
+                    level:
+                        3,
+
+                    room:
+                        "entree",
 
                     title:
-                        "Premier virage",
-
-                    instruction:
-                        "Rejoins la porte sans toucher les meubles.",
+                        "Marche arrière",
 
                     difficulty:
                         "Facile",
 
-                    guideMessage:
-                        "Cette fois, avancer tout droit ne suffit plus. Il faudra aussi tourner.",
-
-                    starterCode:
-`# Rejoins la porte.
-avancer()
-`,
-
-                    requiredConcepts: [
-                        "sequence",
-                        "turn"
-                    ],
-
-                    map: {
-
-                        width: 7,
-                        height: 6,
-
-                        blocked: [
-                            [3, 1],
-                            [3, 2],
-                            [3, 3],
-                            [1, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "console",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "console",
-                                x: 3,
-                                y: 2
-                            },
-                            {
-                                type: "porte",
-                                x: 5,
-                                y: 4
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
-                    },
-
-                    targets: [
-                        {
-                            id: "porte",
-                            type: "destination",
-                            x: 5,
-                            y: 4,
-                            label: "Porte"
-                        }
-                    ],
-
-                    goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 5,
-                                y: 4
-                            }
-                        ]
-                    },
-
-                    hints: [
-                        "Le meuble bloque le passage direct.",
-                        "Essaie de descendre avant de repartir vers la droite."
-                    ]
-                }),
-
-
-
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Le colis",
-
                     instruction:
-                        "Va chercher le colis puis apporte-le devant la porte.",
-
-                    difficulty:
-                        "Moyen",
+                        "Utilise aussi la marche arrière pour rejoindre l’objectif.",
 
                     guideMessage:
-                        "Pyt doit maintenant se déplacer, récupérer un objet puis l’emporter ailleurs.",
-
-                    starterCode:
-`# Trouve le colis.
-# Utilise ramasser() quand Pyt est dessus.
-`,
-
-                    requiredConcepts: [
-                        "sequence",
-                        "pickup"
-                    ],
+                        "backward() permet de reculer sans changer le regard de Pyt.",
 
                     map: {
 
-                        width: 8,
-                        height: 6,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [3, 0],
-                            [3, 1],
-                            [3, 2],
-                            [5, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plante",
-                                x: 1,
-                                y: 4
-                            },
-                            {
-                                type: "porte",
-                                x: 6,
-                                y: 4
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "S"
+                    robotStart: {
+
+                        x:
+                            5,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "colis",
-                            type: "caisse",
-                            label: "Colis",
-                            x: 1,
-                            y: 4,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            3
+                        )
                     ],
 
+                    decorations:
+                        getRoomDecorations(
+                            "entree",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
                     targets: [
-                        {
-                            id: "porte",
-                            type: "deposit",
-                            x: 6,
-                            y: 4,
-                            label: "Devant la porte"
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            3,
+                            2
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 6,
-                                y: 4
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "colis"
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                3,
+
+                            y:
+                                2
+                        }
                     },
 
-                    hints: [
-                        "Commence par descendre jusqu’au colis.",
-                        "Quand Pyt se trouve sur le colis, utilise ramasser()."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "backward",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Utilise au moins une fois backward().
+`,
+
+                    hints: [
+
+                        "Pyt peut commencer par reculer.",
+
+                        "Reculer ne change pas sa direction.",
+
+                        "Une rotation sera ensuite nécessaire."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 2
-           VARIABLES
+           CUISINE
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 2,
+            chapter:
+                2,
 
             title:
                 "Variables",
 
             subtitle:
-                "Stocke des informations pour les réutiliser.",
+                "Donner un nom aux valeurs",
 
             room:
-                "Cuisine",
+                "cuisine",
 
             theory: [
 
                 {
+
                     title:
-                        "Une variable mémorise une valeur",
+                        "Une variable",
 
                     body:
-                        "Une variable possède un nom. On peut lui donner une valeur puis utiliser ce nom plus tard.",
+                        "Une variable permet de stocker une valeur sous un nom.",
+
+                    code:
+`distance = 3`
+                },
+
+                {
+
+                    title:
+                        "Réutiliser une valeur",
+
+                    body:
+                        "Une fois créée, la variable peut être utilisée à la place du nombre.",
 
                     code:
 `distance = 3
-avancer(distance)`
+
+forward(distance)`
                 },
 
-
                 {
+
                     title:
-                        "Les nombres",
+                        "Plusieurs variables",
 
                     body:
-                        "Un entier peut servir à stocker une distance, un compteur ou une quantité.",
+                        "Tu peux stocker plusieurs informations séparément.",
 
                     code:
-`pas = 2
-avancer(pas)`
+`horizontal = 2
+vertical = 4`
                 },
 
-
                 {
-                    title:
-                        "Les chaînes de caractères",
 
-                    body:
-                        "Du texte peut être placé entre guillemets.",
-
-                    code:
-`objet = "pomme"
-ramasser(objet)`
-                },
-
-
-                {
                     title:
                         "Modifier une variable",
 
                     body:
-                        "Une variable peut recevoir une nouvelle valeur pendant le programme.",
+                        "La valeur d’une variable peut changer pendant le programme.",
 
                     code:
 `distance = 2
-avancer(distance)
-
-distance = 1
-avancer(distance)`
+distance = distance + 1`
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   2-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        2,
+
+                    level:
+                        1,
+
+                    room:
+                        "cuisine",
 
                     title:
-                        "Distance jusqu’au frigo",
-
-                    instruction:
-                        "Utilise une variable pour envoyer Pyt devant le frigo.",
+                        "La bonne distance",
 
                     difficulty:
                         "Facile",
 
+                    instruction:
+                        "Stocke la distance dans une variable puis rejoins l’objectif.",
+
                     guideMessage:
-                        "Au lieu d’écrire directement le nombre dans avancer(), place la distance dans une variable.",
-
-                    starterCode:
-`distance = 0
-
-# Modifie la variable.
-avancer(distance)`,
-
-                    requiredConcepts: [
-                        "assignment"
-                    ],
+                        "Crée une variable contenant le nombre de cases à parcourir.",
 
                     map: {
 
-                        width: 8,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [2, 0],
-                            [3, 0],
-                            [4, 0]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "frigo",
-                                x: 6,
-                                y: 2
-                            },
-                            {
-                                type: "table",
-                                x: 3,
-                                y: 4
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            2,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        ),
+
+                        cell(
+                            4,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "cuisine",
+                            1
+                        ),
+
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "frigo",
-                            type: "destination",
-                            x: 5,
-                            y: 2,
-                            label: "Frigo"
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            6,
+                            3
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 5,
-                                y: 2
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                3
+                        }
                     },
 
-                    hints: [
-                        "Compte le nombre de cases entre Pyt et le frigo.",
-                        "Place ce nombre dans distance."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "variable",
 
-
-                level({
-
-                    level: 2,
-
-                    title:
-                        "La bonne pomme",
-
-                    instruction:
-                        "Stocke le nom de l’objet dans une variable puis ramasse la pomme.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Une variable peut aussi contenir du texte.",
+                        "forward"
+                    ],
 
                     starterCode:
-`objet = ""
-
-avancer(2)
-
-# Ramasse l'objet contenu dans la variable.
+`# Stocke le nombre de cases dans une variable.
 `,
 
-                    requiredConcepts: [
-                        "assignment",
-                        "string",
-                        "pickup"
-                    ],
+                    hints: [
+
+                        "Une variable s’écrit par exemple : distance = 4.",
+
+                        "Tu peux ensuite utiliser forward(distance)."
+                    ]
+                },
+
+
+                /* =========================================
+                   2-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        2,
+
+                    level:
+                        2,
+
+                    room:
+                        "cuisine",
+
+                    title:
+                        "Deux distances",
+
+                    difficulty:
+                        "Facile",
+
+                    instruction:
+                        "Utilise des variables pour les deux parties du trajet.",
+
+                    guideMessage:
+                        "Le trajet comporte une partie horizontale puis une partie verticale.",
 
                     map: {
 
-                        width: 7,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 1],
-                            [4, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "table",
-                                x: 3,
-                                y: 1
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            1,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "pomme",
-                            type: "pomme",
-                            label: "Pomme",
-                            x: 3,
-                            y: 2,
-                            pickable: true
-                        },
-                        {
-                            id: "tasse",
-                            type: "tasse",
-                            label: "Tasse",
-                            x: 5,
-                            y: 2,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            2,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
                     ],
 
-                    goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "pomme"
-                            },
-                            {
-                                type: "inventory_not_has",
-                                object: "tasse"
-                            }
-                        ]
-                    },
+                    decorations:
+                        getRoomDecorations(
+                            "cuisine",
+                            2
+                        ),
 
-                    hints: [
-                        "Le texte doit être écrit entre guillemets.",
-                        "La variable peut contenir \"pomme\"."
-                    ]
-                }),
-
-
-
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Préparer la table",
-
-                    instruction:
-                        "Récupère l’assiette et apporte-la jusqu’à la table en utilisant plusieurs variables.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Utilise des variables pour les distances et pour le nom de l’objet.",
-
-                    starterCode:
-`objet = "assiette"
-aller_objet = 0
-aller_table = 0
-
-# Complète le programme.
-`,
-
-                    requiredConcepts: [
-                        "assignment",
-                        "variables_multiple",
-                        "pickup"
-                    ],
-
-                    map: {
-
-                        width: 9,
-                        height: 6,
-
-                        blocked: [
-                            [4, 0],
-                            [4, 1],
-                            [4, 2],
-                            [6, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plan_travail",
-                                x: 2,
-                                y: 4
-                            },
-                            {
-                                type: "table",
-                                x: 7,
-                                y: 4
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "S"
-                    },
-
-                    objects: [
-                        {
-                            id: "assiette",
-                            type: "assiette",
-                            label: "Assiette",
-                            x: 1,
-                            y: 4,
-                            pickable: true
-                        }
-                    ],
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "table",
-                            type: "deposit",
-                            x: 7,
-                            y: 4,
-                            label: "Table"
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            3
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 7,
-                                y: 4
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "assiette"
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                3
+                        }
                     },
 
-                    hints: [
-                        "Une première variable peut stocker la distance jusqu’à l’assiette.",
-                        "Une deuxième variable peut être utilisée pour une autre partie du trajet."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "variable",
+
+                        "right",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Tu peux créer plusieurs variables.
+`,
+
+                    hints: [
+
+                        "Commence par compter le déplacement horizontal.",
+
+                        "Pyt devra ensuite regarder vers le bas."
+                    ]
+                },
+
+
+                /* =========================================
+                   2-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        2,
+
+                    level:
+                        3,
+
+                    room:
+                        "cuisine",
+
+                    title:
+                        "Le service",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise des variables pour traverser la cuisine en plusieurs étapes.",
+
+                    guideMessage:
+                        "Organise ton trajet avec des noms de variables compréhensibles.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            6,
+
+                        y:
+                            4,
+
+                        direction:
+                            "W"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            2,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            4,
+                            2
+                        ),
+
+                        cell(
+                            5,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "cuisine",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            2,
+                            1
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                2,
+
+                            y:
+                                1
+                        }
+                    },
+
+                    requiredConcepts: [
+
+                        "variable",
+
+                        "right",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Choisis des noms de variables qui décrivent ton trajet.
+`,
+
+                    hints: [
+
+                        "Pyt commence en regardant vers l’ouest.",
+
+                        "right(90) depuis l’ouest fait regarder vers le nord."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 3
-           CONDITIONS
+           SALON
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 3,
+            chapter:
+                3,
 
             title:
                 "Conditions",
 
             subtitle:
-                "Permets à Pyt de prendre une décision.",
+                "Permettre à Pyt de prendre une décision",
 
             room:
-                "Salon",
+                "salon",
 
             theory: [
 
                 {
+
                     title:
-                        "if",
+                        "La condition if",
 
                     body:
-                        "Une condition permet d’exécuter du code uniquement si une expression est vraie.",
+                        "if permet d’exécuter du code seulement lorsqu’une condition est vraie.",
 
                     code:
-`if devant_libre():
-    avancer()`
+`if front_is_clear():
+    forward(1)`
                 },
 
+                {
+
+                    title:
+                        "Sinon",
+
+                    body:
+                        "else permet de prévoir une autre action lorsque la condition est fausse.",
+
+                    code:
+`if front_is_clear():
+    forward(1)
+else:
+    left(90)`
+                },
 
                 {
+
+                    title:
+                        "not",
+
+                    body:
+                        "not inverse une condition.",
+
+                    code:
+`if not front_is_clear():
+    right(90)`
+                },
+
+                {
+
                     title:
                         "Indentation",
 
                     body:
-                        "En Python, le code placé à l’intérieur d’un if doit être indenté.",
-
-                    code:
-`if sur_objet("livre"):
-    ramasser("livre")`
-                },
-
-
-                {
-                    title:
-                        "else",
-
-                    body:
-                        "else permet d’exécuter autre chose quand la condition est fausse.",
-
-                    code:
-`if devant_libre():
-    avancer()
-else:
-    tourner_droite()`
-                },
-
-
-                {
-                    title:
-                        "Comparer des valeurs",
-
-                    body:
-                        "On peut comparer des nombres ou du texte avec ==, !=, < ou >.",
-
-                    code:
-`x = position_x()
-
-if x == 4:
-    tourner_gauche()`
+                        "En Python, les lignes qui appartiennent au if doivent être décalées vers la droite."
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   3-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        3,
+
+                    level:
+                        1,
+
+                    room:
+                        "salon",
 
                     title:
-                        "Passage libre",
-
-                    instruction:
-                        "Utilise if et devant_libre() avant de faire avancer Pyt.",
+                        "Le canapé bloque le passage",
 
                     difficulty:
-                        "Facile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise une condition pour réagir lorsque Pyt rencontre un passage bloqué.",
 
                     guideMessage:
-                        "Demande d’abord à Pyt si la case devant lui est libre.",
-
-                    starterCode:
-`if devant_libre():
-    # Ajoute l'instruction ici.
-    pass`,
-
-                    requiredConcepts: [
-                        "if"
-                    ],
+                        "front_is_clear() indique si la case située devant Pyt est libre.",
 
                     map: {
 
-                        width: 7,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [5, 1],
-                            [5, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "canape",
-                                x: 5,
-                                y: 1
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 2,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 3,
-                                y: 2
-                            }
-                        ]
-                    },
+                    blocked: [
 
-                    hints: [
-                        "Le déplacement doit se trouver sous le if.",
-                        "N’oublie pas l’indentation."
-                    ]
-                }),
+                        cell(
+                            3,
+                            4
+                        ),
 
+                        cell(
+                            0,
+                            1
+                        ),
 
+                        cell(
+                            1,
+                            1
+                        ),
 
-                level({
+                        cell(
+                            6,
+                            0
+                        ),
 
-                    level: 2,
-
-                    title:
-                        "Choisir le passage",
-
-                    instruction:
-                        "Fais avancer Pyt si le chemin est libre, sinon fais-le tourner.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Tu vas maintenant utiliser if et else.",
-
-                    starterCode:
-`if devant_libre():
-    avancer()
-else:
-    # Que doit faire Pyt ?
-    pass`,
-
-                    requiredConcepts: [
-                        "if",
-                        "else"
+                        cell(
+                            7,
+                            0
+                        )
                     ],
 
-                    map: {
+                    decorations:
+                        getRoomDecorations(
+                            "salon",
+                            1
+                        ),
 
-                        width: 7,
-                        height: 6,
-
-                        blocked: [
-                            [3, 1],
-                            [3, 2],
-                            [5, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "canape",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "table",
-                                x: 5,
-                                y: 4
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 3,
-                        y: 3,
-                        direction: "N"
-                    },
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "sortie",
-                            type: "destination",
-                            x: 5,
-                            y: 3,
-                            label: "Sortie"
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            2,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 5,
-                                y: 3
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                2,
+
+                            y:
+                                1
+                        },
+
+                        noCollisions:
+                            true
                     },
 
-                    hints: [
-                        "La case située devant Pyt au départ est bloquée.",
-                        "Quand devant_libre() est faux, le bloc else est exécuté."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "condition",
 
+                        "left",
 
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Le livre bleu",
-
-                    instruction:
-                        "Récupère uniquement le livre bleu en utilisant une condition.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "Pyt trouvera plusieurs objets. Vérifie lequel se trouve sous lui avant de le ramasser.",
+                        "forward"
+                    ],
 
                     starterCode:
-`objet = "livre_bleu"
-
-# Déplace Pyt puis vérifie l'objet.
+`# Utilise front_is_clear() dans une condition.
 `,
 
-                    requiredConcepts: [
-                        "if",
-                        "comparison",
-                        "pickup"
-                    ],
+                    hints: [
+
+                        "Une case bloque le passage devant Pyt.",
+
+                        "Teste le passage avant de choisir la direction."
+                    ]
+                },
+
+
+                /* =========================================
+                   3-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        3,
+
+                    level:
+                        2,
+
+                    room:
+                        "salon",
+
+                    title:
+                        "Changer de direction",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Décide quand tourner pour rejoindre l’autre côté du salon.",
+
+                    guideMessage:
+                        "Tu peux utiliser if ou if/else pour décider du prochain mouvement.",
 
                     map: {
 
-                        width: 9,
-                        height: 6,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 1],
-                            [4, 2],
-                            [6, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "bibliotheque",
-                                x: 7,
-                                y: 1
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 3,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            1,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "livre_rouge",
-                            type: "livre",
-                            label: "Livre rouge",
-                            x: 3,
-                            y: 3,
-                            pickable: true
-                        },
-                        {
-                            id: "livre_bleu",
-                            type: "livre",
-                            label: "Livre bleu",
-                            x: 7,
-                            y: 3,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            4,
+                            1
+                        ),
+
+                        cell(
+                            0,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "salon",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            3,
+                            4
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "livre_bleu"
-                            },
-                            {
-                                type: "inventory_not_has",
-                                object: "livre_rouge"
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                3,
+
+                            y:
+                                4
+                        },
+
+                        noCollisions:
+                            true
                     },
 
-                    hints: [
-                        "sur_objet(\"livre_bleu\") renvoie vrai uniquement sur le bon livre.",
-                        "Le livre rouge ne doit pas finir dans l’inventaire."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "condition",
+
+                        "right",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Observe l'obstacle avant de décider quand tourner.
+`,
+
+                    hints: [
+
+                        "Pyt ne doit pas foncer dans le meuble.",
+
+                        "Lorsqu’il ne peut plus continuer vers l’est, il doit changer de direction."
+                    ]
+                },
+
+
+                /* =========================================
+                   3-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        3,
+
+                    level:
+                        3,
+
+                    room:
+                        "salon",
+
+                    title:
+                        "La clé du salon",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Récupère automatiquement la clé puis apporte-la dans la zone de dépôt.",
+
+                    guideMessage:
+                        "Pyt ramasse la clé automatiquement lorsqu’il passe dessus.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            3,
+                            4
+                        ),
+
+                        cell(
+                            0,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            4,
+                            3
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "salon",
+                            3
+                        ),
+
+                    objects: [
+
+                        object(
+                            "cle_salon",
+                            "cle",
+                            2,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        )
+                    ],
+
+                    targets: [
+
+                        target(
+                            "depot_cle",
+                            "deposit",
+                            5,
+                            1,
+                            {
+
+                                object:
+                                    "cle_salon"
+                            }
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                1
+                        },
+
+                        requiredObject:
+                            "cle_salon",
+
+                        noCollisions:
+                            true
+                    },
+
+                    requiredConcepts: [
+
+                        "condition",
+
+                        "left",
+
+                        "right",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Passe sur la clé.
+# Elle sera ramassée automatiquement.
+`,
+
+                    hints: [
+
+                        "La clé est sur la première partie du trajet.",
+
+                        "Une fois l’objet récupéré, rejoins la zone bleue.",
+
+                        "Teste l’obstacle pour savoir quand changer de direction."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 4
-           BOUCLES FOR
+           CHAMBRE
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 4,
+            chapter:
+                4,
 
             title:
                 "Boucles for",
 
             subtitle:
-                "Répète automatiquement des instructions.",
+                "Répéter une action un nombre connu de fois",
 
             room:
-                "Chambre",
+                "chambre",
 
             theory: [
 
                 {
+
                     title:
-                        "Pourquoi une boucle ?",
+                        "Répéter",
 
                     body:
-                        "Quand la même instruction doit être exécutée plusieurs fois, une boucle évite de la recopier.",
+                        "Une boucle for évite de recopier plusieurs fois la même instruction.",
 
                     code:
 `for i in range(4):
-    avancer()`
+    forward(1)`
                 },
 
-
                 {
+
                     title:
-                        "range",
+                        "range()",
 
                     body:
-                        "range(4) permet d’effectuer quatre tours de boucle.",
-
-                    code:
-`for i in range(4):
-    print(i)`
+                        "range(4) produit quatre répétitions : 0, 1, 2 et 3."
                 },
 
-
                 {
+
                     title:
-                        "Plusieurs instructions",
+                        "La variable de boucle",
 
                     body:
-                        "Une boucle peut répéter plusieurs instructions à chaque tour.",
+                        "Dans for i in range(...), i change automatiquement à chaque répétition.",
 
                     code:
 `for i in range(3):
-    avancer()
-    tourner_droite()`
+    print(i)`
+                },
+
+                {
+
+                    title:
+                        "Plusieurs boucles",
+
+                    body:
+                        "Un programme peut contenir plusieurs boucles pour différentes parties d’un trajet."
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   4-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        4,
+
+                    level:
+                        1,
+
+                    room:
+                        "chambre",
 
                     title:
-                        "Long couloir",
-
-                    instruction:
-                        "Rejoins le lit avec une boucle for.",
+                        "Répéter les pas",
 
                     difficulty:
-                        "Facile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise une boucle for pour faire traverser la chambre à Pyt.",
 
                     guideMessage:
-                        "Pyt doit effectuer plusieurs fois exactement la même action.",
-
-                    starterCode:
-`for i in range(0):
-    avancer()`,
-
-                    requiredConcepts: [
-                        "for",
-                        "range"
-                    ],
+                        "Au lieu d’écrire forward(1) plusieurs fois, utilise range().",
 
                     map: {
 
-                        width: 9,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [0, 0],
-                            [8, 0]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "lit",
-                                x: 7,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
 
-                    goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 7,
-                                y: 2
-                            }
-                        ]
-                    },
+                    blocked: [
 
-                    hints: [
-                        "Compte les déplacements nécessaires.",
-                        "Change uniquement la valeur donnée à range()."
-                    ]
-                }),
+                        cell(
+                            5,
+                            0
+                        ),
 
+                        cell(
+                            6,
+                            0
+                        ),
 
+                        cell(
+                            0,
+                            0
+                        ),
 
-                level({
-
-                    level: 2,
-
-                    title:
-                        "Le tour du tapis",
-
-                    instruction:
-                        "Fais faire à Pyt le tour complet du tapis avec une boucle.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Un carré possède quatre côtés. Cherche quelles instructions doivent être répétées.",
-
-                    starterCode:
-`for i in range(4):
-    # Avance le long d'un côté.
-    # Puis tourne.
-    pass`,
-
-                    requiredConcepts: [
-                        "for",
-                        "range",
-                        "turn"
+                        cell(
+                            3,
+                            2
+                        )
                     ],
 
-                    map: {
+                    decorations:
+                        getRoomDecorations(
+                            "chambre",
+                            1
+                        ),
 
-                        width: 8,
-                        height: 7,
-
-                        blocked: [
-                            [3, 2],
-                            [4, 2],
-                            [3, 3],
-                            [4, 3],
-                            [3, 4],
-                            [4, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "tapis",
-                                x: 3,
-                                y: 3
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 2,
-                        y: 1,
-                        direction: "E"
-                    },
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "depart",
-                            type: "destination",
-                            x: 2,
-                            y: 1
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            6,
+                            3
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 2,
-                                y: 1
-                            },
-                            {
-                                type: "minimum_moves",
-                                count: 12
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                3
+                        }
                     },
 
-                    hints: [
-                        "Chaque côté du trajet fait trois cases.",
-                        "Le déplacement et le virage doivent être dans la boucle."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "for",
 
+                        "range",
 
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Ranger les jouets",
-
-                    instruction:
-                        "Passe sur les trois jouets et récupère-les avec une boucle.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "Les jouets sont alignés. Une boucle peut effectuer le déplacement et le ramassage plusieurs fois.",
+                        "forward"
+                    ],
 
                     starterCode:
-`for i in range(3):
-    # Avance jusqu'au prochain jouet.
-    # Puis ramasse-le.
-    pass`,
+`# Répète une instruction avec for et range().
+`,
 
-                    requiredConcepts: [
-                        "for",
-                        "pickup"
-                    ],
+                    hints: [
+
+                        "Compte combien de cases Pyt doit parcourir.",
+
+                        "La ligne à répéter doit être indentée."
+                    ]
+                },
+
+
+                /* =========================================
+                   4-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        4,
+
+                    level:
+                        2,
+
+                    room:
+                        "chambre",
+
+                    title:
+                        "Deux répétitions",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise des boucles pour les deux parties du trajet.",
+
+                    guideMessage:
+                        "Deux segments du trajet nécessitent plusieurs déplacements identiques.",
 
                     map: {
 
-                        width: 9,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [],
-
-                        decorations: [
-                            {
-                                type: "lit",
-                                x: 8,
-                                y: 0
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "jouet_1",
-                            type: "jouet",
-                            label: "Jouet 1",
-                            x: 3,
-                            y: 2,
-                            pickable: true
-                        },
-                        {
-                            id: "jouet_2",
-                            type: "jouet",
-                            label: "Jouet 2",
-                            x: 5,
-                            y: 2,
-                            pickable: true
-                        },
-                        {
-                            id: "jouet_3",
-                            type: "jouet",
-                            label: "Jouet 3",
-                            x: 7,
-                            y: 2,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            5,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "chambre",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "jouet_1"
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "jouet_2"
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "jouet_3"
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                1
+                        }
                     },
 
-                    hints: [
-                        "Il y a toujours deux cases entre deux jouets.",
-                        "Chaque tour de boucle peut avancer puis ramasser."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "for",
+
+                        "range",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Tu peux écrire plusieurs boucles for.
+`,
+
+                    hints: [
+
+                        "Le premier segment est horizontal.",
+
+                        "Le deuxième est vertical.",
+
+                        "Une rotation sépare les deux boucles."
+                    ]
+                },
+
+
+                /* =========================================
+                   4-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        4,
+
+                    level:
+                        3,
+
+                    room:
+                        "chambre",
+
+                    title:
+                        "Les livres oubliés",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Traverse la chambre avec des boucles et récupère les livres placés sur le chemin.",
+
+                    guideMessage:
+                        "Les objets sont ramassés automatiquement lorsque Pyt passe dessus.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            5,
+                            0
+                        ),
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "chambre",
+                            3
+                        ),
+
+                    objects: [
+
+                        object(
+                            "livre_1",
+                            "livre_rouge",
+                            2,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        ),
+
+                        object(
+                            "livre_2",
+                            "livre_bleu",
+                            4,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        ),
+
+                        object(
+                            "livre_3",
+                            "livre",
+                            6,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        )
+                    ],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            6,
+                            1
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                1
+                        },
+
+                        requiredObject:
+                            "livre_3"
+                    },
+
+                    requiredConcepts: [
+
+                        "for",
+
+                        "range",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Les livres seront récupérés automatiquement.
+`,
+
+                    hints: [
+
+                        "Commence par traverser la ligne des livres.",
+
+                        "Une seconde boucle peut ensuite faire monter Pyt."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 5
-           FONCTIONS
+           GARAGE
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 5,
+            chapter:
+                5,
 
             title:
                 "Fonctions",
 
             subtitle:
-                "Regroupe des instructions dans des blocs réutilisables.",
+                "Créer ses propres commandes",
 
             room:
-                "Garage",
+                "garage",
 
             theory: [
 
                 {
+
                     title:
                         "Créer une fonction",
 
                     body:
-                        "def permet de donner un nom à un groupe d’instructions.",
+                        "def permet de regrouper plusieurs instructions sous un seul nom.",
 
                     code:
 `def avancer_deux():
-    avancer()
-    avancer()`
+    forward(1)
+    forward(1)`
                 },
 
-
                 {
+
                     title:
-                        "Appeler une fonction",
+                        "Appeler la fonction",
 
                     body:
-                        "Créer la fonction ne suffit pas. Il faut ensuite l’appeler.",
+                        "Définir une fonction ne l’exécute pas. Il faut ensuite l’appeler.",
 
                     code:
-`def avancer_deux():
-    avancer(2)
-
-avancer_deux()`
+`avancer_deux()`
                 },
 
-
                 {
+
                     title:
                         "Paramètres",
 
@@ -1553,634 +2723,882 @@ avancer_deux()`
                         "Une fonction peut recevoir une valeur.",
 
                     code:
-`def avancer_de(n):
-    avancer(n)
+`def avancer_de(distance):
+    forward(distance)`
+                },
 
-avancer_de(4)`
+                {
+
+                    title:
+                        "return",
+
+                    body:
+                        "return permet à une fonction de renvoyer une valeur.",
+
+                    code:
+`def distance():
+    return 3`
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   5-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        5,
+
+                    level:
+                        1,
+
+                    room:
+                        "garage",
 
                     title:
-                        "Une fonction simple",
-
-                    instruction:
-                        "Crée une fonction avancer_trois() puis utilise-la.",
+                        "Une commande personnalisée",
 
                     difficulty:
-                        "Facile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Crée une fonction puis utilise-la pour rejoindre l’objectif.",
 
                     guideMessage:
-                        "Place les déplacements dans une fonction puis appelle cette fonction.",
-
-                    starterCode:
-`def avancer_trois():
-    pass
-
-# Appelle la fonction ici.
-`,
-
-                    requiredConcepts: [
-                        "function_definition",
-                        "function_call"
-                    ],
+                        "Regroupe ton déplacement dans une fonction créée avec def.",
 
                     map: {
 
-                        width: 7,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [],
-
-                        decorations: [
-                            {
-                                type: "etabli",
-                                x: 5,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 2,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            5,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            1
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            0,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "garage",
+                            1
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            6,
+                            3
+                        )
+                    ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 5,
-                                y: 2
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                3
+                        }
                     },
 
+                    requiredConcepts: [
+
+                        "function",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Crée ta propre fonction avec def.
+`,
+
                     hints: [
-                        "Le corps de la fonction doit être indenté.",
-                        "N’oublie pas d’écrire avancer_trois() après la définition."
+
+                        "Une fonction doit être définie avant d’être appelée.",
+
+                        "N’oublie pas l’indentation dans le corps de la fonction."
                     ]
-                }),
+                },
 
 
+                /* =========================================
+                   5-2
+                ========================================= */
 
-                level({
+                {
 
-                    level: 2,
+                    chapter:
+                        5,
+
+                    level:
+                        2,
+
+                    room:
+                        "garage",
 
                     title:
                         "Fonction avec paramètre",
 
-                    instruction:
-                        "Crée une fonction avancer_de(distance) et utilise-la pour atteindre l’établi.",
-
                     difficulty:
-                        "Moyen",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Crée une fonction capable d’avancer d’une distance donnée.",
 
                     guideMessage:
-                        "Le nombre de cases peut devenir un paramètre de fonction.",
-
-                    starterCode:
-`def avancer_de(distance):
-    # Utilise distance.
-    pass
-
-avancer_de(4)`,
-
-                    requiredConcepts: [
-                        "function_definition",
-                        "parameter"
-                    ],
+                        "Un paramètre permet de réutiliser la même fonction avec différentes valeurs.",
 
                     map: {
 
-                        width: 8,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [],
-
-                        decorations: [
-                            {
-                                type: "etabli",
-                                x: 6,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 2,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            5,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            1
+                        ),
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "garage",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            2
+                        )
+                    ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 6,
-                                y: 2
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                2
+                        }
                     },
 
-                    hints: [
-                        "distance est disponible à l’intérieur de la fonction.",
-                        "Tu peux transmettre distance à avancer()."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "function",
 
+                        "left",
 
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Livraison au garage",
-
-                    instruction:
-                        "Crée une fonction capable d’avancer puis tourner. Utilise-la plusieurs fois pour récupérer la boîte à outils et rejoindre l’établi.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "Cherche un motif de déplacement qui apparaît plusieurs fois dans le trajet.",
+                        "forward"
+                    ],
 
                     starterCode:
-`def trajet():
-    # Écris ici un morceau réutilisable du trajet.
-    pass
-
-# Utilise ta fonction.
+`# Ta fonction peut recevoir une distance.
 `,
 
-                    requiredConcepts: [
-                        "function_definition",
-                        "function_call_multiple",
-                        "pickup"
-                    ],
+                    hints: [
+
+                        "Essaie de créer une fonction qui appelle forward(distance).",
+
+                        "Tu peux appeler cette fonction plusieurs fois."
+                    ]
+                },
+
+
+                /* =========================================
+                   5-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        5,
+
+                    level:
+                        3,
+
+                    room:
+                        "garage",
+
+                    title:
+                        "Une fonction qui calcule",
+
+                    difficulty:
+                        "Avancé",
+
+                    instruction:
+                        "Utilise une fonction avec return pour obtenir une valeur utile au trajet.",
+
+                    guideMessage:
+                        "Une fonction peut renvoyer une valeur puis cette valeur peut être utilisée par forward().",
 
                     map: {
 
-                        width: 9,
-                        height: 7,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 2],
-                            [4, 3],
-                            [4, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "voiture",
-                                x: 4,
-                                y: 3
-                            },
-                            {
-                                type: "etabli",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "boite_outils",
-                            type: "outils",
-                            label: "Boîte à outils",
-                            x: 7,
-                            y: 1,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            5,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            1
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "garage",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            4,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "boite_outils"
-                            },
-                            {
-                                type: "position",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                4,
+
+                            y:
+                                1
+                        }
                     },
 
-                    hints: [
-                        "Tu dois d’abord rejoindre la boîte à outils.",
-                        "Une fonction peut être appelée plusieurs fois."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "function",
+
+                        "return",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Une fonction peut renvoyer un nombre avec return.
+`,
+
+                    hints: [
+
+                        "Crée une fonction qui renvoie une distance.",
+
+                        "Utilise ensuite sa valeur dans ton déplacement."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 6
-           LISTES
+           CAVE
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 6,
+            chapter:
+                6,
 
             title:
                 "Listes",
 
             subtitle:
-                "Regroupe plusieurs valeurs dans une seule variable.",
+                "Stocker plusieurs valeurs dans un ordre précis",
 
             room:
-                "Cave à vin",
+                "cave_a_vin",
 
             theory: [
 
                 {
+
                     title:
                         "Créer une liste",
 
                     body:
-                        "Une liste Python utilise des crochets et peut contenir plusieurs valeurs.",
+                        "Une liste regroupe plusieurs valeurs entre crochets.",
 
                     code:
-`objets = ["rouge", "bleu", "vert"]`
+`distances = [2, 4, 1]`
                 },
 
-
                 {
+
                     title:
-                        "Lire un élément",
+                        "Lire une valeur",
 
                     body:
-                        "Les positions dans une liste commencent à zéro.",
+                        "Les positions commencent à 0.",
 
                     code:
-`objets = ["pomme", "livre", "clé"]
+`distances = [2, 4, 1]
 
-print(objets[0])`
+print(distances[0])
+print(distances[1])`
                 },
 
-
                 {
+
                     title:
-                        "Parcourir une liste",
+                        "Liste et boucle",
 
                     body:
-                        "Une boucle for peut parcourir directement tous les éléments d’une liste.",
+                        "Une boucle for peut parcourir directement les valeurs d’une liste.",
 
                     code:
-`distances = [2, 1, 3]
+`distances = [1, 2, 1]
 
 for distance in distances:
-    avancer(distance)`
+    forward(distance)`
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   6-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        6,
+
+                    level:
+                        1,
+
+                    room:
+                        "cave_a_vin",
 
                     title:
-                        "Liste de distances",
-
-                    instruction:
-                        "Utilise une liste et une boucle pour effectuer trois déplacements successifs.",
+                        "Une distance dans une liste",
 
                     difficulty:
-                        "Facile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Stocke la distance dans une liste puis utilise la valeur de la liste.",
 
                     guideMessage:
-                        "Les distances sont différentes. Range-les dans une liste puis parcours cette liste.",
-
-                    starterCode:
-`distances = [2, 1, 3]
-
-for distance in distances:
-    # Utilise distance.
-    pass`,
-
-                    requiredConcepts: [
-                        "list",
-                        "for"
-                    ],
+                        "Une liste utilise des crochets et son premier élément est à l’indice 0.",
 
                     map: {
 
-                        width: 9,
-                        height: 7,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 0],
-                            [4, 1],
-                            [4, 2],
-                            [6, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "casier_vin",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 5,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            1,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "cave_a_vin",
+                            1
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            3
+                        )
+                    ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "minimum_moves",
-                                count: 6
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                3
+                        }
                     },
 
-                    hints: [
-                        "À chaque tour, distance contient une valeur de la liste.",
-                        "Passe distance à avancer()."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "list",
 
-
-                level({
-
-                    level: 2,
-
-                    title:
-                        "Liste de bouteilles",
-
-                    instruction:
-                        "Ramasse uniquement les trois bouteilles indiquées dans la liste.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "La liste te donne les objets que Pyt doit récupérer.",
+                        "forward"
+                    ],
 
                     starterCode:
-`bouteilles = [
-    "bouteille_rouge",
-    "bouteille_bleue",
-    "bouteille_verte"
-]
-
-# Parcours la cave.
+`# Crée une liste.
 `,
 
-                    requiredConcepts: [
-                        "list",
-                        "membership",
-                        "pickup"
-                    ],
-
-                    map: {
-
-                        width: 10,
-                        height: 6,
-
-                        blocked: [
-                            [5, 1],
-                            [5, 2],
-                            [5, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "casier_vin",
-                                x: 2,
-                                y: 0
-                            },
-                            {
-                                type: "casier_vin",
-                                x: 7,
-                                y: 0
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 4,
-                        direction: "E"
-                    },
-
-                    objects: [
-                        {
-                            id: "bouteille_rouge",
-                            type: "bouteille",
-                            label: "Bouteille rouge",
-                            x: 3,
-                            y: 4,
-                            pickable: true
-                        },
-                        {
-                            id: "bouteille_jaune",
-                            type: "bouteille",
-                            label: "Bouteille jaune",
-                            x: 4,
-                            y: 4,
-                            pickable: true
-                        },
-                        {
-                            id: "bouteille_bleue",
-                            type: "bouteille",
-                            label: "Bouteille bleue",
-                            x: 6,
-                            y: 4,
-                            pickable: true
-                        },
-                        {
-                            id: "bouteille_verte",
-                            type: "bouteille",
-                            label: "Bouteille verte",
-                            x: 8,
-                            y: 4,
-                            pickable: true
-                        }
-                    ],
-
-                    goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "bouteille_rouge"
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "bouteille_bleue"
-                            },
-                            {
-                                type: "inventory_has",
-                                object: "bouteille_verte"
-                            },
-                            {
-                                type: "inventory_not_has",
-                                object: "bouteille_jaune"
-                            }
-                        ]
-                    },
-
                     hints: [
-                        "La bouteille jaune n’est pas dans la liste.",
-                        "Tu peux vérifier si un nom appartient à une liste avec in."
+
+                        "Exemple de liste : valeurs = [2, 3].",
+
+                        "Le premier élément est valeurs[0]."
                     ]
-                }),
+                },
 
 
+                /* =========================================
+                   6-2
+                ========================================= */
 
-                level({
+                {
 
-                    level: 3,
+                    chapter:
+                        6,
+
+                    level:
+                        2,
+
+                    room:
+                        "cave_a_vin",
 
                     title:
-                        "Programme d’actions",
-
-                    instruction:
-                        "Crée une liste d’actions puis parcours-la pour rejoindre la sortie.",
+                        "Deux valeurs",
 
                     difficulty:
-                        "Difficile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise une liste pour stocker les deux distances du trajet.",
 
                     guideMessage:
-                        "Cette fois, la liste décrit le trajet lui-même.",
-
-                    starterCode:
-`actions = [
-    "avancer",
-    "droite",
-    "avancer"
-]
-
-for action in actions:
-    # Exécute l'action correspondante.
-    pass`,
-
-                    requiredConcepts: [
-                        "list",
-                        "for",
-                        "if"
-                    ],
+                        "Les deux segments peuvent être enregistrés dans une seule liste.",
 
                     map: {
 
-                        width: 9,
-                        height: 7,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [3, 1],
-                            [3, 2],
-                            [5, 4],
-                            [6, 4]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "tonneau",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "porte",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "cave_a_vin",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            4,
+                            1
+                        )
+                    ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                4,
+
+                            y:
+                                1
+                        }
                     },
 
-                    hints: [
-                        "Compare action à \"avancer\", \"gauche\" ou \"droite\".",
-                        "Chaque valeur peut déclencher une instruction différente."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "list",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Place les distances du trajet dans une liste.
+`,
+
+                    hints: [
+
+                        "Il y a deux segments de même ou de différente longueur.",
+
+                        "Accède aux éléments avec [0], [1], etc."
+                    ]
+                },
+
+
+                /* =========================================
+                   6-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        6,
+
+                    level:
+                        3,
+
+                    room:
+                        "cave_a_vin",
+
+                    title:
+                        "Une liste d’actions",
+
+                    difficulty:
+                        "Avancé",
+
+                    instruction:
+                        "Crée une liste d’actions puis parcours-la avec une boucle et une condition.",
+
+                    guideMessage:
+                        "Une liste peut aussi contenir du texte comme \"forward\" ou \"left\".",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "cave_a_vin",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            4,
+                            2
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                4,
+
+                            y:
+                                2
+                        }
+                    },
+
+                    requiredConcepts: [
+
+                        "list",
+
+                        "for",
+
+                        "condition",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Tu peux stocker des mots dans une liste.
+# Exemple : actions = ["forward", "left"]
+`,
+
+                    hints: [
+
+                        "Parcours la liste avec for.",
+
+                        "Teste la valeur de chaque action avec if.",
+
+                        "Une action peut représenter un déplacement ou une rotation."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 7
-           DICTIONNAIRES
+           BALCON
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 7,
+            chapter:
+                7,
 
             title:
                 "Dictionnaires",
 
             subtitle:
-                "Associe des noms à des valeurs.",
+                "Associer une clé à une valeur",
 
             room:
-                "Balcon",
+                "balcon",
 
             theory: [
 
                 {
+
                     title:
-                        "Clé et valeur",
+                        "Créer un dictionnaire",
 
                     body:
-                        "Un dictionnaire associe une clé à une valeur.",
+                        "Un dictionnaire associe des noms, appelés clés, à des valeurs.",
 
                     code:
-`distances = {
-    "table": 2,
-    "porte": 4
+`trajet = {
+    "distance": 3,
+    "angle": 90
 }`
                 },
 
-
                 {
+
                     title:
                         "Lire une valeur",
 
@@ -2188,311 +3606,418 @@ for action in actions:
                         "On utilise la clé entre crochets.",
 
                     code:
-`distances = {
-    "table": 2
-}
+`trajet = {"distance": 3}
 
-avancer(distances["table"])`
+forward(trajet["distance"])`
                 },
 
-
                 {
+
                     title:
                         "Plusieurs informations",
 
                     body:
-                        "Les valeurs peuvent aussi être du texte, des listes ou d’autres dictionnaires.",
+                        "Un dictionnaire est utile lorsque chaque valeur possède une signification précise."
+                },
+
+                {
+
+                    title:
+                        "Dictionnaire et condition",
+
+                    body:
+                        "La valeur associée à une clé peut aussi être utilisée dans une condition.",
 
                     code:
-`mission = {
-    "objet": "clé",
-    "distance": 3
-}`
+`config = {"tour": "left"}
+
+if config["tour"] == "left":
+    left(90)`
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   7-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        7,
+
+                    level:
+                        1,
+
+                    room:
+                        "balcon",
 
                     title:
-                        "Distance enregistrée",
-
-                    instruction:
-                        "Lis la distance dans le dictionnaire pour rejoindre la table du balcon.",
+                        "La distance nommée",
 
                     difficulty:
-                        "Facile",
+                        "Intermédiaire",
+
+                    instruction:
+                        "Stocke la distance dans un dictionnaire puis utilise-la.",
 
                     guideMessage:
-                        "La valeur dont tu as besoin est déjà enregistrée dans le dictionnaire.",
-
-                    starterCode:
-`distances = {
-    "table": 4
-}
-
-# Utilise la valeur associée à "table".
-`,
-
-                    requiredConcepts: [
-                        "dictionary",
-                        "dictionary_access"
-                    ],
+                        "Crée une clé qui représente clairement la distance à parcourir.",
 
                     map: {
 
-                        width: 8,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [],
-
-                        decorations: [
-                            {
-                                type: "table",
-                                x: 6,
-                                y: 2
-                            },
-                            {
-                                type: "plante",
-                                x: 7,
-                                y: 4
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 2,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
 
-                    goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 6,
-                                y: 2
-                            }
-                        ]
-                    },
+                    blocked: [
 
-                    hints: [
-                        "La valeur se lit avec distances[\"table\"]."
-                    ]
-                }),
+                        cell(
+                            0,
+                            0
+                        ),
 
+                        cell(
+                            7,
+                            0
+                        ),
 
-
-                level({
-
-                    level: 2,
-
-                    title:
-                        "Mission enregistrée",
-
-                    instruction:
-                        "Utilise les informations du dictionnaire pour récupérer l’arrosoir.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Le nom de l’objet et la distance sont tous les deux stockés dans mission.",
-
-                    starterCode:
-`mission = {
-    "objet": "arrosoir",
-    "distance": 3
-}
-
-# Utilise les deux valeurs.
-`,
-
-                    requiredConcepts: [
-                        "dictionary",
-                        "dictionary_access",
-                        "pickup"
+                        cell(
+                            3,
+                            2
+                        )
                     ],
 
-                    map: {
+                    decorations:
+                        getRoomDecorations(
+                            "balcon",
+                            1
+                        ),
 
-                        width: 8,
-                        height: 5,
-
-                        blocked: [
-                            [6, 1]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plante",
-                                x: 6,
-                                y: 1
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 3,
-                        direction: "E"
-                    },
-
-                    objects: [
-                        {
-                            id: "arrosoir",
-                            type: "arrosoir",
-                            label: "Arrosoir",
-                            x: 4,
-                            y: 3,
-                            pickable: true
-                        }
-                    ],
-
-                    goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "arrosoir"
-                            }
-                        ]
-                    },
-
-                    hints: [
-                        "mission[\"distance\"] donne le nombre de cases.",
-                        "mission[\"objet\"] donne le nom à transmettre à ramasser()."
-                    ]
-                }),
-
-
-
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Plan du balcon",
-
-                    instruction:
-                        "Utilise un dictionnaire contenant plusieurs étapes pour arroser les deux plantes.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "Une structure de données peut décrire toute une mission.",
-
-                    starterCode:
-`trajet = {
-    "premiere": 2,
-    "seconde": 3
-}
-
-# Rejoins les deux plantes.
-`,
-
-                    requiredConcepts: [
-                        "dictionary",
-                        "dictionary_access_multiple",
-                        "sequence"
-                    ],
-
-                    map: {
-
-                        width: 9,
-                        height: 7,
-
-                        blocked: [
-                            [4, 2],
-                            [4, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plante",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "plante",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
-                    },
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "plante_1",
-                            type: "visit",
-                            x: 3,
-                            y: 1
-                        },
-                        {
-                            id: "plante_2",
-                            type: "visit",
-                            x: 7,
-                            y: 5
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            3
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "visited",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "visited",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                3
+                        }
                     },
 
-                    hints: [
-                        "La première distance permet d’atteindre la première plante.",
-                        "Tu peux ensuite tourner et continuer vers la seconde."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "dictionary",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Crée un dictionnaire avec une clé pour la distance.
+`,
+
+                    hints: [
+
+                        "Un dictionnaire s’écrit avec des accolades.",
+
+                        "Lis une valeur avec dictionnaire[\"cle\"]."
+                    ]
+                },
+
+
+                /* =========================================
+                   7-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        7,
+
+                    level:
+                        2,
+
+                    room:
+                        "balcon",
+
+                    title:
+                        "Le trajet organisé",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Stocke plusieurs informations du trajet dans un dictionnaire.",
+
+                    guideMessage:
+                        "Utilise une clé pour chaque segment du trajet.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            3,
+                            2
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "balcon",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            2
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                2
+                        }
+                    },
+
+                    requiredConcepts: [
+
+                        "dictionary",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Ton dictionnaire peut contenir plusieurs distances.
+`,
+
+                    hints: [
+
+                        "Une clé peut s’appeler horizontal.",
+
+                        "Une autre peut s’appeler vertical."
+                    ]
+                },
+
+
+                /* =========================================
+                   7-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        7,
+
+                    level:
+                        3,
+
+                    room:
+                        "balcon",
+
+                    title:
+                        "Configuration de Pyt",
+
+                    difficulty:
+                        "Avancé",
+
+                    instruction:
+                        "Utilise un dictionnaire et une condition pour décider comment Pyt doit tourner.",
+
+                    guideMessage:
+                        "Le dictionnaire peut contenir une direction sous forme de texte.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "balcon",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            4,
+                            1
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                4,
+
+                            y:
+                                1
+                        }
+                    },
+
+                    requiredConcepts: [
+
+                        "dictionary",
+
+                        "condition",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Exemple d'idée :
+# config = {"tour": "..."}
+`,
+
+                    hints: [
+
+                        "Lis la valeur d’une clé dans ta condition.",
+
+                        "Le programme doit décider quelle rotation appliquer."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 8
-           WHILE
+           TOILETTE / SALLE D'EAU
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 8,
+            chapter:
+                8,
 
             title:
                 "Boucles while",
 
             subtitle:
-                "Répète des instructions tant qu’une condition est vraie.",
+                "Répéter tant qu’une condition est vraie",
 
             room:
-                "Toilette",
+                "toilette",
 
             theory: [
 
                 {
+
                     title:
                         "while",
 
@@ -2500,789 +4025,1168 @@ avancer(distances["table"])`
                         "Une boucle while continue tant que sa condition reste vraie.",
 
                     code:
-`while devant_libre():
-    avancer()`
+`while front_is_clear():
+    forward(1)`
                 },
 
-
                 {
+
                     title:
                         "Attention aux boucles infinies",
 
                     body:
-                        "Le code exécuté dans la boucle doit finir par modifier la situation ou la condition risque de rester vraie pour toujours.",
+                        "Si la condition ne devient jamais fausse, la boucle ne peut pas s’arrêter."
+                },
+
+                {
+
+                    title:
+                        "Utiliser une position",
+
+                    body:
+                        "Pyt peut connaître sa position avec position_x() et position_y().",
 
                     code:
 `while position_x() < 5:
-    avancer()`
+    forward(1)`
                 },
 
-
                 {
+
                     title:
-                        "while avec une condition",
+                        "Plusieurs while",
 
                     body:
-                        "Une boucle peut contenir des if, des virages et d’autres instructions.",
-
-                    code:
-`while not sur_objet("clé"):
-    if devant_libre():
-        avancer()
-    else:
-        tourner_droite()`
+                        "Une mission peut utiliser une première boucle pour un segment puis une seconde pour un autre."
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   8-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        8,
+
+                    level:
+                        1,
+
+                    room:
+                        "toilette",
 
                     title:
                         "Jusqu’au mur",
 
+                    difficulty:
+                        "Intermédiaire",
+
                     instruction:
                         "Fais avancer Pyt tant que la case devant lui est libre.",
 
-                    difficulty:
-                        "Facile",
-
                     guideMessage:
-                        "Tu ne connais pas la distance. La condition devant_libre() peut décider quand arrêter la boucle.",
-
-                    starterCode:
-`while devant_libre():
-    # Complète.
-    pass`,
-
-                    requiredConcepts: [
-                        "while"
-                    ],
+                        "Cette mission est parfaite pour while front_is_clear().",
 
                     map: {
 
-                        width: 9,
-                        height: 5,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [7, 2]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "lavabo",
-                                x: 7,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            3,
+
+                        direction:
+                            "E"
                     },
 
-                    goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 6,
-                                y: 2
-                            }
-                        ]
-                    },
+                    blocked: [
 
-                    hints: [
-                        "La boucle s’arrête automatiquement quand devant_libre() devient faux."
-                    ]
-                }),
+                        cell(
+                            6,
+                            3
+                        ),
 
+                        cell(
+                            0,
+                            1
+                        ),
 
+                        cell(
+                            6,
+                            0
+                        ),
 
-                level({
-
-                    level: 2,
-
-                    title:
-                        "Contourner l’obstacle",
-
-                    instruction:
-                        "Utilise while et une condition pour avancer jusqu’à la sortie.",
-
-                    difficulty:
-                        "Moyen",
-
-                    guideMessage:
-                        "Quand la route est bloquée, Pyt devra changer de direction.",
-
-                    starterCode:
-`while position_x() < 7:
-    if devant_libre():
-        avancer()
-    else:
-        # Que faire ?
-        pass`,
-
-                    requiredConcepts: [
-                        "while",
-                        "if",
-                        "else"
+                        cell(
+                            7,
+                            0
+                        )
                     ],
 
-                    map: {
+                    decorations:
+                        getRoomDecorations(
+                            "toilette",
+                            1
+                        ),
 
-                        width: 9,
-                        height: 7,
-
-                        blocked: [
-                            [4, 1],
-                            [4, 2],
-                            [4, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "meuble",
-                                x: 4,
-                                y: 2
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 2,
-                        direction: "E"
-                    },
+                    objects:
+                        [],
 
                     targets: [
-                        {
-                            id: "sortie",
-                            type: "destination",
-                            x: 7,
-                            y: 5
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            3
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "position",
-                                x: 7,
-                                y: 5
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                3
+                        },
+
+                        noCollisions:
+                            true
                     },
 
-                    hints: [
-                        "La boucle peut contenir un if.",
-                        "Teste devant_libre() avant chaque déplacement."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "while",
 
-
-                level({
-
-                    level: 3,
-
-                    title:
-                        "Trouver la clé",
-
-                    instruction:
-                        "Continue à explorer jusqu’à ce que Pyt trouve la clé.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "La boucle peut s’arrêter quand Pyt se trouve enfin sur la clé.",
+                        "forward"
+                    ],
 
                     starterCode:
-`while not sur_objet("cle"):
-    if devant_libre():
-        avancer()
-    else:
-        tourner_droite()
-
-# Que faire une fois la clé trouvée ?
+`# Répète tant que le passage est libre.
 `,
 
-                    requiredConcepts: [
-                        "while",
-                        "if",
-                        "pickup"
-                    ],
+                    hints: [
+
+                        "La boucle doit s’arrêter juste avant l’obstacle.",
+
+                        "front_is_clear() devient False devant le mur."
+                    ]
+                },
+
+
+                /* =========================================
+                   8-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        8,
+
+                    level:
+                        2,
+
+                    room:
+                        "toilette",
+
+                    title:
+                        "Jusqu’à la coordonnée",
+
+                    difficulty:
+                        "Intermédiaire",
+
+                    instruction:
+                        "Utilise la position de Pyt dans la condition de la boucle.",
+
+                    guideMessage:
+                        "position_x() donne la colonne actuelle de Pyt.",
 
                     map: {
 
-                        width: 9,
-                        height: 7,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [3, 1],
-                            [3, 2],
-                            [5, 4],
-                            [6, 4],
-                            [7, 2]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "meuble",
-                                x: 3,
-                                y: 1
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "cle",
-                            type: "cle",
-                            label: "Clé",
-                            x: 7,
-                            y: 5,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            0,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "toilette",
+                            2
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            5,
+                            4
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "cle"
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                5,
+
+                            y:
+                                4
+                        }
                     },
 
-                    hints: [
-                        "La boucle doit se terminer lorsque sur_objet(\"cle\") devient vrai.",
-                        "Après la boucle, Pyt se trouve normalement sur la clé."
-                    ]
-                })
+                    requiredConcepts: [
 
+                        "while",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Utilise position_x() dans la condition.
+`,
+
+                    hints: [
+
+                        "Observe la colonne de l’objectif.",
+
+                        "La valeur de position_x() change après chaque déplacement."
+                    ]
+                },
+
+
+                /* =========================================
+                   8-3
+                ========================================= */
+
+                {
+
+                    chapter:
+                        8,
+
+                    level:
+                        3,
+
+                    room:
+                        "toilette",
+
+                    title:
+                        "Deux couloirs",
+
+                    difficulty:
+                        "Avancé",
+
+                    instruction:
+                        "Utilise plusieurs boucles while pour parcourir les deux parties du trajet.",
+
+                    guideMessage:
+                        "Une première boucle peut aller jusqu’à l’obstacle, puis une autre terminer le trajet.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            4,
+                            4
+                        ),
+
+                        cell(
+                            0,
+                            1
+                        ),
+
+                        cell(
+                            6,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "toilette",
+                            3
+                        ),
+
+                    objects:
+                        [],
+
+                    targets: [
+
+                        target(
+                            "goal",
+                            "goal",
+                            3,
+                            1
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                3,
+
+                            y:
+                                1
+                        },
+
+                        noCollisions:
+                            true
+                    },
+
+                    requiredConcepts: [
+
+                        "while",
+
+                        "left",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# Tu peux utiliser plusieurs boucles while.
+`,
+
+                    hints: [
+
+                        "La première boucle peut s’arrêter devant l’obstacle.",
+
+                        "Après avoir tourné, position_y() peut aider à savoir quand arrêter la seconde boucle."
+                    ]
+                }
             ]
-        }),
+        },
 
 
 
         /* =================================================
            CHAPITRE 9
-           SYNTHÈSE
+           JARDIN
         ================================================= */
 
-        chapter({
+        {
 
-            chapter: 9,
+            chapter:
+                9,
 
             title:
                 "Mission finale",
 
             subtitle:
-                "Combine tout ce que tu as appris.",
+                "Combiner les outils Python appris dans la maison",
 
             room:
-                "Jardin",
+                "jardin",
 
             theory: [
 
                 {
+
                     title:
-                        "Construire un programme",
+                        "La mission finale",
 
                     body: [
-                        "Un programme peut mélanger variables, conditions, boucles, fonctions et structures de données.",
-                        "Il n’existe pas toujours une seule bonne solution."
+
+                        "Dans le jardin, tu vas combiner plusieurs notions apprises dans les chapitres précédents.",
+
+                        "Il n’existe pas une seule bonne façon d’écrire le programme. PYT vérifie principalement le résultat obtenu et les notions demandées."
                     ]
                 },
 
-
                 {
+
                     title:
                         "Décomposer le problème",
 
                     body: [
-                        "Commence par identifier les petites tâches : se déplacer, récupérer un objet, contourner un obstacle puis atteindre la destination.",
-                        "Une fonction peut représenter une tâche. Une liste ou un dictionnaire peut stocker les informations nécessaires."
+
+                        "Observe d’abord la carte.",
+
+                        "Découpe ensuite la mission en petites parties : déplacement, décision, répétition et interaction."
                     ]
                 },
 
-
                 {
+
                     title:
-                        "Tester progressivement",
+                        "Réutiliser une fonction",
 
                     body:
-                        "Un programme complexe est plus facile à corriger si tu testes chaque partie avant d’ajouter la suivante."
+                        "Une fonction peut éviter de répéter plusieurs fois la même logique."
+                },
+
+                {
+
+                    title:
+                        "Choisir la bonne structure",
+
+                    body: [
+
+                        "Une liste est utile pour conserver une suite de valeurs.",
+
+                        "Un dictionnaire est utile pour associer des noms à des informations.",
+
+                        "for convient lorsque le nombre de répétitions est connu.",
+
+                        "while convient lorsque l’arrêt dépend d’une condition."
+                    ]
                 }
             ],
 
 
             levels: [
 
-                level({
+                /* =========================================
+                   9-1
+                ========================================= */
 
-                    level: 1,
+                {
+
+                    chapter:
+                        9,
+
+                    level:
+                        1,
+
+                    room:
+                        "jardin",
 
                     title:
-                        "Préparer la piscine",
-
-                    instruction:
-                        "Récupère la bouée puis apporte-la jusqu’à la piscine.",
+                        "Traversée du jardin",
 
                     difficulty:
-                        "Moyen",
+                        "Avancé",
+
+                    instruction:
+                        "Crée une fonction et utilise une boucle pour rejoindre l’autre côté du jardin.",
 
                     guideMessage:
-                        "Tu peux choisir ta méthode. Utilise au moins une structure de contrôle.",
-
-                    starterCode:
-`# Récupère la bouée puis rejoins la piscine.
-`,
-
-                    requiredConcepts: [
-                        "control_structure"
-                    ],
+                        "Combine une variable, une fonction et une boucle for.",
 
                     map: {
 
-                        width: 10,
-                        height: 8,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 1],
-                            [4, 2],
-                            [4, 3],
-                            [6, 5]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "piscine",
-                                x: 8,
-                                y: 5
-                            },
-                            {
-                                type: "transat",
-                                x: 8,
-                                y: 2
-                            },
-                            {
-                                type: "arbre",
-                                x: 4,
-                                y: 1
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "E"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
 
-                    objects: [
-                        {
-                            id: "bouee",
-                            type: "bouee",
-                            label: "Bouée",
-                            x: 2,
-                            y: 6,
-                            pickable: true
-                        }
+                    blocked: [
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        ),
+
+                        cell(
+                            5,
+                            2
+                        ),
+
+                        cell(
+                            6,
+                            2
+                        )
                     ],
 
+                    decorations:
+                        getRoomDecorations(
+                            "jardin",
+                            1
+                        ),
+
+                    objects:
+                        [],
+
                     targets: [
-                        {
-                            id: "piscine",
-                            type: "destination",
-                            x: 8,
-                            y: 6
-                        }
+
+                        target(
+                            "goal",
+                            "goal",
+                            6,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "bouee"
-                            },
-                            {
-                                type: "position",
-                                x: 8,
-                                y: 6
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                1
+                        }
                     },
 
-                    hints: [
-                        "Commence par découper la mission en deux étapes.",
-                        "Tu peux créer une fonction pour une partie du trajet."
-                    ]
-                }),
+                    requiredConcepts: [
 
+                        "variable",
 
+                        "function",
 
-                level({
+                        "for",
 
-                    level: 2,
+                        "range",
 
-                    title:
-                        "Entretien du jardin",
+                        "left",
 
-                    instruction:
-                        "Récupère l’arrosoir et visite les trois plantes du jardin.",
-
-                    difficulty:
-                        "Difficile",
-
-                    guideMessage:
-                        "Plusieurs plantes doivent être visitées. Une liste peut être utile pour organiser la mission.",
+                        "forward"
+                    ],
 
                     starterCode:
-`plantes = [
-    "plante_1",
-    "plante_2",
-    "plante_3"
-]
-
-# Organise ton programme.
+`# Combine plusieurs notions apprises dans les chapitres précédents.
 `,
 
+                    hints: [
+
+                        "Une fonction peut recevoir une distance.",
+
+                        "La fonction peut elle-même contenir une boucle for.",
+
+                        "Découpe le trajet en deux grands segments."
+                    ]
+                },
+
+
+                /* =========================================
+                   9-2
+                ========================================= */
+
+                {
+
+                    chapter:
+                        9,
+
+                    level:
+                        2,
+
+                    room:
+                        "jardin",
+
+                    title:
+                        "La clé du portail",
+
+                    difficulty:
+                        "Très avancé",
+
+                    instruction:
+                        "Récupère la clé et apporte-la au portail en utilisant une liste, un dictionnaire, une boucle et des conditions.",
+
+                    guideMessage:
+                        "La clé est ramassée automatiquement. Organise tes actions avec les structures Python apprises.",
+
+                    map: {
+
+                        width:
+                            PYT_MAP_WIDTH,
+
+                        height:
+                            PYT_MAP_HEIGHT
+                    },
+
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
+                    },
+
+                    blocked: [
+
+                        cell(
+                            3,
+                            4
+                        ),
+
+                        cell(
+                            4,
+                            4
+                        ),
+
+                        cell(
+                            5,
+                            4
+                        ),
+
+                        cell(
+                            5,
+                            2
+                        ),
+
+                        cell(
+                            6,
+                            2
+                        ),
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "jardin",
+                            2
+                        ),
+
+                    objects: [
+
+                        object(
+                            "cle_portail",
+                            "cle",
+                            2,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        )
+                    ],
+
+                    targets: [
+
+                        target(
+                            "portail",
+                            "deposit",
+                            6,
+                            1,
+                            {
+
+                                object:
+                                    "cle_portail"
+                            }
+                        )
+                    ],
+
+                    goal: {
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                1
+                        },
+
+                        requiredObject:
+                            "cle_portail",
+
+                        noCollisions:
+                            true
+                    },
+
                     requiredConcepts: [
+
                         "list",
-                        "loop",
-                        "function_or_condition"
+
+                        "dictionary",
+
+                        "for",
+
+                        "condition",
+
+                        "forward"
                     ],
 
-                    map: {
-
-                        width: 11,
-                        height: 8,
-
-                        blocked: [
-                            [4, 2],
-                            [4, 3],
-                            [7, 4],
-                            [7, 5]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "plante",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "plante",
-                                x: 6,
-                                y: 6
-                            },
-                            {
-                                type: "plante",
-                                x: 9,
-                                y: 2
-                            },
-                            {
-                                type: "fontaine",
-                                x: 5,
-                                y: 4
-                            }
-                        ]
-                    },
-
-                    robot: {
-                        x: 1,
-                        y: 6,
-                        direction: "E"
-                    },
-
-                    objects: [
-                        {
-                            id: "arrosoir",
-                            type: "arrosoir",
-                            label: "Arrosoir",
-                            x: 2,
-                            y: 6,
-                            pickable: true
-                        }
-                    ],
-
-                    targets: [
-                        {
-                            id: "plante_1",
-                            type: "visit",
-                            x: 3,
-                            y: 1
-                        },
-                        {
-                            id: "plante_2",
-                            type: "visit",
-                            x: 6,
-                            y: 6
-                        },
-                        {
-                            id: "plante_3",
-                            type: "visit",
-                            x: 9,
-                            y: 2
-                        }
-                    ],
-
-                    goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "arrosoir"
-                            },
-                            {
-                                type: "visited",
-                                x: 3,
-                                y: 1
-                            },
-                            {
-                                type: "visited",
-                                x: 6,
-                                y: 6
-                            },
-                            {
-                                type: "visited",
-                                x: 9,
-                                y: 2
-                            }
-                        ]
-                    },
+                    starterCode:
+`# La clé sera récupérée automatiquement.
+# Organise les informations de ton trajet.
+`,
 
                     hints: [
-                        "L’arrosoir doit être récupéré avant de terminer le parcours.",
-                        "Une fonction de déplacement peut éviter de recopier du code."
+
+                        "Après la clé, le passage direct est bloqué.",
+
+                        "Une liste peut représenter plusieurs actions.",
+
+                        "Un dictionnaire peut contenir les valeurs utilisées par ces actions.",
+
+                        "Une condition peut choisir quoi faire selon l’action actuellement parcourue."
                     ]
-                }),
+                },
 
 
+                /* =========================================
+                   9-3
+                   FINAL
+                ========================================= */
 
-                level({
+                {
 
-                    level: 3,
+                    chapter:
+                        9,
+
+                    level:
+                        3,
+
+                    room:
+                        "jardin",
 
                     title:
-                        "La grande mission PYT",
-
-                    instruction:
-                        "Récupère la clé, récupère le colis, passe par la piscine puis dépose le colis devant la porte de la maison.",
+                        "Mission PYT",
 
                     difficulty:
                         "Final",
 
+                    instruction:
+                        "Récupère l’arrosoir, traverse la zone boueuse, nettoie le passage et termine à la station de recharge.",
+
                     guideMessage:
-                        "C’est la mission finale. Utilise librement tout ce que tu as appris pour construire ton programme.",
-
-                    starterCode:
-`mission = {
-    "cle": "cle",
-    "colis": "colis",
-    "destination": "porte"
-}
-
-def mission_finale():
-    # Construis ta solution.
-    pass
-
-mission_finale()
-`,
-
-                    requiredConcepts: [
-                        "function_definition",
-                        "dictionary",
-                        "control_structure",
-                        "loop"
-                    ],
+                        "C’est la mission finale. Décompose le problème avant de commencer à coder.",
 
                     map: {
 
-                        width: 12,
-                        height: 9,
+                        width:
+                            PYT_MAP_WIDTH,
 
-                        blocked: [
-                            [4, 1],
-                            [4, 2],
-                            [4, 3],
-
-                            [7, 4],
-                            [7, 5],
-
-                            [9, 2],
-                            [9, 3]
-                        ],
-
-                        decorations: [
-                            {
-                                type: "arbre",
-                                x: 4,
-                                y: 1
-                            },
-                            {
-                                type: "piscine",
-                                x: 8,
-                                y: 6
-                            },
-                            {
-                                type: "transat",
-                                x: 9,
-                                y: 7
-                            },
-                            {
-                                type: "porte",
-                                x: 10,
-                                y: 1
-                            },
-                            {
-                                type: "fleurs",
-                                x: 2,
-                                y: 7
-                            },
-                            {
-                                type: "fontaine",
-                                x: 6,
-                                y: 2
-                            }
-                        ]
+                        height:
+                            PYT_MAP_HEIGHT
                     },
 
-                    robot: {
-                        x: 1,
-                        y: 1,
-                        direction: "S"
+                    robotStart: {
+
+                        x:
+                            1,
+
+                        y:
+                            4,
+
+                        direction:
+                            "E"
                     },
+
+                    blocked: [
+
+                        /*
+                         * Le chemin direct est fermé.
+                         */
+
+                        cell(
+                            3,
+                            4
+                        ),
+
+                        cell(
+                            4,
+                            4
+                        ),
+
+                        cell(
+                            5,
+                            4
+                        ),
+
+
+                        /*
+                         * Piscine.
+                         */
+
+                        cell(
+                            5,
+                            2
+                        ),
+
+                        cell(
+                            5,
+                            3
+                        ),
+
+                        cell(
+                            6,
+                            3
+                        ),
+
+
+                        /*
+                         * Décor haut.
+                         */
+
+                        cell(
+                            0,
+                            0
+                        ),
+
+                        cell(
+                            7,
+                            0
+                        )
+                    ],
+
+                    decorations:
+                        getRoomDecorations(
+                            "jardin",
+                            3
+                        ),
 
                     objects: [
-                        {
-                            id: "cle",
-                            type: "cle",
-                            label: "Clé",
-                            x: 1,
-                            y: 6,
-                            pickable: true
-                        },
-                        {
-                            id: "colis",
-                            type: "caisse",
-                            label: "Colis",
-                            x: 6,
-                            y: 7,
-                            pickable: true
-                        }
+
+                        /*
+                         * 1.
+                         * Ramassage automatique.
+                         */
+
+                        object(
+                            "arrosoir_final",
+                            "arrosoir",
+                            2,
+                            4,
+                            {
+
+                                pickable:
+                                    true
+                            }
+                        ),
+
+
+                        /*
+                         * 2.
+                         * La boue disparaît automatiquement
+                         * lorsque Pyt passe dessus.
+                         */
+
+                        object(
+                            "boue_finale",
+                            "boue",
+                            3,
+                            2,
+                            {
+
+                                cleanable:
+                                    true,
+
+                                solid:
+                                    false
+                            }
+                        ),
+
+
+                        /*
+                         * 3.
+                         * Station de recharge.
+                         */
+
+                        object(
+                            "station_finale",
+                            "station_recharge",
+                            6,
+                            1,
+                            {
+
+                                solid:
+                                    false
+                            }
+                        )
                     ],
 
                     targets: [
-                        {
-                            id: "piscine",
-                            type: "visit",
-                            x: 8,
-                            y: 7,
-                            label: "Piscine"
-                        },
-                        {
-                            id: "porte",
-                            type: "deposit",
-                            x: 10,
-                            y: 1,
-                            label: "Porte"
-                        }
+
+                        target(
+                            "goal_final",
+                            "goal",
+                            6,
+                            1
+                        )
                     ],
 
                     goal: {
-                        rules: [
-                            {
-                                type: "inventory_has",
-                                object: "cle"
-                            },
-                            {
-                                type: "visited",
-                                x: 8,
-                                y: 7
-                            },
-                            {
-                                type: "object_at",
-                                object: "colis",
-                                x: 10,
-                                y: 1
-                            },
-                            {
-                                type: "position",
-                                x: 10,
-                                y: 1
-                            }
-                        ]
+
+                        position: {
+
+                            x:
+                                6,
+
+                            y:
+                                1
+                        },
+
+                        requiredObject:
+                            "arrosoir_final",
+
+                        cleaned:
+                            1,
+
+                        recharge:
+                            true,
+
+                        noCollisions:
+                            true
                     },
 
+                    requiredConcepts: [
+
+                        "variable",
+
+                        "list",
+
+                        "dictionary",
+
+                        "condition",
+
+                        "while",
+
+                        "function",
+
+                        "forward"
+                    ],
+
+                    starterCode:
+`# MISSION FINALE
+#
+# 1. Observe le jardin.
+# 2. Découpe le trajet en plusieurs étapes.
+# 3. Utilise les structures Python apprises.
+#
+`,
+
                     hints: [
-                        "Résous d’abord chaque partie séparément.",
-                        "Une fonction peut gérer une étape du trajet.",
-                        "Le colis doit être déposé devant la porte, pas seulement conservé dans l’inventaire.",
-                        "Il existe plusieurs programmes corrects. Seul le résultat et l’utilisation des notions demandées comptent."
+
+                        "L’arrosoir est récupéré automatiquement lorsque Pyt passe dessus.",
+
+                        "Le passage direct vers la droite est bloqué après l’arrosoir.",
+
+                        "La boue se trouve plus haut dans le jardin.",
+
+                        "Pyt nettoie automatiquement la boue lorsqu’il atteint sa case.",
+
+                        "La dernière destination est la station de recharge.",
+
+                        "Une fonction peut regrouper une partie répétitive du déplacement.",
+
+                        "Une boucle while peut être utile lorsque l’arrêt dépend de la position ou d’un obstacle.",
+
+                        "Une liste et un dictionnaire peuvent servir à organiser les informations du trajet."
                     ]
-                })
-
+                }
             ]
-        })
+        }
+    ]
+};
 
-    ];
 
 
+/* =========================================================
+   HELPERS PUBLICS
+========================================================= */
 
-    /* =====================================================
-       EXPORT
-    ===================================================== */
+PYT_LEVEL_DATA.getChapter =
+    function getChapter(
+        chapterNumber
+    ) {
 
-    const data = {
-
-        version:
-            1,
-
-        chapterCount:
-            chapters.length,
-
-        levelCount:
-            chapters.reduce(
-                (
-                    total,
-                    currentChapter
-                ) =>
-                    total +
-                    currentChapter.levels.length,
-                0
-            ),
-
-        chapters
+        return this.chapters
+            .find(
+                chapter =>
+                    Number(
+                        chapter.chapter
+                    ) ===
+                    Number(
+                        chapterNumber
+                    )
+            ) ||
+            null;
     };
 
 
-    window.PYT_LEVELS =
-        data;
+
+PYT_LEVEL_DATA.getLevel =
+    function getLevel(
+        chapterNumber,
+        levelNumber
+    ) {
+
+        const chapter =
+            this.getChapter(
+                chapterNumber
+            );
 
 
-    /*
-    Alias pratiques pour éviter de casser
-    une ancienne partie du projet qui chercherait
-    encore LEVELS.
-    */
+        if (
+            !chapter
+        ) {
 
-    window.GAME_LEVELS =
-        data;
+            return null;
+        }
 
-    window.LEVELS =
-        data;
 
-})();
+        return chapter.levels
+            .find(
+                level =>
+                    Number(
+                        level.level
+                    ) ===
+                    Number(
+                        levelNumber
+                    )
+            ) ||
+            null;
+    };
+
+
+
+PYT_LEVEL_DATA.getAllLevels =
+    function getAllLevels() {
+
+        return this.chapters
+            .flatMap(
+                chapter =>
+                    chapter.levels
+            );
+    };
+
+
+
+PYT_LEVEL_DATA.getLevelCount =
+    function getLevelCount() {
+
+        return this.getAllLevels()
+            .length;
+    };
+
+
+
+PYT_LEVEL_DATA.getLevelKey =
+    function getLevelKey(
+        chapter,
+        level
+    ) {
+
+        return levelKey(
+            chapter,
+            level
+        );
+    };
+
+
+
+/* =========================================================
+   EXPORTS
+========================================================= */
+
+window.PYT_GAME_DATA =
+    PYT_LEVEL_DATA;
+
+
+window.PYT_LEVELS =
+    PYT_LEVEL_DATA;
+
+
+window.GAME_LEVELS =
+    PYT_LEVEL_DATA;
+
+
+window.LEVELS =
+    PYT_LEVEL_DATA;
+
+
+window.levels =
+    PYT_LEVEL_DATA;

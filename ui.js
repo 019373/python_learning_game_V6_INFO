@@ -1,18 +1,42 @@
 "use strict";
 
 /* =========================================================
-   PYT
-   ui.js
+   PYT - ui.js
 
-   Interface générale :
-   - carte de la maison dessinée en code
-   - progression
-   - chapitres
-   - niveaux
-   - cours
+   NAVIGATION DU JEU
+
+   INTRO
+      ↓
+   CARTE GÉNÉRALE DE LA MAISON
+      ↓
+   CHAPITRE
+      ↓
+   THÉORIE OBLIGATOIRE
+      ↓
+   PIÈCE DU CHAPITRE
+      ↓
+   EXERCICE 1 → 2 → 3
+      ↓
+   CHAPITRE SUIVANT DÉBLOQUÉ
+
+   ---------------------------------------------------------
+
+   Cette version gère :
+
+   - carte complète de la maison
+   - 9 chapitres placés dans les pièces
+   - badges dessinés en pixel art
+   - chapitres verrouillés
+   - théorie obligatoire
+   - vue détaillée de la pièce
+   - exercices verrouillés progressivement
+   - progression sauvegardée
+   - retour aux anciens chapitres
+   - erreurs
    - aide de Pyt
-   - gestion des erreurs
-   - retour au cours sans perdre le code
+   - code conservé après retour au cours
+   - aucune solution affichée dans la progression
+
 ========================================================= */
 
 
@@ -20,46 +44,109 @@ class PytUI {
 
     constructor() {
 
+        /* =====================================================
+           PROGRESSION
+        ===================================================== */
+
         this.progress = {
+
             completed: {}
         };
 
-        this.currentLevelData = null;
 
-        this.loadedLevelKey = null;
+        /* =====================================================
+           ÉTAT
+        ===================================================== */
 
-        this.failureCounts = {};
+        this.mapMode =
+            "house";
 
-        this.reviewMode = false;
 
-        this.reviewContext = null;
+        this.selectedChapter =
+            1;
 
-        this.firstMapHintShown = false;
 
-        this.mapCanvas = null;
+        this.currentLevelData =
+            null;
 
-        this.mapCtx = null;
 
-        this.mapAnimationFrame = null;
+        this.loadedLevelKey =
+            null;
+
+
+        this.failureCounts =
+            {};
+
+
+        /* =====================================================
+           THÉORIE
+        ===================================================== */
+
+        this.theoryEntryPending =
+            false;
+
+
+        this.reviewMode =
+            false;
+
+
+        this.reviewContext =
+            null;
+
+
+        /* =====================================================
+           CARTE
+        ===================================================== */
+
+        this.mapCanvas =
+            null;
+
+
+        this.mapCtx =
+            null;
+
+
+        this.chapterHitboxes =
+            [];
+
+
+        this.mapAnimationFrame =
+            null;
+
+
+        this.lastMapAnimationTime =
+            0;
+
+
+        /* =====================================================
+           AIDE
+        ===================================================== */
+
+        this.firstHouseHintShown =
+            false;
+
 
         this.init();
     }
 
 
 
-    /* =====================================================
+    /* =========================================================
        INITIALISATION
-    ===================================================== */
+    ========================================================= */
 
     init() {
 
         this.loadProgress();
 
+        this.repairArtCompatibility();
+
+        this.prepareHouseCanvas();
+
         this.bindEvents();
 
         this.prepareEditor();
 
-        this.prepareHouseMap();
 
         window.setTimeout(
             () => {
@@ -73,9 +160,60 @@ class PytUI {
 
 
 
-    /* =====================================================
+    /* =========================================================
+       COMPATIBILITÉ ART.JS
+    ========================================================= */
+
+    repairArtCompatibility() {
+
+        /*
+         * Le gros art.js précédent utilisait deux helpers
+         * directement depuis palette.
+         *
+         * On les fournit ici pour éviter une erreur avant
+         * qu'on fasse le prochain passage complet sur art.js.
+         */
+
+        const palette =
+            window.PYTArt
+                ?.palette;
+
+
+        if (
+            !palette
+        ) {
+
+            return;
+        }
+
+
+        if (
+            typeof palette.glassBlue !==
+            "function"
+        ) {
+
+            palette.glassBlue =
+                () =>
+                    "#74c9dd";
+        }
+
+
+        if (
+            typeof palette.glassSteel !==
+            "function"
+        ) {
+
+            palette.glassSteel =
+                () =>
+                    "#9dc3c8";
+        }
+    }
+
+
+
+    /* =========================================================
        EVENTS
-    ===================================================== */
+    ========================================================= */
 
     bindEvents() {
 
@@ -83,7 +221,9 @@ class PytUI {
             "pyt:app-ready",
             () => {
 
-                this.refresh();
+                this.openHouseMap(
+                    false
+                );
             }
         );
 
@@ -93,8 +233,6 @@ class PytUI {
             () => {
 
                 this.renderMap();
-
-                this.showFirstMapHint();
             }
         );
 
@@ -109,84 +247,12 @@ class PytUI {
 
 
         window.addEventListener(
-            "pyt:chapter-change",
-            () => {
-
-                this.renderMap();
-
-                this.renderCourse();
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:chapter-request",
-            event => {
-
-                this.handleChapterRequest(
-                    event
-                );
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:level-select",
-            event => {
-
-                const detail =
-                    event.detail || {};
-
-
-                this.loadLevel(
-                    detail.chapter,
-                    detail.level
-                );
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:run-code",
-            () => {
-
-                this.setExecuting(
-                    true
-                );
-            }
-        );
-
-
-        window.addEventListener(
             "pyt:execution-result",
             event => {
 
                 this.handleExecutionResult(
-                    event.detail || {}
-                );
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:robot-thought",
-            event => {
-
-                window.pytApp?.showThought(
-                    event.detail?.message
-                );
-            }
-        );
-
-
-        window.addEventListener(
-            "pyt:code-error-line",
-            event => {
-
-                this.renderCodeError(
-                    Number(
-                        event.detail?.line
-                    )
+                    event.detail ||
+                    {}
                 );
             }
         );
@@ -196,7 +262,7 @@ class PytUI {
             "pyt:restart-level",
             () => {
 
-                this.handleRestart();
+                this.restartLevel();
             }
         );
 
@@ -205,36 +271,60 @@ class PytUI {
             "resize",
             () => {
 
-                this.resizeHouseMap();
+                this.resizeMapCanvas();
             }
         );
 
 
+        this.bindMapButtons();
+
+        this.bindLevelButtons();
+
+        this.bindCourseButton();
+
+        this.bindChapterNavigation();
+    }
+
+
+
+    /* =========================================================
+       BOUTONS CARTE
+    ========================================================= */
+
+    bindMapButtons() {
+
         const courseButton =
             document.getElementById(
-                "course-map-button"
+                "map-course-button"
             );
 
 
-        if (courseButton) {
+        if (
+            courseButton
+        ) {
 
             courseButton.addEventListener(
                 "click",
                 event => {
 
+                    event.preventDefault();
+
+                    event.stopImmediatePropagation();
+
+
                     if (
-                        !this.reviewMode
+                        this.mapMode ===
+                        "house"
                     ) {
 
                         return;
                     }
 
 
-                    event.preventDefault();
-
-                    event.stopImmediatePropagation();
-
-                    this.returnFromTheory();
+                    this.openTheoryForChapter(
+                        this.selectedChapter,
+                        false
+                    );
 
                 },
                 true
@@ -244,32 +334,270 @@ class PytUI {
 
 
 
-    /* =====================================================
-       RAFRAÎCHISSEMENT
-    ===================================================== */
+    /* =========================================================
+       BOUTONS EXERCICES
+    ========================================================= */
 
-    refresh() {
+    bindLevelButtons() {
+
+        for (
+            let level = 1;
+            level <= 3;
+            level += 1
+        ) {
+
+            const button =
+                document.getElementById(
+                    `level-node-${level}`
+                );
+
+
+            if (
+                !button
+            ) {
+
+                continue;
+            }
+
+
+            button.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    event.stopImmediatePropagation();
+
+
+                    if (
+                        this.mapMode !==
+                        "chapter"
+                    ) {
+
+                        return;
+                    }
+
+
+                    if (
+                        !this.isLevelUnlocked(
+                            this.selectedChapter,
+                            level
+                        )
+                    ) {
+
+                        window.pytApp
+                            ?.showGuide(
+                                "Cet exercice est encore verrouillé. Termine l’exercice précédent."
+                            );
+
+                        return;
+                    }
+
+
+                    this.openLevel(
+                        this.selectedChapter,
+                        level
+                    );
+
+                },
+                true
+            );
+        }
+    }
+
+
+
+    /* =========================================================
+       BOUTON COURS
+    ========================================================= */
+
+    bindCourseButton() {
+
+        const button =
+            document.getElementById(
+                "course-map-button"
+            );
+
 
         if (
-            !window.pytApp
+            !button
         ) {
 
             return;
         }
 
 
-        this.renderMap();
+        button.addEventListener(
+            "click",
+            event => {
 
-        this.renderCourse();
+                event.preventDefault();
 
-        this.resizeHouseMap();
+                event.stopImmediatePropagation();
+
+
+                /*
+                 * Entrée normale dans un chapitre.
+                 */
+
+                if (
+                    this.theoryEntryPending
+                ) {
+
+                    this.finishMandatoryTheory();
+
+                    return;
+                }
+
+
+                /*
+                 * Retour au jeu après consultation du cours
+                 * depuis une erreur.
+                 */
+
+                if (
+                    this.reviewMode &&
+                    this.reviewContext
+                ) {
+
+                    this.returnFromTheoryReview();
+
+                    return;
+                }
+
+
+                /*
+                 * Sinon on revient à la carte de la pièce.
+                 */
+
+                this.openChapterRoom(
+                    this.selectedChapter
+                );
+
+            },
+            true
+        );
     }
 
 
 
-    /* =====================================================
+    /* =========================================================
+       NAVIGATION CHAPITRES
+    ========================================================= */
+
+    bindChapterNavigation() {
+
+        const previous =
+            document.getElementById(
+                "previous-chapter-button"
+            );
+
+
+        const next =
+            document.getElementById(
+                "next-chapter-button"
+            );
+
+
+        if (
+            previous
+        ) {
+
+            previous.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    event.stopImmediatePropagation();
+
+
+                    if (
+                        this.mapMode ===
+                        "chapter"
+                    ) {
+
+                        this.openHouseMap();
+
+                        return;
+                    }
+
+
+                    this.openHouseMap();
+
+                },
+                true
+            );
+        }
+
+
+        if (
+            next
+        ) {
+
+            next.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    event.stopImmediatePropagation();
+
+
+                    if (
+                        this.mapMode !==
+                        "chapter"
+                    ) {
+
+                        return;
+                    }
+
+
+                    const nextChapter =
+                        this.selectedChapter +
+                        1;
+
+
+                    if (
+                        nextChapter >
+                        this.getTotalChapters()
+                    ) {
+
+                        return;
+                    }
+
+
+                    if (
+                        !this.isChapterUnlocked(
+                            nextChapter
+                        )
+                    ) {
+
+                        window.pytApp
+                            ?.showGuide(
+                                "Le chapitre suivant est encore verrouillé."
+                            );
+
+                        return;
+                    }
+
+
+                    this.openTheoryForChapter(
+                        nextChapter,
+                        true
+                    );
+
+                },
+                true
+            );
+        }
+    }
+
+
+
+    /* =========================================================
        DONNÉES
-    ===================================================== */
+    ========================================================= */
 
     getDataSource() {
 
@@ -292,7 +620,9 @@ class PytUI {
             of sources
         ) {
 
-            if (source) {
+            if (
+                source
+            ) {
 
                 return source;
             }
@@ -339,6 +669,18 @@ class PytUI {
 
 
         return [];
+    }
+
+
+
+    getTotalChapters() {
+
+        const chapters =
+            this.getChapters();
+
+
+        return chapters.length ||
+            9;
     }
 
 
@@ -419,17 +761,11 @@ class PytUI {
             );
 
 
-        if (
-            Array.isArray(
-                chapter.levels
-            )
-        ) {
-
-            return chapter.levels;
-        }
-
-
-        return [];
+        return Array.isArray(
+            chapter.levels
+        )
+            ? chapter.levels
+            : [];
     }
 
 
@@ -471,6 +807,12 @@ class PytUI {
             );
 
 
+        const chapter =
+            this.getChapterData(
+                chapterNumber
+            );
+
+
         if (
             level
         ) {
@@ -487,7 +829,11 @@ class PytUI {
                 level:
                     Number(
                         levelNumber
-                    )
+                    ),
+
+                room:
+                    level.room ||
+                    chapter.room
             };
         }
 
@@ -504,6 +850,9 @@ class PytUI {
                     levelNumber
                 ),
 
+            room:
+                chapter.room,
+
             title:
                 `Exercice ${levelNumber}`,
 
@@ -511,12 +860,7 @@ class PytUI {
                 "Termine la mission.",
 
             difficulty:
-                "Facile",
-
-            room:
-                this.getChapterData(
-                    chapterNumber
-                ).room,
+                "Exercice",
 
             starterCode:
                 ""
@@ -525,11 +869,11 @@ class PytUI {
 
 
 
-    /* =====================================================
-       CARTE GÉNÉRALE
-    ===================================================== */
+    /* =========================================================
+       CANVAS CARTE
+    ========================================================= */
 
-    prepareHouseMap() {
+    prepareHouseCanvas() {
 
         const decoration =
             document.getElementById(
@@ -545,70 +889,61 @@ class PytUI {
         }
 
 
-        /*
-        Plus aucune image de fond externe.
-        */
+        decoration.innerHTML =
+            "";
 
-        decoration.style.backgroundImage =
+
+        decoration.style.background =
             "none";
 
-
-        decoration.style.position =
-            "absolute";
-
-        decoration.style.inset =
-            "0";
 
         decoration.style.pointerEvents =
             "none";
 
-        decoration.style.overflow =
-            "hidden";
 
-
-        let canvas =
-            document.getElementById(
-                "house-map-canvas"
+        const canvas =
+            document.createElement(
+                "canvas"
             );
 
 
-        if (
-            !canvas
-        ) {
-
-            canvas =
-                document.createElement(
-                    "canvas"
-                );
+        canvas.id =
+            "house-map-canvas";
 
 
-            canvas.id =
-                "house-map-canvas";
+        canvas.style.position =
+            "absolute";
+
+        canvas.style.inset =
+            "0";
+
+        canvas.style.width =
+            "100%";
+
+        canvas.style.height =
+            "100%";
+
+        canvas.style.imageRendering =
+            "pixelated";
+
+        canvas.style.pointerEvents =
+            "auto";
+
+        canvas.style.cursor =
+            "default";
 
 
-            canvas.style.position =
-                "absolute";
-
-            canvas.style.inset =
-                "0";
-
-            canvas.style.width =
-                "100%";
-
-            canvas.style.height =
-                "100%";
-
-            canvas.style.pointerEvents =
-                "none";
-
-            canvas.style.imageRendering =
-                "pixelated";
+        decoration.appendChild(
+            canvas
+        );
 
 
-            decoration.appendChild(
-                canvas
-            );
-        }
+        /*
+         * Le parent doit recevoir les événements.
+         */
+
+        decoration.style.pointerEvents =
+            "auto";
 
 
         this.mapCanvas =
@@ -625,12 +960,46 @@ class PytUI {
             false;
 
 
-        this.resizeHouseMap();
+        canvas.addEventListener(
+            "click",
+            event => {
+
+                this.handleMapCanvasClick(
+                    event
+                );
+            }
+        );
+
+
+        canvas.addEventListener(
+            "mousemove",
+            event => {
+
+                this.handleMapMouseMove(
+                    event
+                );
+            }
+        );
+
+
+        canvas.addEventListener(
+            "mouseleave",
+            () => {
+
+                canvas.style.cursor =
+                    "default";
+            }
+        );
+
+
+        this.resizeMapCanvas();
+
+        this.startMapAnimation();
     }
 
 
 
-    resizeHouseMap() {
+    resizeMapCanvas() {
 
         if (
             !this.mapCanvas
@@ -641,7 +1010,8 @@ class PytUI {
 
 
         const parent =
-            this.mapCanvas.parentElement;
+            this.mapCanvas
+                .parentElement;
 
 
         if (
@@ -653,7 +1023,8 @@ class PytUI {
 
 
         const rect =
-            parent.getBoundingClientRect();
+            parent
+                .getBoundingClientRect();
 
 
         const width =
@@ -694,12 +1065,204 @@ class PytUI {
         }
 
 
-        this.drawHouseMap();
+        this.drawCurrentMap();
     }
 
 
 
-    drawHouseMap() {
+    /* =========================================================
+       ANIMATION CARTE
+    ========================================================= */
+
+    startMapAnimation() {
+
+        if (
+            this.mapAnimationFrame
+        ) {
+
+            cancelAnimationFrame(
+                this.mapAnimationFrame
+            );
+        }
+
+
+        const animate =
+            time => {
+
+                this.mapAnimationFrame =
+                    requestAnimationFrame(
+                        animate
+                    );
+
+
+                /*
+                 * On ne redessine pas 60 fois par seconde.
+                 * La grande carte est volontairement lourde.
+                 */
+
+                if (
+                    time -
+                    this.lastMapAnimationTime <
+                    160
+                ) {
+
+                    return;
+                }
+
+
+                this.lastMapAnimationTime =
+                    time;
+
+
+                const map =
+                    document.getElementById(
+                        "map-screen"
+                    );
+
+
+                if (
+                    !map ||
+                    map.classList.contains(
+                        "hidden"
+                    )
+                ) {
+
+                    return;
+                }
+
+
+                if (
+                    this.mapMode ===
+                    "house"
+                ) {
+
+                    this.drawHouseOverview();
+                }
+            };
+
+
+        this.mapAnimationFrame =
+            requestAnimationFrame(
+                animate
+            );
+    }
+
+
+
+    /* =========================================================
+       OUVERTURE MAISON
+    ========================================================= */
+
+    openHouseMap(
+        showScreen = true
+    ) {
+
+        this.mapMode =
+            "house";
+
+
+        this.theoryEntryPending =
+            false;
+
+
+        this.reviewMode =
+            false;
+
+
+        this.reviewContext =
+            null;
+
+
+        if (
+            showScreen
+        ) {
+
+            window.pytApp
+                ?.showMap();
+        }
+
+
+        this.renderHouseInterface();
+
+        this.resizeMapCanvas();
+
+        this.showFirstHouseHint();
+    }
+
+
+
+    renderHouseInterface() {
+
+        this.setText(
+            "map-title",
+            "Maison de Pyt"
+        );
+
+
+        this.setText(
+            "map-subtitle",
+            "Choisis un chapitre dans la maison."
+        );
+
+
+        const courseButton =
+            document.getElementById(
+                "map-course-button"
+            );
+
+
+        if (
+            courseButton
+        ) {
+
+            courseButton.classList.add(
+                "hidden"
+            );
+        }
+
+
+        const levels =
+            document.querySelector(
+                ".map-levels"
+            );
+
+
+        if (
+            levels
+        ) {
+
+            levels.classList.add(
+                "hidden"
+            );
+        }
+
+
+        const navigation =
+            document.querySelector(
+                ".map-navigation"
+            );
+
+
+        if (
+            navigation
+        ) {
+
+            navigation.classList.add(
+                "hidden"
+            );
+        }
+
+
+        this.drawHouseOverview();
+    }
+
+
+
+    /* =========================================================
+       DESSIN MAISON
+    ========================================================= */
+
+    drawHouseOverview() {
 
         const ctx =
             this.mapCtx;
@@ -711,7 +1274,8 @@ class PytUI {
 
         if (
             !ctx ||
-            !canvas
+            !canvas ||
+            !window.PYTArt
         ) {
 
             return;
@@ -720,7 +1284,6 @@ class PytUI {
 
         const width =
             canvas.width;
-
 
         const height =
             canvas.height;
@@ -734,1871 +1297,557 @@ class PytUI {
         );
 
 
-        /*
-        Fond général.
-        */
-
-        const gradient =
-            ctx.createLinearGradient(
-                0,
-                0,
-                0,
-                height
-            );
-
-
-        gradient.addColorStop(
-            0,
-            "#8bb67c"
-        );
-
-
-        gradient.addColorStop(
-            1,
-            "#577d52"
-        );
-
-
-        ctx.fillStyle =
-            gradient;
-
-
-        ctx.fillRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        /*
-        Petites variations d'herbe.
-        */
-
-        this.drawMapGrassNoise(
-            ctx,
-            width,
-            height
-        );
-
-
-        const margin =
-            Math.max(
-                20,
-                width *
-                0.04
-            );
-
-
-        const gardenWidth =
-            width *
-            0.27;
-
-
-        const houseX =
-            margin;
-
-
-        const houseY =
-            margin;
-
-
-        const houseWidth =
-            width -
-            gardenWidth -
-            margin *
-            2;
-
-
-        const houseHeight =
-            height -
-            margin *
-            2;
-
-
-        this.drawHouseBuilding(
-            ctx,
-            houseX,
-            houseY,
-            houseWidth,
-            houseHeight
-        );
-
-
-        this.drawGarden(
-            ctx,
-            houseX +
-                houseWidth +
-                margin *
-                0.45,
-            houseY,
-            gardenWidth,
-            houseHeight
-        );
-
-
-        this.drawMapChapterMarker(
-            ctx,
-            houseX,
-            houseY,
-            houseWidth,
-            houseHeight
-        );
-    }
-
-
-
-    drawMapGrassNoise(
-        ctx,
-        width,
-        height
-    ) {
-
-        ctx.save();
-
-
-        ctx.globalAlpha =
-            0.16;
-
-
-        ctx.fillStyle =
-            "#315d38";
-
-
-        const amount =
-            Math.floor(
-                width *
-                height /
-                10000
-            );
-
-
-        for (
-            let i = 0;
-            i < amount;
-            i += 1
-        ) {
-
-            const x =
-                (
-                    i *
-                    73
-                ) %
-                width;
-
-
-            const y =
-                (
-                    i *
-                    131
-                ) %
-                height;
-
-
-            ctx.fillRect(
-                x,
-                y,
-                2,
-                5
-            );
-        }
-
-
-        ctx.restore();
-    }
-
-
-
-    drawHouseBuilding(
-        ctx,
-        x,
-        y,
-        width,
-        height
-    ) {
-
-        /*
-        Ombre maison.
-        */
-
-        ctx.fillStyle =
-            "rgba(0,0,0,0.28)";
-
-
-        ctx.fillRect(
-            x + 12,
-            y + 12,
-            width,
-            height
-        );
-
-
-        /*
-        Coque extérieure.
-        */
-
-        ctx.fillStyle =
-            "#3c3b3b";
-
-
-        ctx.fillRect(
-            x,
-            y,
-            width,
-            height
-        );
-
-
-        const wall =
-            Math.max(
-                7,
-                width *
-                0.012
-            );
-
-
-        const innerX =
-            x + wall;
-
-
-        const innerY =
-            y + wall;
-
-
-        const innerWidth =
-            width -
-            wall * 2;
-
-
-        const innerHeight =
-            height -
-            wall * 2;
-
-
-        /*
-        Distribution de la maison.
-
-        3 colonnes × 3 rangées.
-        */
-
-        const col1 =
-            innerWidth *
-            0.31;
-
-
-        const col2 =
-            innerWidth *
-            0.36;
-
-
-        const col3 =
-            innerWidth -
-            col1 -
-            col2;
-
-
-        const row1 =
-            innerHeight *
-            0.33;
-
-
-        const row2 =
-            innerHeight *
-            0.34;
-
-
-        const row3 =
-            innerHeight -
-            row1 -
-            row2;
-
-
-        /*
-        RANGÉE HAUTE
-        */
-
-        this.drawMapRoom(
-            ctx,
-            innerX,
-            innerY,
-            col1,
-            row1,
-            "chambre",
-            4
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1,
-            innerY,
-            col2,
-            row1,
-            "salon",
-            3
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1 +
-                col2,
-            innerY,
-            col3,
-            row1,
-            "balcon",
-            7
-        );
-
-
-        /*
-        RANGÉE MILIEU
-        */
-
-        this.drawMapRoom(
-            ctx,
-            innerX,
-            innerY +
-                row1,
-            col1,
-            row2,
-            "garage",
-            5
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1,
-            innerY +
-                row1,
-            col2,
-            row2,
-            "entree",
-            1
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1 +
-                col2,
-            innerY +
-                row1,
-            col3,
-            row2,
-            "cuisine",
-            2
-        );
-
-
-        /*
-        RANGÉE BASSE
-        */
-
-        this.drawMapRoom(
-            ctx,
-            innerX,
-            innerY +
-                row1 +
-                row2,
-            col1,
-            row3,
-            "cave_a_vin",
-            6
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1,
-            innerY +
-                row1 +
-                row2,
-            col2,
-            row3,
-            "couloir",
-            null
-        );
-
-
-        this.drawMapRoom(
-            ctx,
-            innerX +
-                col1 +
-                col2,
-            innerY +
-                row1 +
-                row2,
-            col3,
-            row3,
-            "toilette",
-            8
-        );
-
-
-        this.drawMapDoors(
-            ctx,
-            innerX,
-            innerY,
-            innerWidth,
-            innerHeight,
-            col1,
-            col2,
-            row1,
-            row2
-        );
-    }
-
-
-
-    drawMapRoom(
-        ctx,
-        x,
-        y,
-        width,
-        height,
-        room,
-        chapter
-    ) {
-
-        const normalized =
-            this.normalize(
-                room
-            );
-
-
-        const colors = {
-
-            entree:
-                "#c29568",
-
-            cuisine:
-                "#c9c7be",
-
-            salon:
-                "#b68a68",
-
-            chambre:
-                "#9b7b83",
-
-            garage:
-                "#73777c",
-
-            cave_a_vin:
-                "#75645e",
-
-            balcon:
-                "#aaa08d",
-
-            toilette:
-                "#b9cbcc",
-
-            couloir:
-                "#b28a62"
-        };
-
-
-        ctx.fillStyle =
-            colors[normalized] ||
-            "#a78c73";
-
-
-        ctx.fillRect(
-            x,
-            y,
-            width,
-            height
-        );
-
-
-        /*
-        Sol texturé.
-        */
-
-        this.drawRoomFloorPattern(
-            ctx,
-            normalized,
-            x,
-            y,
-            width,
-            height
-        );
-
-
-        ctx.strokeStyle =
-            "#45413e";
-
-
-        ctx.lineWidth =
-            Math.max(
-                3,
-                width *
-                0.014
-            );
-
-
-        ctx.strokeRect(
-            x,
-            y,
-            width,
-            height
-        );
-
-
-        this.drawMapRoomFurniture(
-            ctx,
-            normalized,
-            x,
-            y,
-            width,
-            height
-        );
-
-
-        if (
-            chapter
-        ) {
-
-            this.drawRoomLabel(
-                ctx,
-                normalized,
-                chapter,
-                x,
-                y,
+        const positions =
+            this.getChapterPositions(
                 width,
                 height
             );
-        }
-    }
 
 
+        this.chapterHitboxes =
+            [];
 
-    drawRoomFloorPattern(
-        ctx,
-        room,
-        x,
-        y,
-        width,
-        height
-    ) {
 
-        ctx.save();
-
-        ctx.globalAlpha =
-            0.14;
-
-
-        if (
-            room === "cuisine" ||
-            room === "toilette"
-        ) {
-
-            ctx.strokeStyle =
-                "#444";
-
-
-            ctx.lineWidth =
-                1;
-
-
-            const size =
-                Math.max(
-                    14,
-                    Math.min(
-                        width,
-                        height
-                    ) /
-                    4
-                );
-
-
-            for (
-                let px = x;
-                px < x + width;
-                px += size
-            ) {
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    px,
-                    y
-                );
-
-                ctx.lineTo(
-                    px,
-                    y + height
-                );
-
-                ctx.stroke();
-            }
-
-
-            for (
-                let py = y;
-                py < y + height;
-                py += size
-            ) {
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    x,
-                    py
-                );
-
-                ctx.lineTo(
-                    x + width,
-                    py
-                );
-
-                ctx.stroke();
-            }
-
-        } else {
-
-            ctx.strokeStyle =
-                "#553c2c";
-
-
-            const spacing =
-                Math.max(
-                    8,
-                    height /
-                    8
-                );
-
-
-            for (
-                let py =
-                    y +
-                    spacing;
-
-                py <
-                    y +
-                    height;
-
-                py +=
-                    spacing
-            ) {
-
-                ctx.beginPath();
-
-                ctx.moveTo(
-                    x,
-                    py
-                );
-
-                ctx.lineTo(
-                    x + width,
-                    py
-                );
-
-                ctx.stroke();
-            }
-        }
-
-
-        ctx.restore();
-    }
-
-
-
-    drawMapRoomFurniture(
-        ctx,
-        room,
-        x,
-        y,
-        width,
-        height
-    ) {
-
-        if (
-            !window.PYTArt
-        ) {
-
-            return;
-        }
-
-
-        const size =
-            Math.min(
-                width,
-                height
-            ) *
-            0.34;
-
-
-        const draw =
-            (
-                type,
-                px,
-                py,
-                multiplier = 1
-            ) => {
-
-                window.PYTArt.draw(
-                    ctx,
-                    type,
-                    px,
-                    py,
-                    size *
-                    multiplier
-                );
-            };
-
-
-        switch (
-            room
-        ) {
-
-            case "entree":
-
-                draw(
-                    "tapis",
-                    x +
-                        width *
-                        0.37,
-                    y +
-                        height *
-                        0.53,
-                    0.9
-                );
-
-
-                draw(
-                    "plante",
-                    x +
-                        width *
-                        0.04,
-                    y +
-                        height *
-                        0.08,
-                    0.7
-                );
-
-                break;
-
-
-            case "cuisine":
-
-                draw(
-                    "frigo",
-                    x +
-                        width *
-                        0.68,
-                    y +
-                        height *
-                        0.08,
-                    0.85
-                );
-
-
-                draw(
-                    "evier",
-                    x +
-                        width *
-                        0.05,
-                    y +
-                        height *
-                        0.08,
-                    0.9
-                );
-
-
-                draw(
-                    "table",
-                    x +
-                        width *
-                        0.35,
-                    y +
-                        height *
-                        0.49,
-                    1.0
-                );
-
-                break;
-
-
-            case "salon":
-
-                draw(
-                    "canape",
-                    x +
-                        width *
-                        0.07,
-                    y +
-                        height *
-                        0.16,
-                    1.15
-                );
-
-
-                draw(
-                    "table",
-                    x +
-                        width *
-                        0.4,
-                    y +
-                        height *
-                        0.52,
-                    0.75
-                );
-
-
-                draw(
-                    "bibliotheque",
-                    x +
-                        width *
-                        0.71,
-                    y +
-                        height *
-                        0.12,
-                    0.85
-                );
-
-                break;
-
-
-            case "chambre":
-
-                draw(
-                    "lit",
-                    x +
-                        width *
-                        0.08,
-                    y +
-                        height *
-                        0.12,
-                    1.15
-                );
-
-
-                draw(
-                    "plante",
-                    x +
-                        width *
-                        0.7,
-                    y +
-                        height *
-                        0.52,
-                    0.7
-                );
-
-                break;
-
-
-            case "garage":
-
-                draw(
-                    "voiture",
-                    x +
-                        width *
-                        0.22,
-                    y +
-                        height *
-                        0.08,
-                    1.2
-                );
-
-
-                draw(
-                    "boite_outils",
-                    x +
-                        width *
-                        0.66,
-                    y +
-                        height *
-                        0.58,
-                    0.65
-                );
-
-                break;
-
-
-            case "cave_a_vin":
-
-                draw(
-                    "casier_vin",
-                    x +
-                        width *
-                        0.08,
-                    y +
-                        height *
-                        0.11,
-                    0.95
-                );
-
-
-                draw(
-                    "tonneau",
-                    x +
-                        width *
-                        0.62,
-                    y +
-                        height *
-                        0.49,
-                    0.68
-                );
-
-                break;
-
-
-            case "balcon":
-
-                draw(
-                    "table",
-                    x +
-                        width *
-                        0.28,
-                    y +
-                        height *
-                        0.35,
-                    0.8
-                );
-
-
-                draw(
-                    "plante",
-                    x +
-                        width *
-                        0.63,
-                    y +
-                        height *
-                        0.12,
-                    0.7
-                );
-
-                break;
-
-
-            case "toilette":
-
-                draw(
-                    "toilette",
-                    x +
-                        width *
-                        0.17,
-                    y +
-                        height *
-                        0.18,
-                    0.9
-                );
-
-
-                draw(
-                    "lavabo",
-                    x +
-                        width *
-                        0.56,
-                    y +
-                        height *
-                        0.2,
-                    0.72
-                );
-
-                break;
-        }
-    }
-
-
-
-    drawRoomLabel(
-        ctx,
-        room,
-        chapter,
-        x,
-        y,
-        width,
-        height
-    ) {
-
-        const names = {
-
-            entree:
-                "Entrée",
-
-            cuisine:
-                "Cuisine",
-
-            salon:
-                "Salon",
-
-            chambre:
-                "Chambre",
-
-            garage:
-                "Garage",
-
-            cave_a_vin:
-                "Cave",
-
-            balcon:
-                "Balcon",
-
-            toilette:
-                "Salle d’eau"
-        };
-
-
-        ctx.save();
-
-
-        ctx.fillStyle =
-            "rgba(15,15,17,0.74)";
-
-
-        const boxWidth =
-            Math.min(
-                width *
-                0.76,
-                130
-            );
-
-
-        const boxHeight =
-            Math.max(
-                23,
-                height *
-                0.15
-            );
-
-
-        const bx =
-            x +
-            width *
-            0.5 -
-            boxWidth *
-            0.5;
-
-
-        const by =
-            y +
-            height -
-            boxHeight -
-            6;
-
-
-        ctx.fillRect(
-            bx,
-            by,
-            boxWidth,
-            boxHeight
-        );
-
-
-        ctx.fillStyle =
-            "#f7f5ef";
-
-
-        ctx.textAlign =
-            "center";
-
-
-        ctx.textBaseline =
-            "middle";
-
-
-        ctx.font =
-            `600 ${Math.max(
-                9,
-                Math.min(
-                    13,
-                    width *
-                    0.055
-                )
-            )}px sans-serif`;
-
-
-        ctx.fillText(
-            `${chapter}. ${names[room] || room}`,
-            x +
-                width *
-                0.5,
-            by +
-                boxHeight *
-                0.52
-        );
-
-
-        ctx.restore();
-    }
-
-
-
-    drawMapDoors(
-        ctx,
-        x,
-        y,
-        width,
-        height,
-        col1,
-        col2,
-        row1,
-        row2
-    ) {
-
-        ctx.save();
-
-
-        ctx.fillStyle =
-            "#d8c2a2";
-
-
-        const doorWidth =
-            Math.max(
-                14,
-                width *
-                0.025
-            );
-
-
-        const wall =
-            Math.max(
-                5,
-                width *
-                0.01
-            );
-
-
-        const verticals = [
-
-            x + col1,
-
-            x + col1 + col2
-        ];
-
-
-        const horizontals = [
-
-            y + row1,
-
-            y + row1 + row2
-        ];
-
-
-        verticals.forEach(
-            px => {
-
-                ctx.fillRect(
-                    px -
-                        wall,
-                    y +
-                        height *
-                        0.45 -
-                        doorWidth /
-                        2,
-                    wall *
-                        2,
-                    doorWidth
-                );
-            }
-        );
-
-
-        horizontals.forEach(
-            py => {
-
-                ctx.fillRect(
-                    x +
-                        width *
-                        0.49 -
-                        doorWidth /
-                        2,
-                    py -
-                        wall,
-                    doorWidth,
-                    wall *
-                        2
-                );
-            }
-        );
-
-
-        ctx.restore();
-    }
-
-
-
-    drawGarden(
-        ctx,
-        x,
-        y,
-        width,
-        height
-    ) {
-
-        /*
-        Chemin.
-        */
-
-        ctx.fillStyle =
-            "#9e9486";
-
-
-        ctx.fillRect(
-            x +
-                width *
-                0.05,
-            y +
-                height *
-                0.45,
-            width *
-                0.42,
-            height *
-                0.13
-        );
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            const tile =
-                Math.min(
-                    width,
-                    height
-                ) *
-                0.18;
-
-
-            window.PYTArt.draw(
-                ctx,
-                "arbre",
-                x +
-                    width *
-                    0.03,
-                y +
-                    height *
-                    0.05,
-                tile *
-                    1.15
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "arbre",
-                x +
-                    width *
-                    0.68,
-                y +
-                    height *
-                    0.08,
-                tile
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "fleurs",
-                x +
-                    width *
-                    0.05,
-                y +
-                    height *
-                    0.72,
-                tile *
-                    0.9
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "buisson",
-                x +
-                    width *
-                    0.7,
-                y +
-                    height *
-                    0.72,
-                tile
-            );
-
-
-            /*
-            Piscine plus grande que les autres objets.
-            */
-
-            const poolSize =
-                Math.min(
-                    width *
-                    0.72,
-                    height *
-                    0.38
-                );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "piscine",
-                x +
-                    width *
-                    0.16,
-                y +
-                    height *
-                    0.2,
-                poolSize,
-                {
-                    animate:
-                        true
-                }
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "transat",
-                x +
-                    width *
-                    0.02,
-                y +
-                    height *
-                    0.57,
-                tile *
-                    0.8
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "transat",
-                x +
-                    width *
-                    0.34,
-                y +
-                    height *
-                    0.61,
-                tile *
-                    0.8
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "bouee",
-                x +
-                    width *
-                    0.57,
-                y +
-                    height *
-                    0.31,
-                tile *
-                    0.55
-            );
-
-
-            window.PYTArt.draw(
-                ctx,
-                "fontaine",
-                x +
-                    width *
-                    0.67,
-                y +
-                    height *
-                    0.5,
-                tile *
-                    0.85
-            );
-        }
-
-
-        /*
-        Chapitre 9.
-        */
-
-        ctx.save();
-
-
-        ctx.fillStyle =
-            "rgba(15,15,17,0.78)";
-
-
-        ctx.fillRect(
-            x +
-                width *
-                0.2,
-            y +
-                height *
-                0.85,
-            width *
-                0.62,
-            Math.max(
-                25,
-                height *
-                0.08
-            )
-        );
-
-
-        ctx.fillStyle =
-            "#f7f5ef";
-
-
-        ctx.textAlign =
-            "center";
-
-
-        ctx.textBaseline =
-            "middle";
-
-
-        ctx.font =
-            `600 ${Math.max(
-                10,
-                Math.min(
-                    14,
-                    width *
-                    0.08
-                )
-            )}px sans-serif`;
-
-
-        ctx.fillText(
-            "9. Jardin",
-            x +
-                width *
-                0.51,
-            y +
-                height *
-                0.89
-        );
-
-
-        ctx.restore();
-    }
-
-
-
-    drawMapChapterMarker(
-        ctx,
-        houseX,
-        houseY,
-        houseWidth,
-        houseHeight
-    ) {
-
-        const current =
-            Number(
-                window.pytApp
-                    ?.currentChapter ||
-                1
-            );
-
-
-        const positions = {
-
-            1: [
-                0.49,
-                0.49
-            ],
-
-            2: [
-                0.84,
-                0.49
-            ],
-
-            3: [
-                0.49,
-                0.16
-            ],
-
-            4: [
-                0.15,
-                0.16
-            ],
-
-            5: [
-                0.15,
-                0.49
-            ],
-
-            6: [
-                0.15,
-                0.84
-            ],
-
-            7: [
-                0.84,
-                0.16
-            ],
-
-            8: [
-                0.84,
-                0.84
-            ]
-        };
-
-
-        /*
-        Chapitre 9 est dans le jardin.
-        Pas de marqueur sur la maison.
-        */
-
-        if (
-            current ===
-            9
-        ) {
-
-            return;
-        }
-
-
-        const position =
-            positions[current];
-
-
-        if (
-            !position
-        ) {
-
-            return;
-        }
-
-
-        const x =
-            houseX +
-            houseWidth *
-            position[0];
-
-
-        const y =
-            houseY +
-            houseHeight *
-            position[1];
-
-
-        const radius =
-            Math.max(
-                10,
-                Math.min(
-                    houseWidth,
-                    houseHeight
-                ) *
-                0.025
-            );
-
-
-        ctx.save();
-
-
-        ctx.shadowColor =
-            "#fff4a8";
-
-
-        ctx.shadowBlur =
-            radius *
-            1.2;
-
-
-        ctx.strokeStyle =
-            "#fff4a8";
-
-
-        ctx.lineWidth =
-            Math.max(
-                3,
-                radius *
-                0.25
-            );
-
-
-        ctx.beginPath();
-
-
-        ctx.arc(
-            x,
-            y,
-            radius,
-            0,
-            Math.PI *
-            2
-        );
-
-
-        ctx.stroke();
-
-
-        ctx.restore();
-    }
-
-
-
-    /* =====================================================
-       CARTE / NIVEAUX
-    ===================================================== */
-
-    renderMap() {
-
-        const app =
-            window.pytApp;
-
-
-        if (
-            !app
-        ) {
-
-            return;
-        }
-
-
-        const chapterNumber =
-            Number(
-                app.currentChapter ||
-                1
-            );
-
-
-        const chapter =
-            this.getChapterData(
-                chapterNumber
-            );
-
-
-        this.setText(
-            "map-title",
-            `Chapitre ${chapterNumber} · ${chapter.title || ""}`
-        );
-
-
-        this.setText(
-            "map-subtitle",
-            `Clique sur un exercice pour le lancer · ${chapter.room || ""}`
-        );
-
-
-        this.renderLevelNodes(
-            chapterNumber
-        );
-
-
-        this.renderChapterButtons(
-            chapterNumber
-        );
-
-
-        this.resizeHouseMap();
-    }
-
-
-
-    renderLevelNodes(
-        chapterNumber
-    ) {
-
-        const levels =
-            this.getLevelsForChapter(
-                chapterNumber
-            );
+        const chapters =
+            [];
 
 
         for (
-            let levelNumber = 1;
-            levelNumber <= 3;
-            levelNumber += 1
+            let chapter = 1;
+            chapter <= this.getTotalChapters();
+            chapter += 1
         ) {
 
-            const node =
-                document.getElementById(
-                    `level-node-${levelNumber}`
-                );
+            const position =
+                positions[
+                    chapter
+                ];
 
 
             if (
-                !node
+                !position
             ) {
 
                 continue;
             }
 
 
-            const completed =
-                this.isLevelCompleted(
-                    chapterNumber,
-                    levelNumber
-                );
-
-
             const unlocked =
-                this.isLevelUnlocked(
-                    chapterNumber,
-                    levelNumber
+                this.isChapterUnlocked(
+                    chapter
                 );
 
 
-            node.disabled =
-                !unlocked;
+            chapters.push({
+
+                number:
+                    chapter,
+
+                x:
+                    position.x,
+
+                y:
+                    position.y,
+
+                radius:
+                    position.radius,
+
+                label:
+                    `CHAPITRE ${chapter}`,
+
+                locked:
+                    !unlocked,
+
+                active:
+                    unlocked &&
+                    !this.isChapterCompleted(
+                        chapter
+                    )
+            });
 
 
-            node.classList.toggle(
-                "locked",
-                !unlocked
-            );
+            this.chapterHitboxes.push({
 
+                chapter,
 
-            node.classList.toggle(
-                "completed",
-                completed
-            );
+                x:
+                    position.x,
 
+                y:
+                    position.y,
 
-            node.classList.toggle(
-                "current",
-                unlocked &&
-                !completed &&
-                Number(
-                    window.pytApp
-                        ?.currentLevel
-                ) ===
-                    levelNumber
-            );
+                radius:
+                    position.radius +
+                    9,
 
-
-            const numberElement =
-                node.querySelector(
-                    ".level-node-number"
-                );
-
-
-            if (
-                numberElement
-            ) {
-
-                numberElement.textContent =
-                    String(
-                        levelNumber
-                    );
-            }
-
-
-            const stateElement =
-                node.querySelector(
-                    ".level-node-state"
-                );
-
-
-            if (
-                stateElement
-            ) {
-
-                if (
-                    completed
-                ) {
-
-                    stateElement.textContent =
-                        "Terminé";
-
-                } else if (
-                    !unlocked
-                ) {
-
-                    stateElement.textContent =
-                        "Verrouillé";
-
-                } else {
-
-                    const level =
-                        levels[
-                            levelNumber -
-                            1
-                        ];
-
-
-                    stateElement.textContent =
-                        level?.difficulty ||
-                        "Exercice";
-                }
-            }
+                unlocked
+            });
         }
+
+
+        window.PYTArt
+            .drawHouseMap(
+                ctx,
+                0,
+                0,
+                width,
+                height,
+                {
+                    chapters
+                }
+            );
     }
 
 
 
-    renderChapterButtons(
-        chapterNumber
+    getChapterPositions(
+        width,
+        height
     ) {
 
-        const previous =
-            document.getElementById(
-                "previous-chapter-button"
+        /*
+         * Ces positions correspondent aux pièces
+         * dessinées dans art.js.
+         */
+
+        const radius =
+            Math.max(
+                34,
+                Math.min(
+                    48,
+                    width *
+                    0.041
+                )
             );
 
 
-        const next =
-            document.getElementById(
-                "next-chapter-button"
-            );
+        const houseX =
+            width *
+            0.08;
 
 
-        const indicator =
-            document.getElementById(
-                "map-chapter-indicator"
-            );
+        const houseY =
+            height *
+            0.265;
 
 
-        if (
-            previous
-        ) {
-
-            previous.disabled =
-                chapterNumber <=
-                1;
-        }
+        const houseW =
+            width *
+            0.83;
 
 
-        if (
-            next
-        ) {
-
-            const nextChapter =
-                chapterNumber +
-                1;
+        const houseH =
+            height *
+            0.49;
 
 
-            next.disabled =
-                nextChapter >
-                    Number(
-                        window.pytApp
-                            ?.totalChapters ||
-                        9
-                    ) ||
-                !this.isChapterUnlocked(
-                    nextChapter
-                );
-        }
+        const leftW =
+            houseW *
+            0.38;
 
 
-        if (
-            indicator
-        ) {
+        const middleW =
+            houseW *
+            0.33;
 
-            indicator.textContent =
-                `${chapterNumber} / ${window.pytApp?.totalChapters || 9}`;
-        }
+
+        const rightW =
+            houseW -
+            leftW -
+            middleW;
+
+
+        const upperH =
+            houseH *
+            0.48;
+
+
+        const lowerH =
+            houseH -
+            upperH;
+
+
+        return {
+
+            /*
+             * 1 - Entrée
+             */
+
+            1: {
+
+                x:
+                    houseX +
+                    leftW +
+                    middleW *
+                    0.31,
+
+                y:
+                    houseY +
+                    upperH +
+                    lowerH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 2 - Cuisine
+             */
+
+            2: {
+
+                x:
+                    houseX +
+                    leftW *
+                    0.5,
+
+                y:
+                    houseY +
+                    upperH +
+                    lowerH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 3 - Salon
+             */
+
+            3: {
+
+                x:
+                    houseX +
+                    leftW *
+                    0.5,
+
+                y:
+                    houseY +
+                    upperH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 4 - Chambre
+             */
+
+            4: {
+
+                x:
+                    houseX +
+                    leftW +
+                    middleW *
+                    0.5,
+
+                y:
+                    houseY +
+                    upperH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 5 - Garage
+             */
+
+            5: {
+
+                x:
+                    houseX +
+                    leftW +
+                    middleW +
+                    rightW *
+                    0.5,
+
+                y:
+                    houseY +
+                    upperH +
+                    lowerH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 6 - Cave
+             */
+
+            6: {
+
+                x:
+                    houseX +
+                    leftW +
+                    middleW +
+                    rightW *
+                    0.5,
+
+                y:
+                    houseY +
+                    upperH *
+                    0.5,
+
+                radius
+            },
+
+
+            /*
+             * 7 - Balcon
+             */
+
+            7: {
+
+                x:
+                    houseX -
+                    width *
+                    0.031,
+
+                y:
+                    houseY +
+                    houseH *
+                    0.34,
+
+                radius:
+                    radius *
+                    0.86
+            },
+
+
+            /*
+             * 8 - Toilette
+             */
+
+            8: {
+
+                x:
+                    houseX +
+                    leftW +
+                    middleW *
+                    0.81,
+
+                y:
+                    houseY +
+                    upperH +
+                    lowerH *
+                    0.5,
+
+                radius:
+                    radius *
+                    0.82
+            },
+
+
+            /*
+             * 9 - Jardin
+             */
+
+            9: {
+
+                x:
+                    width *
+                    0.30,
+
+                y:
+                    height *
+                    0.15,
+
+                radius
+            }
+        };
     }
 
 
 
-    handleChapterRequest(
+    /* =========================================================
+       CLIC CARTE
+    ========================================================= */
+
+    handleMapCanvasClick(
         event
     ) {
 
-        const requested =
-            Number(
-                event.detail
-                    ?.requestedChapter
+        if (
+            this.mapMode !==
+            "house"
+        ) {
+
+            return;
+        }
+
+
+        const point =
+            this.getCanvasPointer(
+                event
             );
 
 
+        const hit =
+            this.chapterHitboxes
+                .find(
+                    item => {
+
+                        const dx =
+                            point.x -
+                            item.x;
+
+
+                        const dy =
+                            point.y -
+                            item.y;
+
+
+                        return (
+                            Math.sqrt(
+                                dx *
+                                    dx +
+                                dy *
+                                    dy
+                            ) <=
+                            item.radius
+                        );
+                    }
+                );
+
+
         if (
-            this.isChapterUnlocked(
-                requested
+            !hit
+        ) {
+
+            return;
+        }
+
+
+        if (
+            !hit.unlocked
+        ) {
+
+            window.pytApp
+                ?.showGuide(
+                    "Ce chapitre est verrouillé. Termine les trois exercices du chapitre précédent pour le débloquer."
+                );
+
+            return;
+        }
+
+
+        this.openTheoryForChapter(
+            hit.chapter,
+            true
+        );
+    }
+
+
+
+    handleMapMouseMove(
+        event
+    ) {
+
+        if (
+            !this.mapCanvas ||
+            this.mapMode !==
+            "house"
+        ) {
+
+            return;
+        }
+
+
+        const point =
+            this.getCanvasPointer(
+                event
+            );
+
+
+        const hit =
+            this.chapterHitboxes
+                .some(
+                    item => {
+
+                        const dx =
+                            point.x -
+                            item.x;
+
+
+                        const dy =
+                            point.y -
+                            item.y;
+
+
+                        return (
+                            Math.sqrt(
+                                dx *
+                                    dx +
+                                dy *
+                                    dy
+                            ) <=
+                            item.radius
+                        );
+                    }
+                );
+
+
+        this.mapCanvas.style.cursor =
+            hit
+                ? "pointer"
+                : "default";
+    }
+
+
+
+    getCanvasPointer(
+        event
+    ) {
+
+        const rect =
+            this.mapCanvas
+                .getBoundingClientRect();
+
+
+        return {
+
+            x:
+                (
+                    event.clientX -
+                    rect.left
+                ) *
+                (
+                    this.mapCanvas.width /
+                    rect.width
+                ),
+
+            y:
+                (
+                    event.clientY -
+                    rect.top
+                ) *
+                (
+                    this.mapCanvas.height /
+                    rect.height
+                )
+        };
+    }
+
+
+
+    /* =========================================================
+       THÉORIE OBLIGATOIRE
+    ========================================================= */
+
+    openTheoryForChapter(
+        chapterNumber,
+        mandatory = true
+    ) {
+
+        if (
+            !this.isChapterUnlocked(
+                chapterNumber
             )
         ) {
 
@@ -2606,57 +1855,77 @@ class PytUI {
         }
 
 
-        event.preventDefault();
+        this.selectedChapter =
+            Number(
+                chapterNumber
+            );
 
 
-        window.pytApp?.showGuide(
-            "Ce chapitre est encore verrouillé. Termine d’abord le chapitre précédent."
+        if (
+            window.pytApp
+        ) {
+
+            window.pytApp.currentChapter =
+                this.selectedChapter;
+        }
+
+
+        this.theoryEntryPending =
+            mandatory;
+
+
+        this.reviewMode =
+            false;
+
+
+        this.reviewContext =
+            null;
+
+
+        this.renderCourse();
+
+
+        window.pytApp
+            ?.showCourse();
+    }
+
+
+
+    finishMandatoryTheory() {
+
+        this.theoryEntryPending =
+            false;
+
+
+        this.openChapterRoom(
+            this.selectedChapter
         );
     }
 
 
 
-    /* =====================================================
+    /* =========================================================
        COURS
-    ===================================================== */
+    ========================================================= */
 
     renderCourse() {
 
-        const app =
-            window.pytApp;
-
-
-        if (
-            !app
-        ) {
-
-            return;
-        }
-
-
-        const chapterNumber =
-            Number(
-                app.currentChapter ||
-                1
-            );
-
-
         const chapter =
             this.getChapterData(
-                chapterNumber
+                this.selectedChapter
             );
 
 
         this.setText(
             "course-chapter-number",
-            `Chapitre ${chapterNumber}`
+            `Chapitre ${this.selectedChapter}`
         );
 
 
         this.setText(
             "course-title",
             chapter.title ||
-            `Chapitre ${chapterNumber}`
+            `Chapitre ${this.selectedChapter}`
         );
 
 
@@ -2698,10 +1967,25 @@ class PytUI {
             button
         ) {
 
-            button.textContent =
+            if (
+                this.theoryEntryPending
+            ) {
+
+                button.textContent =
+                    "Continuer vers les exercices";
+
+            } else if (
                 this.reviewMode
-                    ? "Retour à l'exercice"
-                    : "Voir la carte";
+            ) {
+
+                button.textContent =
+                    "Retour à l'exercice";
+
+            } else {
+
+                button.textContent =
+                    "Voir les exercices";
+            }
         }
     }
 
@@ -2715,8 +1999,25 @@ class PytUI {
         if (
             !Array.isArray(
                 theory
-            )
+            ) ||
+            theory.length ===
+                0
         ) {
+
+            const paragraph =
+                document.createElement(
+                    "p"
+                );
+
+
+            paragraph.textContent =
+                "Lis les explications de ce chapitre avant de commencer les exercices.";
+
+
+            container.appendChild(
+                paragraph
+            );
+
 
             return;
         }
@@ -2769,21 +2070,25 @@ class PytUI {
                 }
 
 
+                const body =
+                    section.body;
+
+
                 if (
-                    section.body
+                    body
                 ) {
 
-                    const texts =
+                    const paragraphs =
                         Array.isArray(
-                            section.body
+                            body
                         )
-                            ? section.body
+                            ? body
                             : [
-                                section.body
+                                body
                             ];
 
 
-                    texts.forEach(
+                    paragraphs.forEach(
                         text => {
 
                             const paragraph =
@@ -2839,33 +2144,491 @@ class PytUI {
 
 
 
-    /* =====================================================
-       NIVEAU
-    ===================================================== */
+    /* =========================================================
+       CARTE DE LA PIÈCE
+    ========================================================= */
 
-    loadLevel(
+    openChapterRoom(
+        chapterNumber
+    ) {
+
+        this.selectedChapter =
+            Number(
+                chapterNumber
+            );
+
+
+        this.mapMode =
+            "chapter";
+
+
+        if (
+            window.pytApp
+        ) {
+
+            window.pytApp.currentChapter =
+                this.selectedChapter;
+        }
+
+
+        window.pytApp
+            ?.showMap();
+
+
+        this.renderChapterInterface();
+
+        this.resizeMapCanvas();
+    }
+
+
+
+    renderChapterInterface() {
+
+        const chapter =
+            this.getChapterData(
+                this.selectedChapter
+            );
+
+
+        this.setText(
+            "map-title",
+            `Chapitre ${this.selectedChapter} · ${chapter.room || chapter.title || ""}`
+        );
+
+
+        this.setText(
+            "map-subtitle",
+            "Choisis un exercice. Les exercices se débloquent dans l’ordre."
+        );
+
+
+        const courseButton =
+            document.getElementById(
+                "map-course-button"
+            );
+
+
+        if (
+            courseButton
+        ) {
+
+            courseButton.classList.remove(
+                "hidden"
+            );
+
+
+            courseButton.textContent =
+                "Revoir la théorie";
+        }
+
+
+        const levels =
+            document.querySelector(
+                ".map-levels"
+            );
+
+
+        if (
+            levels
+        ) {
+
+            levels.classList.remove(
+                "hidden"
+            );
+        }
+
+
+        const navigation =
+            document.querySelector(
+                ".map-navigation"
+            );
+
+
+        if (
+            navigation
+        ) {
+
+            navigation.classList.remove(
+                "hidden"
+            );
+        }
+
+
+        this.renderLevelNodes();
+
+        this.renderChapterNavigation();
+
+        this.drawChapterRoom();
+    }
+
+
+
+    drawChapterRoom() {
+
+        if (
+            !this.mapCtx ||
+            !this.mapCanvas ||
+            !window.PYTArt
+        ) {
+
+            return;
+        }
+
+
+        const chapter =
+            this.getChapterData(
+                this.selectedChapter
+            );
+
+
+        const room =
+            this.normalize(
+                chapter.room ||
+                ""
+            );
+
+
+        const ctx =
+            this.mapCtx;
+
+
+        const width =
+            this.mapCanvas.width;
+
+
+        const height =
+            this.mapCanvas.height;
+
+
+        ctx.clearRect(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        /*
+         * Fond sombre extérieur.
+         */
+
+        ctx.fillStyle =
+            "#11121d";
+
+
+        ctx.fillRect(
+            0,
+            0,
+            width,
+            height
+        );
+
+
+        const marginX =
+            Math.max(
+                18,
+                width *
+                    0.045
+            );
+
+
+        const marginTop =
+            Math.max(
+                110,
+                height *
+                    0.17
+            );
+
+
+        const marginBottom =
+            Math.max(
+                75,
+                height *
+                    0.12
+            );
+
+
+        window.PYTArt
+            .drawRoomScene(
+                ctx,
+                room ||
+                    "entree",
+                marginX,
+                marginTop,
+                width -
+                    marginX *
+                    2,
+                height -
+                    marginTop -
+                    marginBottom,
+                {
+                    furniture:
+                        true
+                }
+            );
+
+
+        /*
+         * Numéro de chapitre en pixel art dans un coin.
+         */
+
+        window.PYTArt
+            .drawPixelText(
+                ctx,
+                `CHAPITRE ${this.selectedChapter}`,
+                marginX +
+                    20,
+                marginTop +
+                    24,
+                {
+                    scale:
+                        Math.max(
+                            1,
+                            Math.floor(
+                                width /
+                                600
+                            )
+                        ),
+
+                    color:
+                        "#fff3ca",
+
+                    shadow:
+                        "#11121d"
+                }
+            );
+    }
+
+
+
+    renderLevelNodes() {
+
+        for (
+            let level = 1;
+            level <= 3;
+            level += 1
+        ) {
+
+            const node =
+                document.getElementById(
+                    `level-node-${level}`
+                );
+
+
+            if (
+                !node
+            ) {
+
+                continue;
+            }
+
+
+            const unlocked =
+                this.isLevelUnlocked(
+                    this.selectedChapter,
+                    level
+                );
+
+
+            const completed =
+                this.isLevelCompleted(
+                    this.selectedChapter,
+                    level
+                );
+
+
+            node.disabled =
+                !unlocked;
+
+
+            node.classList.toggle(
+                "locked",
+                !unlocked
+            );
+
+
+            node.classList.toggle(
+                "completed",
+                completed
+            );
+
+
+            node.classList.toggle(
+                "current",
+                unlocked &&
+                !completed
+            );
+
+
+            const number =
+                node.querySelector(
+                    ".level-node-number"
+                );
+
+
+            if (
+                number
+            ) {
+
+                number.textContent =
+                    String(
+                        level
+                    );
+            }
+
+
+            const state =
+                node.querySelector(
+                    ".level-node-state"
+                );
+
+
+            if (
+                state
+            ) {
+
+                if (
+                    completed
+                ) {
+
+                    state.textContent =
+                        "Terminé";
+
+                } else if (
+                    !unlocked
+                ) {
+
+                    state.textContent =
+                        "Verrouillé";
+
+                } else {
+
+                    state.textContent =
+                        `Exercice ${level}`;
+                }
+            }
+        }
+    }
+
+
+
+    renderChapterNavigation() {
+
+        const previous =
+            document.getElementById(
+                "previous-chapter-button"
+            );
+
+
+        const next =
+            document.getElementById(
+                "next-chapter-button"
+            );
+
+
+        const indicator =
+            document.getElementById(
+                "map-chapter-indicator"
+            );
+
+
+        if (
+            previous
+        ) {
+
+            previous.disabled =
+                false;
+
+
+            previous.textContent =
+                "← Maison";
+        }
+
+
+        if (
+            next
+        ) {
+
+            const nextChapter =
+                this.selectedChapter +
+                1;
+
+
+            next.textContent =
+                "Chapitre suivant →";
+
+
+            next.disabled =
+                nextChapter >
+                    this.getTotalChapters() ||
+                !this.isChapterUnlocked(
+                    nextChapter
+                );
+        }
+
+
+        if (
+            indicator
+        ) {
+
+            indicator.textContent =
+                `${this.selectedChapter} / ${this.getTotalChapters()}`;
+        }
+    }
+
+
+
+    /* =========================================================
+       RENDER MAP
+    ========================================================= */
+
+    renderMap() {
+
+        if (
+            this.mapMode ===
+            "house"
+        ) {
+
+            this.renderHouseInterface();
+
+        } else {
+
+            this.renderChapterInterface();
+        }
+    }
+
+
+
+    drawCurrentMap() {
+
+        if (
+            this.mapMode ===
+            "house"
+        ) {
+
+            this.drawHouseOverview();
+
+        } else {
+
+            this.drawChapterRoom();
+        }
+    }
+
+
+
+    /* =========================================================
+       EXERCICE
+    ========================================================= */
+
+    openLevel(
         chapterNumber,
         levelNumber
     ) {
 
-        const chapter =
-            Number(
-                chapterNumber ||
-                1
-            );
-
-
-        const level =
-            Number(
-                levelNumber ||
-                1
-            );
-
-
         const data =
             this.getLevelData(
-                chapter,
-                level
+                chapterNumber,
+                levelNumber
             );
 
 
@@ -2873,23 +2636,54 @@ class PytUI {
             data;
 
 
-        const key =
-            this.getLevelKey(
-                chapter,
-                level
+        this.selectedChapter =
+            Number(
+                chapterNumber
             );
 
+
+        if (
+            window.pytApp
+        ) {
+
+            window.pytApp.currentChapter =
+                Number(
+                    chapterNumber
+                );
+
+
+            window.pytApp.currentLevel =
+                Number(
+                    levelNumber
+                );
+        }
+
+
+        const key =
+            this.getLevelKey(
+                chapterNumber,
+                levelNumber
+            );
+
+
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
+        /*
+         * On met le starter code uniquement
+         * la première fois qu'on ouvre l'exercice.
+         *
+         * Aucun écran de progression ne montre
+         * la solution.
+         */
 
         if (
             this.loadedLevelKey !==
             key
         ) {
-
-            const editor =
-                document.getElementById(
-                    "code-editor"
-                );
-
 
             if (
                 editor
@@ -2915,10 +2709,8 @@ class PytUI {
             );
 
 
-        this.setText(
-            "game-status",
-            "Prêt"
-        );
+        window.pytApp
+            ?.showGame();
 
 
         window.dispatchEvent(
@@ -2927,9 +2719,15 @@ class PytUI {
                 {
                     detail: {
 
-                        chapter,
+                        chapter:
+                            Number(
+                                chapterNumber
+                            ),
 
-                        level,
+                        level:
+                            Number(
+                                levelNumber
+                            ),
 
                         data
                     }
@@ -2941,11 +2739,12 @@ class PytUI {
         window.setTimeout(
             () => {
 
-                window.pytApp?.showGuide(
-                    data.guideMessage ||
-                    data.instruction ||
-                    "Lis la mission puis écris ton programme."
-                );
+                window.pytApp
+                    ?.showGuide(
+                        data.guideMessage ||
+                        data.instruction ||
+                        "Lis la mission puis écris ton programme."
+                    );
 
             },
             120
@@ -2954,46 +2753,9 @@ class PytUI {
 
 
 
-    /* =====================================================
+    /* =========================================================
        EXÉCUTION
-    ===================================================== */
-
-    setExecuting(
-        executing
-    ) {
-
-        const button =
-            document.getElementById(
-                "run-code-button"
-            );
-
-
-        if (
-            button
-        ) {
-
-            button.disabled =
-                Boolean(
-                    executing
-                );
-
-
-            button.textContent =
-                executing
-                    ? "Exécution..."
-                    : "Exécuter";
-        }
-
-
-        this.setText(
-            "game-status",
-            executing
-                ? "Programme en cours..."
-                : "Prêt"
-        );
-    }
-
-
+    ========================================================= */
 
     handleExecutionResult(
         result
@@ -3023,6 +2785,35 @@ class PytUI {
             this.handleFailure(
                 result
             );
+        }
+    }
+
+
+
+    setExecuting(
+        value
+    ) {
+
+        const button =
+            document.getElementById(
+                "run-code-button"
+            );
+
+
+        if (
+            button
+        ) {
+
+            button.disabled =
+                Boolean(
+                    value
+                );
+
+
+            button.textContent =
+                value
+                    ? "Exécution..."
+                    : "Exécuter";
         }
     }
 
@@ -3059,15 +2850,6 @@ class PytUI {
             lines.push(
                 ...result.output
             );
-
-        } else if (
-            typeof result.output ===
-                "string"
-        ) {
-
-            lines.push(
-                result.output
-            );
         }
 
 
@@ -3076,26 +2858,24 @@ class PytUI {
         ) {
 
             lines.push(
-                result.error
+                String(
+                    result.error
+                )
             );
         }
 
 
         output.textContent =
-            lines
-                .filter(
-                    Boolean
-                )
-                .join(
-                    "\n"
-                );
+            lines.join(
+                "\n"
+            );
     }
 
 
 
-    /* =====================================================
+    /* =========================================================
        RÉUSSITE
-    ===================================================== */
+    ========================================================= */
 
     handleSuccess(
         result
@@ -3145,12 +2925,6 @@ class PytUI {
         app.hideThought();
 
 
-        this.setText(
-            "game-status",
-            "Mission réussie"
-        );
-
-
         const actions =
             [];
 
@@ -3170,94 +2944,96 @@ class PytUI {
 
                         app.hideGuide();
 
-                        this.openNextLevel();
+
+                        this.openChapterRoom(
+                            chapter
+                        );
+
+
+                        window.setTimeout(
+                            () => {
+
+                                window.pytApp
+                                    ?.showGuide(
+                                        `L’exercice ${level + 1} est maintenant débloqué.`
+                                    );
+
+                            },
+                            150
+                        );
                     }
             });
 
         } else {
 
-            actions.push({
+            const nextChapter =
+                chapter +
+                1;
 
-                label:
-                    "Retour à la carte",
 
-                onClick:
-                    () => {
+            if (
+                nextChapter <=
+                this.getTotalChapters()
+            ) {
 
-                        app.hideGuide();
+                actions.push({
 
-                        app.showMap();
-                    }
-            });
+                    label:
+                        "Retour à la maison",
+
+                    onClick:
+                        () => {
+
+                            app.hideGuide();
+
+                            this.openHouseMap();
+
+
+                            window.setTimeout(
+                                () => {
+
+                                    window.pytApp
+                                        ?.showGuide(
+                                            `Chapitre ${nextChapter} débloqué.`
+                                        );
+
+                                },
+                                160
+                            );
+                        }
+                });
+
+            } else {
+
+                actions.push({
+
+                    label:
+                        "Retour à la maison",
+
+                    onClick:
+                        () => {
+
+                            app.hideGuide();
+
+                            this.openHouseMap();
+                        }
+                });
+            }
         }
 
 
         app.showGuide(
             result.message ||
-            "Bien joué ! La mission est réussie.",
+            "Mission réussie.",
             actions
         );
-
-
-        this.renderMap();
     }
 
 
 
-    openNextLevel() {
-
-        const app =
-            window.pytApp;
-
-
-        if (
-            !app
-        ) {
-
-            return;
-        }
-
-
-        const next =
-            Number(
-                app.currentLevel
-            ) +
-            1;
-
-
-        if (
-            next <=
-                3 &&
-            this.isLevelUnlocked(
-                app.currentChapter,
-                next
-            )
-        ) {
-
-            app.currentLevel =
-                next;
-
-
-            this.loadLevel(
-                app.currentChapter,
-                next
-            );
-
-
-            app.showGame();
-
-            return;
-        }
-
-
-        app.showMap();
-    }
-
-
-
-    /* =====================================================
-       ÉCHECS
-    ===================================================== */
+    /* =========================================================
+       ÉCHEC
+    ========================================================= */
 
     handleFailure(
         result
@@ -3282,39 +3058,35 @@ class PytUI {
             );
 
 
-        this.failureCounts[key] =
+        this.failureCounts[
+            key
+        ] =
             (
-                this.failureCounts[key] ||
+                this.failureCounts[
+                    key
+                ] ||
                 0
             ) +
             1;
 
 
         const failures =
-            this.failureCounts[key];
-
-
-        this.setText(
-            "game-status",
-            "Mission non terminée"
-        );
+            this.failureCounts[
+                key
+            ];
 
 
         const reason =
             String(
                 result.reason ||
                 ""
-            )
-                .toLowerCase();
+            );
 
 
         if (
             reason ===
                 "wrong_destination" ||
-            reason ===
-                "wrong_position" ||
-            result.wrongDestination ===
-                true
+            result.wrongDestination
         ) {
 
             app.showThought(
@@ -3328,9 +3100,11 @@ class PytUI {
 
 
         /*
-        Premier échec :
-        aucune ligne rouge.
-        */
+         * PREMIER ÉCHEC
+         *
+         * Pas de ligne rouge.
+         * Pas de solution.
+         */
 
         if (
             failures ===
@@ -3341,14 +3115,13 @@ class PytUI {
 
 
             app.showGuide(
-                result.firstAttemptMessage ||
-                "Ça ne fonctionne pas encore. Tu peux revoir le cours avant de réessayer. Si ça bloque encore, je pourrai t’indiquer plus précisément où chercher.",
+                "Ça ne fonctionne pas encore. Tu peux revoir la théorie puis reprendre exactement ton programme.",
                 [
 
                     {
 
                         label:
-                            "Revoir le cours",
+                            "Revoir la théorie",
 
                         onClick:
                             () => {
@@ -3360,7 +3133,7 @@ class PytUI {
                     {
 
                         label:
-                            "Réessayer",
+                            "Modifier mon code",
 
                         onClick:
                             () => {
@@ -3379,8 +3152,10 @@ class PytUI {
 
 
         /*
-        Deuxième erreur et suivantes.
-        */
+         * À partir du deuxième échec,
+         * on peut montrer une ligne uniquement
+         * lorsque le moteur sait réellement laquelle.
+         */
 
         const errorLine =
             Number(
@@ -3408,15 +3183,28 @@ class PytUI {
         }
 
 
-        app.showGuide(
+        /*
+         * Toujours pas de réponse complète.
+         */
+
+        let message =
             result.hint ||
             result.message ||
-            (
-                errorLine >
-                    0
-                    ? `Regarde plus attentivement la ligne ${errorLine}.`
-                    : "Ton programme s’exécute, mais la mission n’est pas encore complètement réussie."
-            ),
+            "Le programme s’exécute, mais la mission n’est pas encore complètement réussie.";
+
+
+        if (
+            errorLine >
+            0
+        ) {
+
+            message +=
+                ` Regarde notamment autour de la ligne ${errorLine}.`;
+        }
+
+
+        app.showGuide(
+            message,
             [
 
                 {
@@ -3436,7 +3224,7 @@ class PytUI {
                 {
 
                     label:
-                        "Revoir le cours",
+                        "Revoir la théorie",
 
                     onClick:
                         () => {
@@ -3450,9 +3238,9 @@ class PytUI {
 
 
 
-    /* =====================================================
-       RETOUR AU COURS
-    ===================================================== */
+    /* =========================================================
+       RETOUR THÉORIE
+    ========================================================= */
 
     openTheoryReview() {
 
@@ -3489,59 +3277,55 @@ class PytUI {
         };
 
 
+        this.selectedChapter =
+            Number(
+                app.currentChapter
+            );
+
+
         this.reviewMode =
             true;
 
 
+        this.theoryEntryPending =
+            false;
+
+
         app.hideGuide();
+
+        this.renderCourse();
 
         app.showCourse();
     }
 
 
 
-    returnFromTheory() {
+    returnFromTheoryReview() {
 
-        const app =
-            window.pytApp;
+        const context =
+            this.reviewContext;
 
 
         if (
-            !app
+            !context
         ) {
 
             return;
         }
 
 
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
         if (
-            this.reviewContext
+            editor
         ) {
 
-            app.currentChapter =
-                this.reviewContext
-                    .chapter;
-
-
-            app.currentLevel =
-                this.reviewContext
-                    .level;
-
-
-            const editor =
-                document.getElementById(
-                    "code-editor"
-                );
-
-
-            if (
-                editor
-            ) {
-
-                editor.value =
-                    this.reviewContext
-                        .code;
-            }
+            editor.value =
+                context.code;
         }
 
 
@@ -3553,33 +3337,35 @@ class PytUI {
             null;
 
 
-        this.renderCourse();
-
-        app.showGame();
+        window.pytApp
+            ?.showGame();
 
 
         window.setTimeout(
             () => {
 
-                app.showGuide(
-                    "Tu peux reprendre ton programme exactement là où tu l’avais laissé.",
-                    [
+                window.pytApp
+                    ?.showGuide(
+                        "Tu peux reprendre ton programme là où tu l’avais laissé.",
+                        [
 
-                        {
+                            {
 
-                            label:
-                                "Continuer",
+                                label:
+                                    "Continuer",
 
-                            onClick:
-                                () => {
+                                onClick:
+                                    () => {
 
-                                    app.hideGuide();
+                                        window.pytApp
+                                            ?.hideGuide();
 
-                                    app.openCodeWindow();
-                                }
-                        }
-                    ]
-                );
+                                        window.pytApp
+                                            ?.openCodeWindow();
+                                    }
+                            }
+                        ]
+                    );
 
             },
             100
@@ -3588,49 +3374,46 @@ class PytUI {
 
 
 
-    /* =====================================================
+    /* =========================================================
        RESTART
-    ===================================================== */
+    ========================================================= */
 
-    handleRestart() {
+    restartLevel() {
+
+        this.clearCodeError();
+
 
         window.pytApp
             ?.hideThought();
 
 
-        this.clearCodeError();
-
-
-        this.setText(
-            "game-status",
-            "Niveau recommencé"
-        );
-
-
         if (
-            this.currentLevelData
+            !this.currentLevelData
         ) {
 
-            window.dispatchEvent(
-                new CustomEvent(
-                    "pyt:reload-world",
-                    {
-                        detail: {
-
-                            data:
-                                this.currentLevelData
-                        }
-                    }
-                )
-            );
+            return;
         }
+
+
+        window.dispatchEvent(
+            new CustomEvent(
+                "pyt:reload-world",
+                {
+                    detail: {
+
+                        data:
+                            this.currentLevelData
+                    }
+                }
+            )
+        );
     }
 
 
 
-    /* =====================================================
-       ÉDITEUR / ERREURS
-    ===================================================== */
+    /* =========================================================
+       ÉDITEUR
+    ========================================================= */
 
     prepareEditor() {
 
@@ -3653,16 +3436,6 @@ class PytUI {
 
             return;
         }
-
-
-        overlay.style.zIndex =
-            "3";
-
-        overlay.style.pointerEvents =
-            "none";
-
-        overlay.style.overflow =
-            "hidden";
 
 
         editor.addEventListener(
@@ -3690,11 +3463,8 @@ class PytUI {
 
 
                 if (
-                    Number.isInteger(
-                        line
-                    ) &&
                     line >
-                        0
+                    0
                 ) {
 
                     this.renderCodeError(
@@ -3745,10 +3515,6 @@ class PytUI {
             );
 
 
-        overlay.innerHTML =
-            "";
-
-
         const lines =
             editor.value
                 .replace(
@@ -3758,6 +3524,10 @@ class PytUI {
                 .split(
                     "\n"
                 );
+
+
+        overlay.innerHTML =
+            "";
 
 
         lines.forEach(
@@ -3780,7 +3550,7 @@ class PytUI {
 
                 if (
                     index +
-                        1 ===
+                    1 ===
                     lineNumber
                 ) {
 
@@ -3854,9 +3624,9 @@ class PytUI {
 
 
 
-    /* =====================================================
+    /* =========================================================
        PROGRESSION
-    ===================================================== */
+    ========================================================= */
 
     loadProgress() {
 
@@ -3904,7 +3674,7 @@ class PytUI {
         ) {
 
             console.warn(
-                "Impossible de charger la progression PYT.",
+                "PYT : progression impossible à charger.",
                 error
             );
         }
@@ -3928,7 +3698,7 @@ class PytUI {
         ) {
 
             console.warn(
-                "Impossible d'enregistrer la progression PYT.",
+                "PYT : progression impossible à enregistrer.",
                 error
             );
         }
@@ -3967,6 +3737,55 @@ class PytUI {
                     level
                 )
             ]
+        );
+    }
+
+
+
+    isChapterCompleted(
+        chapter
+    ) {
+
+        return (
+            this.isLevelCompleted(
+                chapter,
+                1
+            ) &&
+            this.isLevelCompleted(
+                chapter,
+                2
+            ) &&
+            this.isLevelCompleted(
+                chapter,
+                3
+            )
+        );
+    }
+
+
+
+    isChapterUnlocked(
+        chapter
+    ) {
+
+        const number =
+            Number(
+                chapter
+            );
+
+
+        if (
+            number <=
+            1
+        ) {
+
+            return true;
+        }
+
+
+        return this.isChapterCompleted(
+            number -
+                1
         );
     }
 
@@ -4017,68 +3836,6 @@ class PytUI {
 
 
 
-    isChapterUnlocked(
-        chapter
-    ) {
-
-        const chapterNumber =
-            Number(
-                chapter
-            );
-
-
-        if (
-            chapterNumber <=
-            1
-        ) {
-
-            return true;
-        }
-
-
-        const previous =
-            chapterNumber -
-            1;
-
-
-        const levels =
-            this.getLevelsForChapter(
-                previous
-            );
-
-
-        const count =
-            levels.length
-                ? Math.min(
-                    levels.length,
-                    3
-                )
-                : 3;
-
-
-        for (
-            let level = 1;
-            level <= count;
-            level += 1
-        ) {
-
-            if (
-                !this.isLevelCompleted(
-                    previous,
-                    level
-                )
-            ) {
-
-                return false;
-            }
-        }
-
-
-        return true;
-    }
-
-
-
     getLevelKey(
         chapter,
         level
@@ -4091,14 +3848,14 @@ class PytUI {
 
 
 
-    /* =====================================================
-       AIDE PREMIÈRE CARTE
-    ===================================================== */
+    /* =========================================================
+       PREMIÈRE AIDE MAISON
+    ========================================================= */
 
-    showFirstMapHint() {
+    showFirstHouseHint() {
 
         if (
-            this.firstMapHintShown
+            this.firstHouseHintShown
         ) {
 
             return;
@@ -4113,7 +3870,7 @@ class PytUI {
 
             seen =
                 localStorage.getItem(
-                    "pyt-map-help-seen"
+                    "pyt-house-help-seen"
                 ) ===
                 "1";
 
@@ -4130,51 +3887,75 @@ class PytUI {
             seen
         ) {
 
-            this.firstMapHintShown =
+            this.firstHouseHintShown =
                 true;
 
             return;
         }
 
 
-        this.firstMapHintShown =
+        this.firstHouseHintShown =
             true;
 
 
         window.setTimeout(
             () => {
 
-                window.pytApp?.showGuide(
-                    "Voici la maison. Chaque chapitre correspond à une pièce. Clique sur l’exercice 1 pour commencer."
-                );
+                window.pytApp
+                    ?.showGuide(
+                        "Voici la maison de Pyt. Commence par le chapitre 1. Les autres pièces se débloqueront progressivement."
+                    );
 
 
                 try {
 
                     localStorage.setItem(
-                        "pyt-map-help-seen",
+                        "pyt-house-help-seen",
                         "1"
                     );
 
                 } catch (
-                    error
+                error
                 ) {
 
                     /*
-                    localStorage indisponible.
-                    */
+                     * localStorage indisponible.
+                     */
                 }
 
             },
-            200
+            250
         );
     }
 
 
 
-    /* =====================================================
-       UTILITAIRES
-    ===================================================== */
+    /* =========================================================
+       REFRESH
+    ========================================================= */
+
+    refresh() {
+
+        if (
+            !window.pytApp
+        ) {
+
+            return;
+        }
+
+
+        this.renderMap();
+
+        this.renderCourse();
+
+        this.resizeMapCanvas();
+    }
+
+
+
+    /* =========================================================
+       OUTILS
+    ========================================================= */
 
     setText(
         id,
