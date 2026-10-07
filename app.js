@@ -1,4022 +1,5342 @@
 "use strict";
 
-class BrowserPythonRunner {
-constructor() {
-this.maxActions = 250;
-this.maxIterations = 1000;
-this.maxFunctionCalls = 100;
-this.actions = [];
-this.output = [];
-this.variables = Object.create(null);
-this.functions = Object.create(null);
-this.iterations = 0;
-this.functionCalls = 0;
-}
-
-run(code) {
-this.reset();
-
-try {
-this.checkForbiddenCode(code);
-
-const lines = this.prepareLines(code);
-
-this.executeBlock(lines, 0, 0);
-
-return {
-success: true,
-error: null,
-errorLine: null,
-output: this.output.join("\n"),
-actions: [...this.actions]
-};
-
-} catch (error) {
-
-const message =
-error instanceof Error
-? error.message
-: String(error);
-
-const lineMatch =
-message.match(/Ligne\s+(\d+)/i);
-
-return {
-success: false,
-error: message,
-errorLine:
-lineMatch
-? Number(lineMatch[1])
-: null,
-output: this.output.join("\n"),
-
 /*
-On conserve les actions comprises avant l'erreur.
-Pyt peut donc montrer ce qu'il a réussi à faire.
+============================================================
+PYT - app.js
+
+Rôle :
+- démarrer le jeu ;
+- gérer l'intro ;
+- gérer le menu et les paramètres ;
+- gérer la musique ;
+- exécuter le sous-ensemble Python utilisé dans PYT ;
+- transformer le code en actions ;
+- animer les actions même si le programme échoue ensuite ;
+- vérifier les notions demandées par chaque exercice ;
+- donner un retour précis à l'élève.
+============================================================
 */
-actions: [...this.actions]
-};
-}
-}
-
-reset() {
-this.actions = [];
-this.output = [];
-
-this.variables =
-Object.create(null);
-
-this.functions =
-Object.create(null);
-
-this.iterations = 0;
-this.functionCalls = 0;
-}
-
-prepareLines(code) {
-
-const rawLines =
-String(code)
-.replace(/\r/g, "")
-.replace(/\t/g, "    ")
-.split("\n");
-
-const result = [];
-
-for (
-let index = 0;
-index < rawLines.length;
-index++
-) {
-
-const original =
-rawLines[index];
-
-const withoutComment =
-this.removeComment(original);
-
-if (
-withoutComment.trim()
-=== ""
-) {
-continue;
-}
-
-const spaces =
-withoutComment
-.match(/^ */)[0]
-.length;
-
-if (
-spaces % 4 !== 0
-) {
-throw new Error(
-`Ligne ${index + 1} : utilise 4 espaces pour l'indentation.`
-);
-}
-
-result.push({
-number: index + 1,
-indent: spaces,
-text: withoutComment.trim()
-});
-}
-
-return result;
-}
-
-removeComment(line) {
-
-let result = "";
-let quote = null;
-
-for (
-let i = 0;
-i < line.length;
-i++
-) {
-
-const char =
-line[i];
-
-if (
-(
-char === "'"
-||
-char === '"'
-)
-&&
-line[i - 1] !== "\\"
-) {
-
-if (quote === null) {
-quote = char;
-} else if (
-quote === char
-) {
-quote = null;
-}
-}
-
-if (
-char === "#"
-&&
-quote === null
-) {
-break;
-}
-
-result += char;
-}
-
-return result.replace(
-/\s+$/,
-""
-);
-}
-
-executeBlock(
-lines,
-startIndex,
-indent
-) {
-
-let index =
-startIndex;
-
-while (
-index < lines.length
-) {
-
-const line =
-lines[index];
-
-if (
-line.indent < indent
-) {
-break;
-}
-
-if (
-line.indent > indent
-) {
-throw new Error(
-`Ligne ${line.number} : indentation inattendue.`
-);
-}
-
-const text =
-line.text;
-
-
-/* IF */
-
-if (
-text.startsWith("if ")
-&&
-text.endsWith(":")
-) {
-
-const result =
-this.executeIf(
-lines,
-index,
-indent
-);
-
-index =
-result.nextIndex;
-
-continue;
-}
-
-
-/* FOR */
-
-if (
-text.startsWith("for ")
-&&
-text.endsWith(":")
-) {
-
-index =
-this.executeFor(
-lines,
-index,
-indent
-);
-
-continue;
-}
-
-
-/* WHILE */
-
-if (
-text.startsWith("while ")
-&&
-text.endsWith(":")
-) {
-
-index =
-this.executeWhile(
-lines,
-index,
-indent
-);
-
-continue;
-}
-
-
-/* DEF */
-
-if (
-text.startsWith("def ")
-&&
-text.endsWith(":")
-) {
-
-index =
-this.registerFunction(
-lines,
-index,
-indent
-);
-
-continue;
-}
-
-
-/* ELSE / ELIF isolé */
-
-if (
-text === "else:"
-||
-text.startsWith("elif ")
-) {
-break;
-}
-
-
-/* BREAK */
-
-if (text === "break") {
-
-return {
-nextIndex:
-index + 1,
-signal:
-"break"
-};
-}
-
-
-/* RETURN */
-
-if (
-text === "return"
-||
-text.startsWith("return ")
-) {
-
-let value = null;
-
-if (
-text !== "return"
-) {
-
-value =
-this.evaluateExpression(
-text.slice(7)
-);
-}
-
-return {
-nextIndex:
-index + 1,
-signal:
-"return",
-value
-};
-}
-
-
-/* INSTRUCTION SIMPLE */
-
-this.executeStatement(
-text,
-line.number
-);
-
-index++;
-}
-
-return {
-nextIndex:
-index,
-signal:
-null
-};
-}
-
-executeIf(
-lines,
-index,
-indent
-) {
-
-let cursor =
-index;
-
-let executed =
-false;
-
-while (
-cursor < lines.length
-) {
-
-const line =
-lines[cursor];
-
-if (
-line.indent !== indent
-) {
-break;
-}
-
-let condition = null;
-
-if (
-line.text.startsWith("if ")
-&&
-line.text.endsWith(":")
-) {
-
-condition =
-line.text.slice(
-3,
--1
-);
-
-} else if (
-line.text.startsWith("elif ")
-&&
-line.text.endsWith(":")
-) {
-
-condition =
-line.text.slice(
-5,
--1
-);
-
-} else if (
-line.text === "else:"
-) {
-
-condition =
-null;
-
-} else {
-
-break;
-}
-
-const block =
-this.findChildBlock(
-lines,
-cursor,
-indent
-);
-
-const shouldRun =
-!executed
-&&
-(
-condition === null
-||
-Boolean(
-this.evaluateExpression(
-condition
-)
-)
-);
-
-if (shouldRun) {
-
-const result =
-this.executeBlock(
-lines,
-block.start,
-block.indent
-);
-
-executed = true;
-
-if (
-result.signal
-) {
-
-return {
-nextIndex:
-block.end,
-signal:
-result.signal,
-value:
-result.value
-};
-}
-}
-
-cursor =
-block.end;
-
-if (
-cursor >= lines.length
-) {
-break;
-}
-
-const next =
-lines[cursor];
-
-if (
-next.indent !== indent
-) {
-break;
-}
-
-if (
-!next.text.startsWith("elif ")
-&&
-next.text !== "else:"
-) {
-break;
-}
-}
-
-return {
-nextIndex:
-cursor,
-signal:
-null
-};
-}
-
-executeFor(
-lines,
-index,
-indent
-) {
-
-const line =
-lines[index];
-
-const match =
-line.text.match(
-/^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
-);
-
-if (!match) {
-
-throw new Error(
-`Ligne ${line.number} : boucle for invalide.`
-);
-}
-
-const variableName =
-match[1];
-
-const iterable =
-this.evaluateExpression(
-match[2]
-);
-
-if (
-!Array.isArray(iterable)
-) {
-
-throw new Error(
-`Ligne ${line.number} : la boucle for attend range(...) ou une liste.`
-);
-}
-
-const block =
-this.findChildBlock(
-lines,
-index,
-indent
-);
-
-for (
-const value
-of iterable
-) {
-
-this.countIteration();
-
-this.variables[
-variableName
-] = value;
-
-const result =
-this.executeBlock(
-lines,
-block.start,
-block.indent
-);
-
-if (
-result.signal
-=== "break"
-) {
-break;
-}
-
-if (
-result.signal
-=== "return"
-) {
-return block.end;
-}
-}
-
-return block.end;
-}
-
-executeWhile(
-lines,
-index,
-indent
-) {
-
-const line =
-lines[index];
-
-const condition =
-line.text.slice(
-6,
--1
-);
-
-const block =
-this.findChildBlock(
-lines,
-index,
-indent
-);
-
-while (
-Boolean(
-this.evaluateExpression(
-condition
-)
-)
-) {
-
-this.countIteration();
-
-const result =
-this.executeBlock(
-lines,
-block.start,
-block.indent
-);
-
-if (
-result.signal
-=== "break"
-) {
-break;
-}
-
-if (
-result.signal
-=== "return"
-) {
-break;
-}
-}
-
-return block.end;
-}
-
-countIteration() {
-
-this.iterations++;
-
-if (
-this.iterations
->
-this.maxIterations
-) {
-
-throw new Error(
-"Boucle arrêtée : trop d'itérations. Vérifie la condition de ta boucle."
-);
-}
-}
-
-registerFunction(
-lines,
-index,
-indent
-) {
-
-const line =
-lines[index];
 
-const match =
-line.text.match(
-/^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:$/
-);
 
-if (!match) {
+// =========================================================
+// RUNNER PYTHON SIMPLIFIÉ
+// =========================================================
 
-throw new Error(
-`Ligne ${line.number} : définition de fonction invalide.`
-);
-}
-
-const name =
-match[1];
-
-const parameters =
-match[2]
-.split(",")
-.map(
-value =>
-value.trim()
-)
-.filter(Boolean);
-
-for (
-const parameter
-of parameters
-) {
-
-if (
-!/^[A-Za-z_]\w*$/
-.test(parameter)
-) {
-
-throw new Error(
-`Ligne ${line.number} : paramètre invalide.`
-);
-}
-}
-
-const block =
-this.findChildBlock(
-lines,
-index,
-indent
-);
-
-this.functions[name] = {
-parameters,
-lines,
-start:
-block.start,
-end:
-block.end,
-indent:
-block.indent
-};
-
-return block.end;
-}
-
-callFunction(
-name,
-args
-) {
-
-const func =
-this.functions[name];
+class BrowserPythonRunner {
 
-if (!func) {
+    constructor() {
 
-throw new Error(
-`Fonction inconnue : ${name}().`
-);
-}
-
-if (
-args.length
-!==
-func.parameters.length
-) {
-
-throw new Error(
-`${name}() attend ${func.parameters.length} argument(s).`
-);
-}
+        this.maxActions = 250;
+        this.maxIterations = 1000;
+        this.maxFunctionCalls = 100;
 
-this.functionCalls++;
+        this.reset();
+    }
 
-if (
-this.functionCalls
->
-this.maxFunctionCalls
-) {
 
-throw new Error(
-"Trop d'appels de fonctions."
-);
-}
+    reset() {
 
-const savedVariables =
-{ ...this.variables };
-
-for (
-let i = 0;
-i < func.parameters.length;
-i++
-) {
-
-this.variables[
-func.parameters[i]
-] = args[i];
-}
+        this.variables = {};
+        this.functions = {};
 
-const functionLines =
-func.lines.slice(
-0,
-func.end
-);
-
-const result =
-this.executeBlock(
-functionLines,
-func.start,
-func.indent
-);
-
-const returnValue =
-result.signal
-=== "return"
-? result.value
-: null;
-
-this.variables =
-Object.assign(
-Object.create(null),
-savedVariables
-);
-
-return returnValue;
-}
+        this.actions = [];
+        this.output = [];
 
-findChildBlock(
-lines,
-parentIndex,
-parentIndent
-) {
-
-const start =
-parentIndex + 1;
-
-if (
-start >= lines.length
-||
-lines[start].indent
-<= parentIndent
-) {
-
-throw new Error(
-`Ligne ${lines[parentIndex].number} : bloc indenté attendu.`
-);
-}
+        this.loopIterations = 0;
+        this.functionCalls = 0;
+    }
 
-const childIndent =
-lines[start].indent;
-
-let end =
-start;
-
-while (
-end < lines.length
-&&
-lines[end].indent
->= childIndent
-) {
-end++;
-}
 
-return {
-start,
-end,
-indent:
-childIndent
-};
-}
+    // =====================================================
+    // LANCEMENT
+    // =====================================================
 
-executeStatement(
-text,
-lineNumber
-) {
+    run(code) {
 
-const compound =
-text.match(
-/^([A-Za-z_]\w*)\s*(\+=|-=|\*=)\s*(.+)$/
-);
+        this.reset();
 
-if (compound) {
+        try {
 
-const name =
-compound[1];
+            this.checkForbiddenCode(code);
 
-const operator =
-compound[2];
+            const lines =
+                this.prepareLines(code);
 
-const right =
-this.evaluateExpression(
-compound[3]
-);
+            this.executeBlock(
+                lines,
+                0,
+                lines.length,
+                0
+            );
 
-if (
-!(name in this.variables)
-) {
+            return {
+                success: true,
+                actions: [...this.actions],
+                output: [...this.output],
+                error: null,
+                errorLine: null
+            };
 
-throw new Error(
-`Ligne ${lineNumber} : variable inconnue "${name}".`
-);
-}
+        } catch (error) {
 
-if (operator === "+=") {
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : String(error);
 
-this.variables[name] += right;
+            const match =
+                message.match(
+                    /Ligne\s+(\d+)/i
+                );
 
-} else if (
-operator === "-="
-) {
+            return {
+                success: false,
 
-this.variables[name] -= right;
+                /*
+                IMPORTANT :
+                on garde les actions valides exécutées
+                avant l'erreur.
+                */
+                actions: [...this.actions],
 
-} else {
+                output: [...this.output],
 
-this.variables[name] *= right;
-}
+                error: message,
 
-return;
-}
+                errorLine:
+                    match
+                        ? Number(match[1])
+                        : null
+            };
+        }
+    }
 
-const assignment =
-text.match(
-/^([A-Za-z_]\w*)\s*=\s*(?!=)(.+)$/
-);
 
-if (assignment) {
+    // =====================================================
+    // SÉCURITÉ
+    // =====================================================
 
-this.variables[
-assignment[1]
-] =
-this.evaluateExpression(
-assignment[2]
-);
+    checkForbiddenCode(code) {
+
+        const forbidden = [
+            /\bimport\b/,
+            /\bfrom\b/,
+            /\beval\s*\(/,
+            /\bexec\s*\(/,
+            /\bopen\s*\(/,
+            /\b__import__\b/,
+            /\bglobals\s*\(/,
+            /\blocals\s*\(/,
+            /\bcompile\s*\(/,
+            /\binput\s*\(/,
+            /\bos\./,
+            /\bsys\./,
+            /\bsubprocess\b/
+        ];
 
-return;
-}
+        for (const pattern of forbidden) {
 
-const appendMatch =
-text.match(
-/^([A-Za-z_]\w*)\.append\s*\((.*)\)$/
-);
+            if (pattern.test(code)) {
+
+                throw new Error(
+                    "Cette commande n'est pas disponible dans PYT."
+                );
+            }
+        }
+    }
+
+
+    // =====================================================
+    // PRÉPARATION DES LIGNES
+    // =====================================================
 
-if (appendMatch) {
+    prepareLines(code) {
 
-const list =
-this.variables[
-appendMatch[1]
-];
+        const rawLines =
+            String(code || "")
+                .replace(/\t/g, "    ")
+                .split(/\r?\n/);
 
-if (
-!Array.isArray(list)
-) {
+        const lines = [];
+
+        for (
+            let index = 0;
+            index < rawLines.length;
+            index++
+        ) {
 
-throw new Error(
-`Ligne ${lineNumber} : append() s'utilise sur une liste.`
-);
-}
+            const raw =
+                rawLines[index];
 
-list.push(
-this.evaluateExpression(
-appendMatch[2]
-)
-);
+            const withoutComment =
+                this.removeComment(raw);
 
-return;
-}
+            if (
+                withoutComment.trim() === ""
+            ) {
 
-const call =
-this.parseCall(
-text
-);
-
-if (call) {
-
-const args =
-this.parseArguments(
-call.arguments
-)
-.map(
-argument =>
-this.evaluateExpression(
-argument
-)
-);
-
-this.executeCall(
-call.name,
-args
-);
-
-return;
-}
+                continue;
+            }
 
-throw new Error(
-`Ligne ${lineNumber} : instruction non reconnue : ${text}`
-);
-}
+            const spaces =
+                withoutComment.match(/^ */)[0].length;
 
-executeCall(
-name,
-args
-) {
-
-if (
-name === "forward"
-||
-name === "backward"
-) {
-
-if (
-args.length !== 1
-) {
-
-throw new Error(
-`${name}() attend une distance.`
-);
-}
+            if (
+                spaces % 4 !== 0
+            ) {
 
-const amount =
-Number(args[0]);
-
-if (
-!Number.isInteger(amount)
-||
-amount < 0
-) {
-
-throw new Error(
-`${name}() attend un entier positif.`
-);
-}
+                throw new Error(
+                    `Ligne ${index + 1} : utilise 4 espaces pour l'indentation.`
+                );
+            }
 
-for (
-let i = 0;
-i < amount;
-i++
-) {
-
-this.addAction(
-name,
-1
-);
-}
+            lines.push({
+                number: index + 1,
+                indent: spaces / 4,
+                text: withoutComment.trim()
+            });
+        }
 
-return null;
-}
+        return lines;
+    }
 
-if (
-name === "right"
-||
-name === "left"
-) {
-
-if (
-args.length !== 1
-) {
-
-throw new Error(
-`${name}() attend un angle.`
-);
-}
 
-const angle =
-Number(args[0]);
-
-if (
-!Number.isInteger(angle)
-||
-angle < 0
-||
-angle % 90 !== 0
-) {
-
-throw new Error(
-"Les rotations doivent utiliser un multiple de 90°."
-);
-}
+    removeComment(line) {
 
-const turns =
-angle / 90;
-
-for (
-let i = 0;
-i < turns;
-i++
-) {
-
-this.addAction(
-name,
-90
-);
-}
+        let quote = null;
 
-return null;
-}
+        for (
+            let i = 0;
+            i < line.length;
+            i++
+        ) {
 
-if (name === "print") {
-
-this.output.push(
-args
-.map(
-value =>
-this.pythonString(
-value
-)
-)
-.join(" ")
-);
-
-return null;
-}
+            const char =
+                line[i];
 
-if (
-this.functions[name]
-) {
-
-return this.callFunction(
-name,
-args
-);
-}
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
 
-throw new Error(
-`Fonction inconnue : ${name}().`
-);
-}
+                if (
+                    quote === char
+                ) {
 
-addAction(
-type,
-value
-) {
-
-this.actions.push([
-type,
-value
-]);
-
-if (
-this.actions.length
->
-this.maxActions
-) {
-
-throw new Error(
-"Ton programme effectue trop d'actions."
-);
-}
-}
+                    quote = null;
 
-evaluateExpression(expression) {
+                } else if (
+                    quote === null
+                ) {
 
-let text =
-String(expression)
-.trim();
+                    quote = char;
+                }
+            }
 
-if (!text) {
-return null;
-}
+            if (
+                char === "#" &&
+                quote === null
+            ) {
 
-text =
-this.stripOuterParentheses(
-text
-);
-
-let split =
-this.splitTopLevelWord(
-text,
-"or"
-);
-
-if (split) {
-
-return (
-Boolean(
-this.evaluateExpression(
-split.left
-)
-)
-||
-Boolean(
-this.evaluateExpression(
-split.right
-)
-)
-);
-}
+                return line.slice(
+                    0,
+                    i
+                );
+            }
+        }
 
-split =
-this.splitTopLevelWord(
-text,
-"and"
-);
-
-if (split) {
-
-return (
-Boolean(
-this.evaluateExpression(
-split.left
-)
-)
-&&
-Boolean(
-this.evaluateExpression(
-split.right
-)
-)
-);
-}
+        return line;
+    }
 
-if (
-text.startsWith("not ")
-) {
-
-return !Boolean(
-this.evaluateExpression(
-text.slice(4)
-)
-);
-}
 
-const comparison =
-this.findTopLevelOperator(
-text,
-[
-"==",
-"!=",
-">=",
-"<=",
-">",
-"<",
-" in "
-]
-);
-
-if (comparison) {
-
-const left =
-this.evaluateExpression(
-comparison.left
-);
-
-const right =
-this.evaluateExpression(
-comparison.right
-);
-
-switch (
-comparison.operator
-) {
-
-case "==":
-return left === right;
-
-case "!=":
-return left !== right;
-
-case ">=":
-return left >= right;
-
-case "<=":
-return left <= right;
-
-case ">":
-return left > right;
-
-case "<":
-return left < right;
-
-case " in ":
-
-if (
-Array.isArray(right)
-||
-typeof right
-=== "string"
-) {
-
-return right.includes(
-left
-);
-}
+    // =====================================================
+    // BLOCS
+    // =====================================================
 
-return false;
-}
-}
+    executeBlock(
+        lines,
+        start,
+        end,
+        indent
+    ) {
 
-const plusMinus =
-this.findTopLevelOperatorFromRight(
-text,
-["+", "-"]
-);
-
-if (plusMinus) {
-
-const left =
-this.evaluateExpression(
-plusMinus.left
-);
-
-const right =
-this.evaluateExpression(
-plusMinus.right
-);
-
-if (
-plusMinus.operator
-=== "+"
-) {
-return left + right;
-}
+        let index = start;
 
-return left - right;
-}
+        while (index < end) {
 
-const multiply =
-this.findTopLevelOperatorFromRight(
-text,
-["//", "*", "/", "%"]
-);
-
-if (multiply) {
-
-const left =
-this.evaluateExpression(
-multiply.left
-);
-
-const right =
-this.evaluateExpression(
-multiply.right
-);
-
-if (
-multiply.operator === "*"
-) {
-return left * right;
-}
+            const line =
+                lines[index];
 
-if (
-right === 0
-) {
+            if (
+                line.indent < indent
+            ) {
 
-throw new Error(
-"Division par zéro."
-);
-}
+                break;
+            }
 
-if (
-multiply.operator === "/"
-) {
-return left / right;
-}
+            if (
+                line.indent > indent
+            ) {
 
-if (
-multiply.operator === "//"
-) {
+                throw new Error(
+                    `Ligne ${line.number} : indentation inattendue.`
+                );
+            }
 
-return Math.floor(
-left / right
-);
-}
 
-return left % right;
-}
+            const text =
+                line.text;
 
-if (
-/^-?\d+(\.\d+)?$/
-.test(text)
-) {
-return Number(text);
-}
 
-if (text === "True") {
-return true;
-}
+            // ---------------------------------------------
+            // IF
+            // ---------------------------------------------
 
-if (text === "False") {
-return false;
-}
+            if (
+                /^if\s+.+:$/.test(text)
+            ) {
 
-if (text === "None") {
-return null;
-}
+                index =
+                    this.executeIfChain(
+                        lines,
+                        index,
+                        end,
+                        indent
+                    );
 
-if (
-(
-text.startsWith('"')
-&&
-text.endsWith('"')
-)
-||
-(
-text.startsWith("'")
-&&
-text.endsWith("'")
-)
-) {
-
-return text
-.slice(1, -1)
-.replace(/\\n/g, "\n")
-.replace(/\\"/g, '"')
-.replace(/\\'/g, "'");
-}
+                continue;
+            }
 
-if (
-text.startsWith("[")
-&&
-text.endsWith("]")
-) {
-
-const inside =
-text.slice(
-1,
--1
-);
-
-if (
-inside.trim() === ""
-) {
-return [];
-}
 
-return this
-.parseArguments(
-inside
-)
-.map(
-item =>
-this.evaluateExpression(
-item
-)
-);
-}
+            // ---------------------------------------------
+            // ELIF / ELSE isolé
+            // ---------------------------------------------
 
-const indexMatch =
-text.match(
-/^([A-Za-z_]\w*)\[(.+)\]$/
-);
-
-if (indexMatch) {
-
-const container =
-this.variables[
-indexMatch[1]
-];
-
-if (
-!Array.isArray(container)
-&&
-typeof container
-!== "string"
-) {
-
-throw new Error(
-`${indexMatch[1]} n'est pas indexable.`
-);
-}
+            if (
+                /^elif\s+/.test(text) ||
+                text === "else:"
+            ) {
 
-const position =
-Number(
-this.evaluateExpression(
-indexMatch[2]
-)
-);
-
-return container[
-position
-];
-}
+                throw new Error(
+                    `Ligne ${line.number} : ${text.startsWith("elif") ? "elif" : "else"} sans if correspondant.`
+                );
+            }
 
-const call =
-this.parseCall(
-text
-);
-
-if (call) {
-
-const args =
-this.parseArguments(
-call.arguments
-)
-.map(
-argument =>
-this.evaluateExpression(
-argument
-)
-);
-
-if (
-call.name === "range"
-) {
-
-return this.makeRange(
-args
-);
-}
 
-if (
-call.name === "len"
-) {
+            // ---------------------------------------------
+            // FOR
+            // ---------------------------------------------
 
-if (
-args.length !== 1
-) {
+            if (
+                /^for\s+/.test(text)
+            ) {
 
-throw new Error(
-"len() attend une valeur."
-);
-}
+                index =
+                    this.executeFor(
+                        lines,
+                        index,
+                        end,
+                        indent
+                    );
 
-return args[0].length;
-}
+                continue;
+            }
 
-if (
-call.name === "int"
-) {
 
-if (
-args.length !== 1
-) {
+            // ---------------------------------------------
+            // WHILE
+            // ---------------------------------------------
 
-throw new Error(
-"int() attend une valeur."
-);
-}
+            if (
+                /^while\s+/.test(text)
+            ) {
 
-const value =
-parseInt(
-args[0],
-10
-);
-
-if (
-Number.isNaN(value)
-) {
-
-throw new Error(
-"Conversion int() impossible."
-);
-}
+                index =
+                    this.executeWhile(
+                        lines,
+                        index,
+                        end,
+                        indent
+                    );
 
-return value;
-}
+                continue;
+            }
 
-if (
-call.name === "float"
-) {
 
-if (
-args.length !== 1
-) {
+            // ---------------------------------------------
+            // DEF
+            // ---------------------------------------------
 
-throw new Error(
-"float() attend une valeur."
-);
-}
+            if (
+                /^def\s+/.test(text)
+            ) {
 
-const value =
-Number(
-args[0]
-);
-
-if (
-Number.isNaN(value)
-) {
-
-throw new Error(
-"Conversion float() impossible."
-);
-}
+                index =
+                    this.registerFunction(
+                        lines,
+                        index,
+                        end,
+                        indent
+                    );
 
-return value;
-}
+                continue;
+            }
 
-if (
-call.name === "str"
-) {
 
-if (
-args.length !== 1
-) {
+            // ---------------------------------------------
+            // BREAK
+            // ---------------------------------------------
 
-throw new Error(
-"str() attend une valeur."
-);
-}
+            if (
+                text === "break"
+            ) {
 
-return this.pythonString(
-args[0]
-);
-}
+                return {
+                    type: "break",
+                    nextIndex: index + 1
+                };
+            }
 
-if (
-this.functions[
-call.name
-]
-) {
-
-return this.callFunction(
-call.name,
-args
-);
-}
-}
 
-if (
-/^[A-Za-z_]\w*$/
-.test(text)
-) {
-
-if (
-text
-in
-this.variables
-) {
-
-return this.variables[
-text
-];
-}
+            // ---------------------------------------------
+            // RETURN
+            // ---------------------------------------------
 
-throw new Error(
-`Variable inconnue : ${text}`
-);
-}
+            if (
+                text === "return"
+            ) {
 
-throw new Error(
-`Expression non reconnue : ${text}`
-);
-}
+                return {
+                    type: "return",
+                    value: null,
+                    nextIndex: index + 1
+                };
+            }
 
-makeRange(args) {
 
-let start;
-let stop;
-let step;
+            if (
+                text.startsWith("return ")
+            ) {
 
-if (
-args.length === 1
-) {
+                const expression =
+                    text.slice(7).trim();
 
-start = 0;
-stop =
-Number(args[0]);
-step = 1;
+                return {
+                    type: "return",
+                    value:
+                        this.evaluateExpression(
+                            expression,
+                            line.number
+                        ),
+                    nextIndex: index + 1
+                };
+            }
 
-} else if (
-args.length === 2
-) {
 
-start =
-Number(args[0]);
+            // ---------------------------------------------
+            // PASS
+            // ---------------------------------------------
 
-stop =
-Number(args[1]);
+            if (
+                text === "pass"
+            ) {
 
-step = 1;
+                index++;
+                continue;
+            }
 
-} else if (
-args.length === 3
-) {
 
-start =
-Number(args[0]);
+            this.executeStatement(
+                text,
+                line.number
+            );
 
-stop =
-Number(args[1]);
+            index++;
+        }
 
-step =
-Number(args[2]);
+        return {
+            type: "normal",
+            nextIndex: index
+        };
+    }
 
-} else {
 
-throw new Error(
-"range() attend 1, 2 ou 3 arguments."
-);
-}
+    findBlockEnd(
+        lines,
+        start,
+        end,
+        parentIndent
+    ) {
 
-if (
-!Number.isInteger(start)
-||
-!Number.isInteger(stop)
-||
-!Number.isInteger(step)
-) {
-
-throw new Error(
-"range() utilise des nombres entiers."
-);
-}
+        let index =
+            start + 1;
 
-if (step === 0) {
+        while (index < end) {
 
-throw new Error(
-"Le pas de range() ne peut pas être 0."
-);
-}
+            if (
+                lines[index].indent <=
+                parentIndent
+            ) {
 
-const values = [];
+                break;
+            }
 
-if (step > 0) {
+            index++;
+        }
 
-for (
-let value = start;
-value < stop;
-value += step
-) {
+        return index;
+    }
 
-values.push(
-value
-);
 
-if (
-values.length
->
-this.maxIterations
-) {
+    // =====================================================
+    // IF / ELIF / ELSE
+    // =====================================================
 
-throw new Error(
-"range() contient trop de valeurs."
-);
-}
-}
+    executeIfChain(
+        lines,
+        start,
+        end,
+        indent
+    ) {
 
-} else {
-
-for (
-let value = start;
-value > stop;
-value += step
-) {
-
-values.push(
-value
-);
-
-if (
-values.length
->
-this.maxIterations
-) {
-
-throw new Error(
-"range() contient trop de valeurs."
-);
-}
-}
-}
+        let index = start;
+        let branchExecuted = false;
 
-return values;
-}
+        while (index < end) {
 
-parseCall(text) {
+            const line =
+                lines[index];
 
-const match =
-text.match(
-/^([A-Za-z_]\w*)\s*\((.*)\)$/
-);
+            if (
+                line.indent !== indent
+            ) {
 
-if (!match) {
-return null;
-}
+                break;
+            }
 
-return {
-name:
-match[1],
+            const text =
+                line.text;
 
-arguments:
-match[2]
-};
-}
+            const isIf =
+                /^if\s+.+:$/.test(text);
 
-parseArguments(text) {
+            const isElif =
+                /^elif\s+.+:$/.test(text);
 
-if (
-text.trim() === ""
-) {
-return [];
-}
+            const isElse =
+                text === "else:";
 
-const result = [];
-
-let current = "";
-let depth = 0;
-let quote = null;
-
-for (
-let i = 0;
-i < text.length;
-i++
-) {
-
-const char =
-text[i];
-
-if (
-(
-char === "'"
-||
-char === '"'
-)
-&&
-text[i - 1] !== "\\"
-) {
-
-if (quote === null) {
-quote = char;
-} else if (
-quote === char
-) {
-quote = null;
-}
-}
+            if (
+                !isIf &&
+                !isElif &&
+                !isElse
+            ) {
 
-if (
-quote === null
-) {
-
-if (
-char === "("
-||
-char === "["
-) {
-depth++;
-}
+                break;
+            }
 
-if (
-char === ")"
-||
-char === "]"
-) {
-depth--;
-}
+            if (
+                index !== start &&
+                isIf
+            ) {
 
-if (
-char === ","
-&&
-depth === 0
-) {
+                break;
+            }
 
-result.push(
-current.trim()
-);
+            const blockEnd =
+                this.findBlockEnd(
+                    lines,
+                    index,
+                    end,
+                    indent
+                );
 
-current = "";
+            let shouldRun = false;
 
-continue;
-}
-}
+            if (!branchExecuted) {
 
-current += char;
-}
+                if (isElse) {
 
-if (
-current.trim() !== ""
-) {
+                    shouldRun = true;
 
-result.push(
-current.trim()
-);
-}
+                } else {
 
-return result;
-}
+                    const conditionText =
+                        text
+                            .replace(
+                                /^(if|elif)\s+/,
+                                ""
+                            )
+                            .replace(
+                                /:$/,
+                                ""
+                            );
 
-stripOuterParentheses(text) {
-
-while (
-text.startsWith("(")
-&&
-text.endsWith(")")
-&&
-this.outerParenthesesMatch(
-text
-)
-) {
-
-text =
-text
-.slice(1, -1)
-.trim();
-}
+                    shouldRun =
+                        Boolean(
+                            this.evaluateExpression(
+                                conditionText,
+                                line.number
+                            )
+                        );
+                }
+            }
 
-return text;
-}
+            if (shouldRun) {
 
-outerParenthesesMatch(text) {
-
-let depth = 0;
-let quote = null;
-
-for (
-let i = 0;
-i < text.length;
-i++
-) {
-
-const char =
-text[i];
-
-if (
-(
-char === "'"
-||
-char === '"'
-)
-&&
-text[i - 1] !== "\\"
-) {
-
-if (quote === null) {
-quote = char;
-} else if (
-quote === char
-) {
-quote = null;
-}
-}
+                branchExecuted = true;
 
-if (quote !== null) {
-continue;
-}
+                const result =
+                    this.executeBlock(
+                        lines,
+                        index + 1,
+                        blockEnd,
+                        indent + 1
+                    );
 
-if (char === "(") {
-depth++;
-}
+                if (
+                    result.type !== "normal"
+                ) {
 
-if (char === ")") {
-depth--;
-}
+                    return result;
+                }
+            }
 
-if (
-depth === 0
-&&
-i < text.length - 1
-) {
-return false;
-}
-}
+            index = blockEnd;
 
-return depth === 0;
-}
+            if (
+                index >= end
+            ) {
 
-splitTopLevelWord(
-text,
-word
-) {
-
-const target =
-` ${word} `;
-
-const position =
-this.findTopLevelText(
-text,
-target
-);
-
-if (
-position === -1
-) {
-return null;
-}
+                break;
+            }
 
-return {
-left:
-text
-.slice(
-0,
-position
-)
-.trim(),
-
-right:
-text
-.slice(
-position
-+
-target.length
-)
-.trim()
-};
-}
+            const next =
+                lines[index];
 
-findTopLevelText(
-text,
-target
-) {
-
-let depth = 0;
-let quote = null;
-
-for (
-let i = 0;
-i <=
-text.length
--
-target.length;
-i++
-) {
-
-const char =
-text[i];
-
-if (
-(
-char === "'"
-||
-char === '"'
-)
-&&
-text[i - 1] !== "\\"
-) {
-
-if (quote === null) {
-quote = char;
-} else if (
-quote === char
-) {
-quote = null;
-}
-}
+            if (
+                next.indent !== indent ||
+                !(
+                    /^elif\s+.+:$/.test(
+                        next.text
+                    ) ||
+                    next.text === "else:"
+                )
+            ) {
 
-if (quote !== null) {
-continue;
-}
+                break;
+            }
+        }
 
-if (
-char === "("
-||
-char === "["
-) {
-depth++;
-}
+        return index;
+    }
 
-if (
-char === ")"
-||
-char === "]"
-) {
-depth--;
-}
 
-if (
-depth === 0
-&&
-text.slice(
-i,
-i + target.length
-)
-=== target
-) {
-return i;
-}
-}
+    // =====================================================
+    // FOR
+    // =====================================================
 
-return -1;
-}
+    executeFor(
+        lines,
+        start,
+        end,
+        indent
+    ) {
 
-findTopLevelOperator(
-text,
-operators
-) {
-
-for (
-const operator
-of operators
-) {
-
-const position =
-this.findTopLevelText(
-text,
-operator
-);
-
-if (
-position !== -1
-) {
-
-return {
-left:
-text
-.slice(
-0,
-position
-)
-.trim(),
-
-right:
-text
-.slice(
-position
-+
-operator.length
-)
-.trim(),
-
-operator
-};
-}
-}
+        const line =
+            lines[start];
 
-return null;
-}
+        const match =
+            line.text.match(
+                /^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
+            );
 
-findTopLevelOperatorFromRight(
-text,
-operators
-) {
-
-let depth = 0;
-let quote = null;
-
-for (
-let i =
-text.length - 1;
-i >= 0;
-i--
-) {
-
-const char =
-text[i];
-
-if (
-(
-char === "'"
-||
-char === '"'
-)
-&&
-text[i - 1] !== "\\"
-) {
-
-if (quote === null) {
-quote = char;
-} else if (
-quote === char
-) {
-quote = null;
-}
-}
+        if (!match) {
 
-if (quote !== null) {
-continue;
-}
+            throw new Error(
+                `Ligne ${line.number} : boucle for incorrecte.`
+            );
+        }
 
-if (
-char === ")"
-||
-char === "]"
-) {
-
-depth++;
-continue;
-}
+        const variableName =
+            match[1];
 
-if (
-char === "("
-||
-char === "["
-) {
-
-depth--;
-continue;
-}
+        const iterableExpression =
+            match[2];
 
-if (depth !== 0) {
-continue;
-}
+        const iterable =
+            this.evaluateExpression(
+                iterableExpression,
+                line.number
+            );
 
-for (
-const operator
-of operators
-) {
-
-const start =
-i
--
-operator.length
-+ 1;
-
-if (start < 0) {
-continue;
-}
+        if (
+            !Array.isArray(iterable)
+        ) {
 
-if (
-text.slice(
-start,
-i + 1
-)
-=== operator
-) {
-
-if (
-operator === "-"
-&&
-start === 0
-) {
-continue;
-}
+            throw new Error(
+                `Ligne ${line.number} : la boucle for attend une liste ou range().`
+            );
+        }
 
-return {
-left:
-text
-.slice(
-0,
-start
-)
-.trim(),
-
-right:
-text
-.slice(
-i + 1
-)
-.trim(),
-
-operator
-};
-}
-}
-}
+        const blockEnd =
+            this.findBlockEnd(
+                lines,
+                start,
+                end,
+                indent
+            );
 
-return null;
-}
+        for (
+            const value
+            of iterable
+        ) {
 
-pythonString(value) {
+            this.loopIterations++;
 
-if (value === true) {
-return "True";
-}
+            if (
+                this.loopIterations >
+                this.maxIterations
+            ) {
+
+                throw new Error(
+                    `Ligne ${line.number} : trop d'itérations. Vérifie ta boucle.`
+                );
+            }
+
+            this.variables[
+                variableName
+            ] = value;
+
+            const result =
+                this.executeBlock(
+                    lines,
+                    start + 1,
+                    blockEnd,
+                    indent + 1
+                );
+
+            if (
+                result.type === "break"
+            ) {
 
-if (value === false) {
-return "False";
-}
+                break;
+            }
 
-if (value === null) {
-return "None";
-}
+            if (
+                result.type === "return"
+            ) {
 
-if (
-Array.isArray(value)
-) {
-
-return (
-"["
-+
-value
-.map(
-item =>
-this.pythonString(
-item
-)
-)
-.join(", ")
-+
-"]"
-);
-}
+                return result;
+            }
+        }
+
+        return blockEnd;
+    }
+
 
-return String(value);
-}
+    // =====================================================
+    // WHILE
+    // =====================================================
+
+    executeWhile(
+        lines,
+        start,
+        end,
+        indent
+    ) {
+
+        const line =
+            lines[start];
 
-checkForbiddenCode(code) {
-
-const forbidden = [
-/\bimport\b/i,
-/\bfrom\s+\w+\s+import\b/i,
-/\beval\s*\(/i,
-/\bexec\s*\(/i,
-/\bopen\s*\(/i,
-/__/,
-/\bclass\s+/i,
-/\bglobal\b/i,
-/\bnonlocal\b/i,
-/\blambda\b/i,
-/\byield\b/i,
-/\basync\b/i,
-/\bawait\b/i
-];
-
-for (
-const pattern
-of forbidden
-) {
-
-if (
-pattern.test(code)
-) {
-
-throw new Error(
-"Cette instruction Python n'est pas disponible dans PYT."
-);
-}
-}
-}
-}
+        const match =
+            line.text.match(
+                /^while\s+(.+):$/
+            );
 
+        if (!match) {
 
-/* =========================================================
-   APPLICATION
-========================================================= */
+            throw new Error(
+                `Ligne ${line.number} : boucle while incorrecte.`
+            );
+        }
+
+        const condition =
+            match[1];
+
+        const blockEnd =
+            this.findBlockEnd(
+                lines,
+                start,
+                end,
+                indent
+            );
+
+        while (
+            Boolean(
+                this.evaluateExpression(
+                    condition,
+                    line.number
+                )
+            )
+        ) {
+
+            this.loopIterations++;
+
+            if (
+                this.loopIterations >
+                this.maxIterations
+            ) {
+
+                throw new Error(
+                    `Ligne ${line.number} : la boucle while semble ne jamais s'arrêter.`
+                );
+            }
+
+            const result =
+                this.executeBlock(
+                    lines,
+                    start + 1,
+                    blockEnd,
+                    indent + 1
+                );
+
+            if (
+                result.type === "break"
+            ) {
+
+                break;
+            }
+
+            if (
+                result.type === "return"
+            ) {
+
+                return result;
+            }
+        }
+
+        return blockEnd;
+    }
+
+
+    // =====================================================
+    // FONCTIONS
+    // =====================================================
+
+    registerFunction(
+        lines,
+        start,
+        end,
+        indent
+    ) {
+
+        const line =
+            lines[start];
+
+        const match =
+            line.text.match(
+                /^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:$/
+            );
+
+        if (!match) {
+
+            throw new Error(
+                `Ligne ${line.number} : définition de fonction incorrecte.`
+            );
+        }
+
+        const name =
+            match[1];
+
+        const parametersText =
+            match[2].trim();
+
+        const parameters =
+            parametersText === ""
+                ? []
+                : parametersText
+                    .split(",")
+                    .map(
+                        item =>
+                            item.trim()
+                    );
+
+        for (
+            const parameter
+            of parameters
+        ) {
+
+            if (
+                !/^[A-Za-z_]\w*$/.test(
+                    parameter
+                )
+            ) {
+
+                throw new Error(
+                    `Ligne ${line.number} : paramètre de fonction incorrect.`
+                );
+            }
+        }
+
+        const blockEnd =
+            this.findBlockEnd(
+                lines,
+                start,
+                end,
+                indent
+            );
+
+        this.functions[name] = {
+            parameters,
+            lines,
+            start: start + 1,
+            end: blockEnd,
+            indent: indent + 1,
+            lineNumber: line.number
+        };
+
+        return blockEnd;
+    }
+
+
+    callUserFunction(
+        name,
+        args,
+        lineNumber
+    ) {
+
+        const fn =
+            this.functions[name];
+
+        if (!fn) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : fonction inconnue "${name}".`
+            );
+        }
+
+        if (
+            args.length !==
+            fn.parameters.length
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : "${name}" attend ${fn.parameters.length} argument(s).`
+            );
+        }
+
+        this.functionCalls++;
+
+        if (
+            this.functionCalls >
+            this.maxFunctionCalls
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : trop d'appels de fonction.`
+            );
+        }
+
+        const oldVariables =
+            { ...this.variables };
+
+        for (
+            let i = 0;
+            i < fn.parameters.length;
+            i++
+        ) {
+
+            this.variables[
+                fn.parameters[i]
+            ] = args[i];
+        }
+
+        const result =
+            this.executeBlock(
+                fn.lines,
+                fn.start,
+                fn.end,
+                fn.indent
+            );
+
+        const changedVariables =
+            { ...this.variables };
+
+        this.variables =
+            oldVariables;
+
+        /*
+        On conserve les variables globales
+        qui existaient avant l'appel.
+        */
+        for (
+            const key
+            of Object.keys(oldVariables)
+        ) {
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    changedVariables,
+                    key
+                )
+            ) {
+
+                this.variables[key] =
+                    changedVariables[key];
+            }
+        }
+
+        if (
+            result.type === "return"
+        ) {
+
+            return result.value;
+        }
+
+        return null;
+    }
+
+
+    // =====================================================
+    // INSTRUCTIONS SIMPLES
+    // =====================================================
+
+    executeStatement(
+        text,
+        lineNumber
+    ) {
+
+        // ---------------------------------------------
+        // += -= *=
+        // ---------------------------------------------
+
+        let match =
+            text.match(
+                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=)\s*(.+)$/
+            );
+
+        if (match) {
+
+            const name =
+                match[1];
+
+            const operator =
+                match[2];
+
+            const value =
+                this.evaluateExpression(
+                    match[3],
+                    lineNumber
+                );
+
+            if (
+                !Object.prototype.hasOwnProperty.call(
+                    this.variables,
+                    name
+                )
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : variable inconnue "${name}".`
+                );
+            }
+
+            if (
+                operator === "+="
+            ) {
+
+                this.variables[name] += value;
+
+            } else if (
+                operator === "-="
+            ) {
+
+                this.variables[name] -= value;
+
+            } else {
+
+                this.variables[name] *= value;
+            }
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // AFFECTATION
+        // ---------------------------------------------
+
+        match =
+            text.match(
+                /^([A-Za-z_]\w*)\s*=\s*(.+)$/
+            );
+
+        if (match) {
+
+            const name =
+                match[1];
+
+            const expression =
+                match[2];
+
+            this.variables[name] =
+                this.evaluateExpression(
+                    expression,
+                    lineNumber
+                );
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // APPEND
+        // ---------------------------------------------
+
+        match =
+            text.match(
+                /^([A-Za-z_]\w*)\.append\s*\((.*)\)$/
+            );
+
+        if (match) {
+
+            const listName =
+                match[1];
+
+            const list =
+                this.variables[
+                    listName
+                ];
+
+            if (
+                !Array.isArray(list)
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : "${listName}" n'est pas une liste.`
+                );
+            }
+
+            const value =
+                this.evaluateExpression(
+                    match[2],
+                    lineNumber
+                );
+
+            list.push(value);
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // APPEL DE FONCTION
+        // ---------------------------------------------
+
+        match =
+            text.match(
+                /^([A-Za-z_]\w*)\s*\((.*)\)$/
+            );
+
+        if (match) {
+
+            const name =
+                match[1];
+
+            const args =
+                this.parseArguments(
+                    match[2],
+                    lineNumber
+                );
+
+            this.executeCall(
+                name,
+                args,
+                lineNumber
+            );
+
+            return;
+        }
+
+
+        throw new Error(
+            `Ligne ${lineNumber} : instruction non reconnue.`
+        );
+    }
+
+
+    // =====================================================
+    // APPELS
+    // =====================================================
+
+    executeCall(
+        name,
+        args,
+        lineNumber
+    ) {
+
+        if (
+            name === "forward"
+        ) {
+
+            const steps =
+                this.requireMovementNumber(
+                    args,
+                    lineNumber,
+                    "forward"
+                );
+
+            this.addAction(
+                "forward",
+                steps,
+                lineNumber
+            );
+
+            return null;
+        }
+
+
+        if (
+            name === "backward"
+        ) {
+
+            const steps =
+                this.requireMovementNumber(
+                    args,
+                    lineNumber,
+                    "backward"
+                );
+
+            this.addAction(
+                "backward",
+                steps,
+                lineNumber
+            );
+
+            return null;
+        }
+
+
+        if (
+            name === "right"
+        ) {
+
+            const angle =
+                args.length === 0
+                    ? 90
+                    : Number(args[0]);
+
+            if (
+                !Number.isFinite(angle) ||
+                angle % 90 !== 0
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : right() attend un angle multiple de 90.`
+                );
+            }
+
+            const turns =
+                Math.abs(angle / 90);
+
+            for (
+                let i = 0;
+                i < turns;
+                i++
+            ) {
+
+                this.addAction(
+                    angle >= 0
+                        ? "right"
+                        : "left",
+                    90,
+                    lineNumber
+                );
+            }
+
+            return null;
+        }
+
+
+        if (
+            name === "left"
+        ) {
+
+            const angle =
+                args.length === 0
+                    ? 90
+                    : Number(args[0]);
+
+            if (
+                !Number.isFinite(angle) ||
+                angle % 90 !== 0
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : left() attend un angle multiple de 90.`
+                );
+            }
+
+            const turns =
+                Math.abs(angle / 90);
+
+            for (
+                let i = 0;
+                i < turns;
+                i++
+            ) {
+
+                this.addAction(
+                    angle >= 0
+                        ? "left"
+                        : "right",
+                    90,
+                    lineNumber
+                );
+            }
+
+            return null;
+        }
+
+
+        if (
+            name === "print"
+        ) {
+
+            this.output.push(
+                args
+                    .map(
+                        value =>
+                            this.pythonString(
+                                value
+                            )
+                    )
+                    .join(" ")
+            );
+
+            return null;
+        }
+
+
+        if (
+            Object.prototype.hasOwnProperty.call(
+                this.functions,
+                name
+            )
+        ) {
+
+            return this.callUserFunction(
+                name,
+                args,
+                lineNumber
+            );
+        }
+
+
+        throw new Error(
+            `Ligne ${lineNumber} : fonction inconnue "${name}".`
+        );
+    }
+
+
+    requireMovementNumber(
+        args,
+        lineNumber,
+        name
+    ) {
+
+        if (
+            args.length > 1
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : ${name}() attend un seul nombre.`
+            );
+        }
+
+        const value =
+            args.length === 0
+                ? 1
+                : Number(args[0]);
+
+        if (
+            !Number.isFinite(value) ||
+            value < 0 ||
+            !Number.isInteger(value)
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : ${name}() attend un nombre entier positif.`
+            );
+        }
+
+        return value;
+    }
+
+
+    addAction(
+        type,
+        value,
+        line
+    ) {
+
+        if (
+            this.actions.length >=
+            this.maxActions
+        ) {
+
+            throw new Error(
+                `Ligne ${line} : trop d'actions dans le programme.`
+            );
+        }
+
+        /*
+        On garde maintenant le numéro de ligne.
+        Cela permet d'indiquer une ligne seulement
+        lorsqu'une action précise est réellement en cause.
+        */
+
+        this.actions.push({
+            type,
+            value,
+            line
+        });
+    }
+
+
+    // =====================================================
+    // EXPRESSIONS
+    // =====================================================
+
+    evaluateExpression(
+        expression,
+        lineNumber
+    ) {
+
+        let expr =
+            String(expression).trim();
+
+        if (
+            expr === ""
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : expression vide.`
+            );
+        }
+
+
+        // ---------------------------------------------
+        // PARENTHÈSES EXTÉRIEURES
+        // ---------------------------------------------
+
+        while (
+            expr.startsWith("(") &&
+            expr.endsWith(")") &&
+            this.outerParenthesesMatch(expr)
+        ) {
+
+            expr =
+                expr.slice(
+                    1,
+                    -1
+                ).trim();
+        }
+
+
+        // ---------------------------------------------
+        // OR
+        // ---------------------------------------------
+
+        let split =
+            this.splitTopLevelWord(
+                expr,
+                "or"
+            );
+
+        if (split) {
+
+            return (
+                Boolean(
+                    this.evaluateExpression(
+                        split.left,
+                        lineNumber
+                    )
+                ) ||
+                Boolean(
+                    this.evaluateExpression(
+                        split.right,
+                        lineNumber
+                    )
+                )
+            );
+        }
+
+
+        // ---------------------------------------------
+        // AND
+        // ---------------------------------------------
+
+        split =
+            this.splitTopLevelWord(
+                expr,
+                "and"
+            );
+
+        if (split) {
+
+            return (
+                Boolean(
+                    this.evaluateExpression(
+                        split.left,
+                        lineNumber
+                    )
+                ) &&
+                Boolean(
+                    this.evaluateExpression(
+                        split.right,
+                        lineNumber
+                    )
+                )
+            );
+        }
+
+
+        // ---------------------------------------------
+        // NOT
+        // ---------------------------------------------
+
+        if (
+            expr.startsWith("not ")
+        ) {
+
+            return !Boolean(
+                this.evaluateExpression(
+                    expr.slice(4),
+                    lineNumber
+                )
+            );
+        }
+
+
+        // ---------------------------------------------
+        // COMPARAISONS
+        // ---------------------------------------------
+
+        const comparison =
+            this.findTopLevelOperator(
+                expr,
+                [
+                    "==",
+                    "!=",
+                    ">=",
+                    "<=",
+                    ">",
+                    "<"
+                ]
+            );
+
+        if (comparison) {
+
+            const left =
+                this.evaluateExpression(
+                    expr.slice(
+                        0,
+                        comparison.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    expr.slice(
+                        comparison.index +
+                        comparison.operator.length
+                    ),
+                    lineNumber
+                );
+
+            switch (
+                comparison.operator
+            ) {
+
+                case "==":
+                    return left === right;
+
+                case "!=":
+                    return left !== right;
+
+                case ">=":
+                    return left >= right;
+
+                case "<=":
+                    return left <= right;
+
+                case ">":
+                    return left > right;
+
+                case "<":
+                    return left < right;
+            }
+        }
+
+
+        // ---------------------------------------------
+        // ADDITION / SOUSTRACTION
+        // ---------------------------------------------
+
+        const addSub =
+            this.findTopLevelOperatorFromRight(
+                expr,
+                [
+                    "+",
+                    "-"
+                ]
+            );
+
+        if (addSub) {
+
+            const left =
+                this.evaluateExpression(
+                    expr.slice(
+                        0,
+                        addSub.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    expr.slice(
+                        addSub.index + 1
+                    ),
+                    lineNumber
+                );
+
+            if (
+                addSub.operator === "+"
+            ) {
+
+                return left + right;
+            }
+
+            return left - right;
+        }
+
+
+        // ---------------------------------------------
+        // MULTIPLICATION / DIVISION
+        // ---------------------------------------------
+
+        const mulDiv =
+            this.findTopLevelOperatorFromRight(
+                expr,
+                [
+                    "*",
+                    "/",
+                    "%"
+                ]
+            );
+
+        if (mulDiv) {
+
+            const left =
+                this.evaluateExpression(
+                    expr.slice(
+                        0,
+                        mulDiv.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    expr.slice(
+                        mulDiv.index + 1
+                    ),
+                    lineNumber
+                );
+
+            if (
+                mulDiv.operator === "*"
+            ) {
+
+                return left * right;
+            }
+
+            if (
+                mulDiv.operator === "/"
+            ) {
+
+                if (right === 0) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : division par zéro.`
+                    );
+                }
+
+                return left / right;
+            }
+
+            return left % right;
+        }
+
+
+        // ---------------------------------------------
+        // NOMBRE NÉGATIF
+        // ---------------------------------------------
+
+        if (
+            expr.startsWith("-") &&
+            /^-\d+(\.\d+)?$/.test(expr)
+        ) {
+
+            return Number(expr);
+        }
+
+
+        // ---------------------------------------------
+        // NOMBRES
+        // ---------------------------------------------
+
+        if (
+            /^\d+(\.\d+)?$/.test(expr)
+        ) {
+
+            return Number(expr);
+        }
+
+
+        // ---------------------------------------------
+        // BOOL / NONE
+        // ---------------------------------------------
+
+        if (
+            expr === "True"
+        ) {
+
+            return true;
+        }
+
+        if (
+            expr === "False"
+        ) {
+
+            return false;
+        }
+
+        if (
+            expr === "None"
+        ) {
+
+            return null;
+        }
+
+
+        // ---------------------------------------------
+        // CHAÎNES
+        // ---------------------------------------------
+
+        if (
+            (
+                expr.startsWith('"') &&
+                expr.endsWith('"')
+            ) ||
+            (
+                expr.startsWith("'") &&
+                expr.endsWith("'")
+            )
+        ) {
+
+            return expr.slice(
+                1,
+                -1
+            );
+        }
+
+
+        // ---------------------------------------------
+        // LISTE
+        // ---------------------------------------------
+
+        if (
+            expr.startsWith("[") &&
+            expr.endsWith("]")
+        ) {
+
+            const inside =
+                expr.slice(
+                    1,
+                    -1
+                ).trim();
+
+            if (
+                inside === ""
+            ) {
+
+                return [];
+            }
+
+            return this
+                .splitArguments(inside)
+                .map(
+                    item =>
+                        this.evaluateExpression(
+                            item,
+                            lineNumber
+                        )
+                );
+        }
+
+
+        // ---------------------------------------------
+        // INDEX DE LISTE
+        // ---------------------------------------------
+
+        const indexMatch =
+            expr.match(
+                /^([A-Za-z_]\w*)\[(.+)\]$/
+            );
+
+        if (indexMatch) {
+
+            const listName =
+                indexMatch[1];
+
+            const list =
+                this.variables[
+                    listName
+                ];
+
+            if (
+                !Array.isArray(list) &&
+                typeof list !== "string"
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : "${listName}" ne peut pas être indexé.`
+                );
+            }
+
+            const index =
+                Number(
+                    this.evaluateExpression(
+                        indexMatch[2],
+                        lineNumber
+                    )
+                );
+
+            if (
+                !Number.isInteger(index)
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : l'indice doit être un entier.`
+                );
+            }
+
+            if (
+                index < 0 ||
+                index >= list.length
+            ) {
+
+                throw new Error(
+                    `Ligne ${lineNumber} : indice hors de la liste.`
+                );
+            }
+
+            return list[index];
+        }
+
+
+        // ---------------------------------------------
+        // APPEL DANS UNE EXPRESSION
+        // ---------------------------------------------
+
+        const callMatch =
+            expr.match(
+                /^([A-Za-z_]\w*)\s*\((.*)\)$/
+            );
+
+        if (callMatch) {
+
+            const name =
+                callMatch[1];
+
+            const args =
+                this.parseArguments(
+                    callMatch[2],
+                    lineNumber
+                );
+
+
+            if (
+                name === "range"
+            ) {
+
+                return this.makeRange(
+                    args,
+                    lineNumber
+                );
+            }
+
+
+            if (
+                name === "len"
+            ) {
+
+                if (
+                    args.length !== 1
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : len() attend une valeur.`
+                    );
+                }
+
+                if (
+                    !Array.isArray(args[0]) &&
+                    typeof args[0] !== "string"
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : len() attend une liste ou un texte.`
+                    );
+                }
+
+                return args[0].length;
+            }
+
+
+            if (
+                name === "int"
+            ) {
+
+                if (
+                    args.length !== 1
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : int() attend une valeur.`
+                    );
+                }
+
+                const value =
+                    parseInt(
+                        args[0],
+                        10
+                    );
+
+                if (
+                    Number.isNaN(value)
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : conversion en int impossible.`
+                    );
+                }
+
+                return value;
+            }
+
+
+            if (
+                name === "float"
+            ) {
+
+                if (
+                    args.length !== 1
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : float() attend une valeur.`
+                    );
+                }
+
+                const value =
+                    Number(
+                        args[0]
+                    );
+
+                if (
+                    Number.isNaN(value)
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : conversion en float impossible.`
+                    );
+                }
+
+                return value;
+            }
+
+
+            if (
+                name === "str"
+            ) {
+
+                if (
+                    args.length !== 1
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : str() attend une valeur.`
+                    );
+                }
+
+                return String(
+                    args[0]
+                );
+            }
+
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    this.functions,
+                    name
+                )
+            ) {
+
+                return this.callUserFunction(
+                    name,
+                    args,
+                    lineNumber
+                );
+            }
+
+
+            throw new Error(
+                `Ligne ${lineNumber} : fonction inconnue "${name}".`
+            );
+        }
+
+
+        // ---------------------------------------------
+        // VARIABLE
+        // ---------------------------------------------
+
+        if (
+            /^[A-Za-z_]\w*$/.test(expr)
+        ) {
+
+            if (
+                Object.prototype.hasOwnProperty.call(
+                    this.variables,
+                    expr
+                )
+            ) {
+
+                return this.variables[
+                    expr
+                ];
+            }
+
+            throw new Error(
+                `Ligne ${lineNumber} : variable inconnue "${expr}".`
+            );
+        }
+
+
+        throw new Error(
+            `Ligne ${lineNumber} : expression non reconnue "${expr}".`
+        );
+    }
+
+
+    // =====================================================
+    // RANGE
+    // =====================================================
+
+    makeRange(
+        args,
+        lineNumber
+    ) {
+
+        if (
+            args.length < 1 ||
+            args.length > 3
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : range() attend 1 à 3 nombres.`
+            );
+        }
+
+        let start = 0;
+        let stop = 0;
+        let step = 1;
+
+        if (
+            args.length === 1
+        ) {
+
+            stop =
+                Number(args[0]);
+
+        } else if (
+            args.length === 2
+        ) {
+
+            start =
+                Number(args[0]);
+
+            stop =
+                Number(args[1]);
+
+        } else {
+
+            start =
+                Number(args[0]);
+
+            stop =
+                Number(args[1]);
+
+            step =
+                Number(args[2]);
+        }
+
+        if (
+            !Number.isInteger(start) ||
+            !Number.isInteger(stop) ||
+            !Number.isInteger(step)
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : range() utilise des nombres entiers.`
+            );
+        }
+
+        if (
+            step === 0
+        ) {
+
+            throw new Error(
+                `Ligne ${lineNumber} : le pas de range() ne peut pas être 0.`
+            );
+        }
+
+        const result = [];
+
+        if (
+            step > 0
+        ) {
+
+            for (
+                let value = start;
+                value < stop;
+                value += step
+            ) {
+
+                result.push(value);
+
+                if (
+                    result.length >
+                    this.maxIterations
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : range() est trop grand.`
+                    );
+                }
+            }
+
+        } else {
+
+            for (
+                let value = start;
+                value > stop;
+                value += step
+            ) {
+
+                result.push(value);
+
+                if (
+                    result.length >
+                    this.maxIterations
+                ) {
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : range() est trop grand.`
+                    );
+                }
+            }
+        }
+
+        return result;
+    }
+
+
+    // =====================================================
+    // ARGUMENTS
+    // =====================================================
+
+    parseArguments(
+        text,
+        lineNumber
+    ) {
+
+        const trimmed =
+            String(text).trim();
+
+        if (
+            trimmed === ""
+        ) {
+
+            return [];
+        }
+
+        return this
+            .splitArguments(trimmed)
+            .map(
+                expression =>
+                    this.evaluateExpression(
+                        expression,
+                        lineNumber
+                    )
+            );
+    }
+
+
+    splitArguments(text) {
+
+        const result = [];
+
+        let current = "";
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i < text.length;
+            i++
+        ) {
+
+            const char =
+                text[i];
+
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
+
+                if (
+                    quote === char
+                ) {
+
+                    quote = null;
+
+                } else if (
+                    quote === null
+                ) {
+
+                    quote = char;
+                }
+
+                current += char;
+                continue;
+            }
+
+            if (
+                quote === null
+            ) {
+
+                if (
+                    char === "(" ||
+                    char === "["
+                ) {
+
+                    depth++;
+
+                } else if (
+                    char === ")" ||
+                    char === "]"
+                ) {
+
+                    depth--;
+
+                } else if (
+                    char === "," &&
+                    depth === 0
+                ) {
+
+                    result.push(
+                        current.trim()
+                    );
+
+                    current = "";
+
+                    continue;
+                }
+            }
+
+            current += char;
+        }
+
+        if (
+            current.trim() !== ""
+        ) {
+
+            result.push(
+                current.trim()
+            );
+        }
+
+        return result;
+    }
+
+
+    // =====================================================
+    // OUTILS EXPRESSIONS
+    // =====================================================
+
+    outerParenthesesMatch(expr) {
+
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i < expr.length;
+            i++
+        ) {
+
+            const char =
+                expr[i];
+
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
+
+                if (
+                    quote === char
+                ) {
+
+                    quote = null;
+
+                } else if (
+                    quote === null
+                ) {
+
+                    quote = char;
+                }
+
+                continue;
+            }
+
+            if (
+                quote !== null
+            ) {
+
+                continue;
+            }
+
+            if (
+                char === "("
+            ) {
+
+                depth++;
+
+            } else if (
+                char === ")"
+            ) {
+
+                depth--;
+
+                if (
+                    depth === 0 &&
+                    i !== expr.length - 1
+                ) {
+
+                    return false;
+                }
+            }
+        }
+
+        return depth === 0;
+    }
+
+
+    splitTopLevelWord(
+        expression,
+        word
+    ) {
+
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i <= expression.length - word.length;
+            i++
+        ) {
+
+            const char =
+                expression[i];
+
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
+
+                if (
+                    quote === char
+                ) {
+
+                    quote = null;
+
+                } else if (
+                    quote === null
+                ) {
+
+                    quote = char;
+                }
+
+                continue;
+            }
+
+            if (
+                quote !== null
+            ) {
+
+                continue;
+            }
+
+            if (
+                char === "(" ||
+                char === "["
+            ) {
+
+                depth++;
+                continue;
+            }
+
+            if (
+                char === ")" ||
+                char === "]"
+            ) {
+
+                depth--;
+                continue;
+            }
+
+            if (
+                depth !== 0
+            ) {
+
+                continue;
+            }
+
+            const candidate =
+                expression.slice(
+                    i,
+                    i + word.length
+                );
+
+            if (
+                candidate !== word
+            ) {
+
+                continue;
+            }
+
+            const before =
+                i === 0
+                    ? " "
+                    : expression[i - 1];
+
+            const after =
+                i + word.length >=
+                expression.length
+                    ? " "
+                    : expression[
+                        i + word.length
+                    ];
+
+            if (
+                /\s/.test(before) &&
+                /\s/.test(after)
+            ) {
+
+                return {
+                    left:
+                        expression
+                            .slice(0, i)
+                            .trim(),
+
+                    right:
+                        expression
+                            .slice(
+                                i + word.length
+                            )
+                            .trim()
+                };
+            }
+        }
+
+        return null;
+    }
+
+
+    findTopLevelOperator(
+        expression,
+        operators
+    ) {
+
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i < expression.length;
+            i++
+        ) {
+
+            const char =
+                expression[i];
+
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
+
+                if (
+                    quote === char
+                ) {
+
+                    quote = null;
+
+                } else if (
+                    quote === null
+                ) {
+
+                    quote = char;
+                }
+
+                continue;
+            }
+
+            if (
+                quote !== null
+            ) {
+
+                continue;
+            }
+
+            if (
+                char === "(" ||
+                char === "["
+            ) {
+
+                depth++;
+                continue;
+            }
+
+            if (
+                char === ")" ||
+                char === "]"
+            ) {
+
+                depth--;
+                continue;
+            }
+
+            if (
+                depth !== 0
+            ) {
+
+                continue;
+            }
+
+            for (
+                const operator
+                of operators
+            ) {
+
+                if (
+                    expression.startsWith(
+                        operator,
+                        i
+                    )
+                ) {
+
+                    return {
+                        index: i,
+                        operator
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    findTopLevelOperatorFromRight(
+        expression,
+        operators
+    ) {
+
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i =
+                expression.length - 1;
+            i >= 0;
+            i--
+        ) {
+
+            const char =
+                expression[i];
+
+            if (
+                char === "'" ||
+                char === '"'
+            ) {
+
+                if (
+                    quote === char
+                ) {
+
+                    quote = null;
+
+                } else if (
+                    quote === null
+                ) {
+
+                    quote = char;
+                }
+
+                continue;
+            }
+
+            if (
+                quote !== null
+            ) {
+
+                continue;
+            }
+
+            if (
+                char === ")" ||
+                char === "]"
+            ) {
+
+                depth++;
+                continue;
+            }
+
+            if (
+                char === "(" ||
+                char === "["
+            ) {
+
+                depth--;
+                continue;
+            }
+
+            if (
+                depth !== 0
+            ) {
+
+                continue;
+            }
+
+            if (
+                !operators.includes(char)
+            ) {
+
+                continue;
+            }
+
+            /*
+            Évite de prendre le signe -
+            d'un nombre négatif.
+            */
+
+            if (
+                char === "-" &&
+                (
+                    i === 0 ||
+                    "+-*/%(<>=,".includes(
+                        expression[i - 1]
+                    )
+                )
+            ) {
+
+                continue;
+            }
+
+            return {
+                index: i,
+                operator: char
+            };
+        }
+
+        return null;
+    }
+
+
+    pythonString(value) {
+
+        if (
+            value === true
+        ) {
+
+            return "True";
+        }
+
+        if (
+            value === false
+        ) {
+
+            return "False";
+        }
+
+        if (
+            value === null
+        ) {
+
+            return "None";
+        }
+
+        if (
+            Array.isArray(value)
+        ) {
+
+            return (
+                "[" +
+                value
+                    .map(
+                        item =>
+                            this.pythonString(
+                                item
+                            )
+                    )
+                    .join(", ") +
+                "]"
+            );
+        }
+
+        return String(value);
+    }
+}
+
+
+// =========================================================
+// APPLICATION
+// =========================================================
 
 class PytApplication {
 
-constructor() {
+    constructor() {
 
-this.ui = null;
+        this.ui = null;
 
-this.game = null;
-this.robot = null;
-this.level = null;
+        this.robot = null;
+        this.game = null;
+        this.level = null;
 
-this.currentChapter = 1;
-this.currentExercise = 1;
+        this.runner =
+            new BrowserPythonRunner();
 
-this.runner =
-new BrowserPythonRunner();
 
-this.musicEnabled = true;
-this.musicVolume = 0.6;
+        // ---------------------------------------------
+        // AUDIO
+        // ---------------------------------------------
 
-this.currentMusic = null;
+        this.musicEnabled = true;
+        this.musicVolume = 0.6;
 
-this.introTimers = [];
-this.introFinished = false;
+        this.currentMusic = null;
 
-this.settingsReturnTarget =
-"menu";
-}
 
+        // ---------------------------------------------
+        // INTRO
+        // ---------------------------------------------
 
-/* DÉMARRAGE */
+        this.introTimers = [];
+        this.introFinished = false;
 
-start() {
 
-this.checkDependencies();
+        // ---------------------------------------------
+        // PARAMÈTRES
+        // ---------------------------------------------
 
-this.ui =
-new PytUI();
+        this.settingsReturnTarget =
+            "menu";
 
-/*
-Environ 0,5 seconde par action.
-*/
-this.ui.actionDelay = 500;
 
-this.connectUI();
-this.connectShell();
+        // ---------------------------------------------
+        // ESSAI EN COURS
+        // ---------------------------------------------
 
-this.loadAudioSettings();
-this.refreshSettingsControls();
+        this.lastRunResult = null;
+        this.lastConceptResult = null;
 
-if (
-!this.loadLevel(
-1,
-1
-)
-) {
-return;
-}
+        this.isRunning = false;
+    }
 
-this.hide(
-"main-menu"
-);
 
-this.hide(
-"settings-screen"
-);
+    // =====================================================
+    // DÉMARRAGE
+    // =====================================================
 
-this.hide(
-"game-interface"
-);
+    start() {
 
-this.show(
-"intro-screen"
-);
+        if (
+            typeof PytUI === "undefined"
+        ) {
 
-this.startIntro();
-}
+            console.error(
+                "PytUI est introuvable."
+            );
 
+            return;
+        }
 
-/* DÉPENDANCES */
+        this.ui =
+            new PytUI();
 
-checkDependencies() {
+        /*
+        Environ 0,5 seconde par action.
+        */
+        this.ui.actionDelay = 500;
 
-if (
-typeof PytUI
-!== "function"
-) {
 
-throw new Error(
-"ui.js n'est pas chargé."
-);
-}
+        this.connectUI();
+        this.connectShell();
 
-if (
-typeof Robot
-!== "function"
-) {
-
-throw new Error(
-"robot.js n'est pas chargé."
-);
-}
+        this.loadAudioSettings();
 
-if (
-typeof Game
-!== "function"
-) {
-
-throw new Error(
-"game.js n'est pas chargé."
-);
-}
+        this.loadLevel(
+            1,
+            1,
+            false
+        );
 
-if (
-typeof getLevel
-!== "function"
-) {
-
-throw new Error(
-"levels.js n'est pas chargé."
-);
-}
-}
 
+        this.hide(
+            "main-menu"
+        );
 
-/* OUTILS DOM */
+        this.hide(
+            "settings-screen"
+        );
 
-el(id) {
-return document.getElementById(
-id
-);
-}
+        this.hide(
+            "game-interface"
+        );
 
-hide(id) {
+        this.show(
+            "intro-screen"
+        );
 
-this.el(id)
-?.classList
-.add("hidden");
-}
 
-show(id) {
+        this.startIntro();
+    }
 
-this.el(id)
-?.classList
-.remove("hidden");
-}
 
+    // =====================================================
+    // CONNEXION UI
+    // =====================================================
 
-/* =========================================================
-   INTRO
-========================================================= */
+    connectUI() {
 
-startIntro() {
+        this.ui.onRunCode =
+            code => {
 
-const screen =
-this.el(
-"intro-screen"
-);
+                this.runStudentCode(
+                    code
+                );
+            };
 
-if (!screen) {
 
-this.showMainMenu();
-return;
-}
+        this.ui.onRestart =
+            () => {
 
-this.introFinished =
-false;
+                this.restartCurrentLevel();
+            };
 
-this.clearIntroTimers();
 
-screen.classList.remove(
-"intro-arrive",
-"intro-y",
-"intro-happy",
-"intro-finished"
-);
+        this.ui.onSelectLevel =
+            (
+                chapter,
+                exercise
+            ) => {
 
-this.playMusic(
-"intro"
-);
+                this.loadLevel(
+                    chapter,
+                    exercise,
+                    true
+                );
 
+                this.playChapterMusic(
+                    chapter
+                );
+            };
+    }
 
-/*
-Pyt arrive depuis la droite.
-*/
 
-this.introTimers.push(
-setTimeout(
-() => {
+    // =====================================================
+    // CONNEXION MENU / PARAMÈTRES
+    // =====================================================
 
-screen.classList.add(
-"intro-arrive"
-);
+    connectShell() {
 
-},
-300
-)
-);
+        const playButton =
+            document.getElementById(
+                "play-button"
+            );
 
+        const settingsButton =
+            document.getElementById(
+                "settings-button"
+            );
 
-/*
-Pyt se place entre P et T
-et lève les bras pour former Y.
-*/
+        const settingsBackButton =
+            document.getElementById(
+                "settings-back-button"
+            );
 
-this.introTimers.push(
-setTimeout(
-() => {
+        const gameSettingsButton =
+            document.getElementById(
+                "game-settings-button"
+            );
 
-screen.classList.add(
-"intro-y"
-);
+        const menuButton =
+            document.getElementById(
+                "menu-button"
+            );
 
-},
-1500
-)
-);
+        const skipIntroButton =
+            document.getElementById(
+                "skip-intro-button"
+            );
 
+        const musicEnabled =
+            document.getElementById(
+                "music-enabled"
+            );
 
-/*
-Pyt devient content uniquement
-avec les yeux.
-*/
+        const volumeSlider =
+            document.getElementById(
+                "volume-slider"
+            );
 
-this.introTimers.push(
-setTimeout(
-() => {
+        const clearCodeButton =
+            document.getElementById(
+                "clear-code-button"
+            );
 
-screen.classList.add(
-"intro-happy",
-"intro-finished"
-);
 
-},
-2100
-)
-);
+        if (playButton) {
 
+            playButton.addEventListener(
+                "click",
+                () => {
 
-/*
-Puis menu principal.
-*/
+                    this.startGame();
+                }
+            );
+        }
 
-this.introTimers.push(
-setTimeout(
-() => {
 
-this.finishIntro();
+        if (settingsButton) {
 
-},
-3600
-)
-);
-}
+            settingsButton.addEventListener(
+                "click",
+                () => {
 
-finishIntro() {
+                    this.openSettings(
+                        "menu"
+                    );
+                }
+            );
+        }
 
-if (
-this.introFinished
-) {
-return;
-}
 
-this.introFinished =
-true;
+        if (gameSettingsButton) {
 
-this.showMainMenu();
-}
+            gameSettingsButton.addEventListener(
+                "click",
+                () => {
 
-clearIntroTimers() {
+                    this.openSettings(
+                        "game"
+                    );
+                }
+            );
+        }
 
-this.introTimers
-.forEach(
-clearTimeout
-);
 
-this.introTimers = [];
-}
+        if (settingsBackButton) {
 
+            settingsBackButton.addEventListener(
+                "click",
+                () => {
 
-/* =========================================================
-   MENU
-========================================================= */
+                    this.closeSettings();
+                }
+            );
+        }
 
-showMainMenu() {
 
-this.clearIntroTimers();
+        if (menuButton) {
 
-this.hide(
-"intro-screen"
-);
+            menuButton.addEventListener(
+                "click",
+                () => {
 
-this.hide(
-"settings-screen"
-);
+                    this.openMainMenu();
+                }
+            );
+        }
 
-this.hide(
-"game-interface"
-);
 
-this.show(
-"main-menu"
-);
+        if (skipIntroButton) {
 
-this.stopMusic();
-}
+            skipIntroButton.addEventListener(
+                "click",
+                () => {
 
-startGame() {
+                    this.finishIntro();
+                }
+            );
+        }
 
-this.hide(
-"intro-screen"
-);
 
-this.hide(
-"main-menu"
-);
+        if (musicEnabled) {
 
-this.hide(
-"settings-screen"
-);
+            musicEnabled.addEventListener(
+                "change",
+                () => {
 
-this.show(
-"game-interface"
-);
+                    this.musicEnabled =
+                        musicEnabled.checked;
 
-const courseOpened =
-this.ui
-.showCourseAtChapterStart(
-this.currentChapter
-);
+                    this.saveAudioSettings();
 
-if (
-courseOpened
-) {
+                    if (
+                        !this.musicEnabled
+                    ) {
 
-this.playMusic(
-"theory"
-);
+                        this.stopMusic();
 
-} else {
+                    } else {
 
-this.ui.showMap();
+                        this.resumeCorrectMusic();
+                    }
+                }
+            );
+        }
 
-this.playChapterMusic(
-this.currentChapter
-);
-}
-}
 
+        if (volumeSlider) {
 
-/* =========================================================
-   SETTINGS
-========================================================= */
+            volumeSlider.addEventListener(
+                "input",
+                () => {
 
-openSettings(from) {
+                    this.musicVolume =
+                        Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                Number(
+                                    volumeSlider.value
+                                ) / 100
+                            )
+                        );
 
-this.settingsReturnTarget =
-from;
+                    this.updateVolumeLabel();
+                    this.applyVolume();
+                    this.saveAudioSettings();
+                }
+            );
+        }
 
-this.hide(
-"main-menu"
-);
 
-if (
-from === "game"
-) {
+        if (clearCodeButton) {
 
-this.hide(
-"game-interface"
-);
-}
+            clearCodeButton.addEventListener(
+                "click",
+                () => {
 
-this.show(
-"settings-screen"
-);
+                    if (
+                        this.ui &&
+                        this.ui.codeEditor
+                    ) {
 
-this.refreshSettingsControls();
-}
+                        this.ui.codeEditor.value =
+                            "";
 
-closeSettings() {
+                        if (
+                            typeof this.ui.saveCurrentCode ===
+                            "function"
+                        ) {
 
-this.hide(
-"settings-screen"
-);
+                            this.ui.saveCurrentCode();
+                        }
 
-if (
-this.settingsReturnTarget
-=== "game"
-) {
+                        if (
+                            typeof this.ui.clearCodeError ===
+                            "function"
+                        ) {
 
-this.show(
-"game-interface"
-);
+                            this.ui.clearCodeError();
+                        }
+                    }
+                }
+            );
+        }
 
-this.playChapterMusic(
-this.currentChapter
-);
 
-} else {
+        /*
+        Quand l'élève ouvre volontairement
+        le cours, on utilise la musique théorie.
+        */
 
-this.show(
-"main-menu"
-);
-}
-}
+        const courseButton =
+            document.getElementById(
+                "course-button"
+            );
 
+        const mapCourseButton =
+            document.getElementById(
+                "map-course-button"
+            );
 
-/* =========================================================
-   BOUTONS GÉNÉRAUX
-========================================================= */
 
-connectShell() {
+        if (courseButton) {
 
-this.el(
-"skip-intro-button"
-)
-?.addEventListener(
-"click",
-() => {
+            courseButton.addEventListener(
+                "click",
+                () => {
 
-this.finishIntro();
+                    this.playTheoryMusic();
+                }
+            );
+        }
 
-}
-);
 
+        if (mapCourseButton) {
 
-this.el(
-"play-button"
-)
-?.addEventListener(
-"click",
-() => {
+            mapCourseButton.addEventListener(
+                "click",
+                () => {
 
-this.startGame();
+                    this.playTheoryMusic();
+                }
+            );
+        }
 
-}
-);
 
+        /*
+        Lorsque le bouton du cours ramène
+        vers la carte ou l'exercice,
+        on reprend la musique du chapitre.
+        */
 
-this.el(
-"settings-button"
-)
-?.addEventListener(
-"click",
-() => {
+        const courseMapButton =
+            document.getElementById(
+                "course-map-button"
+            );
 
-this.openSettings(
-"menu"
-);
+        if (courseMapButton) {
 
-}
-);
+            courseMapButton.addEventListener(
+                "click",
+                () => {
 
+                    setTimeout(
+                        () => {
 
-this.el(
-"game-settings-button"
-)
-?.addEventListener(
-"click",
-() => {
+                            if (
+                                !this.isElementVisible(
+                                    "chapter-screen"
+                                )
+                            ) {
 
-this.ui.stopAnimation();
+                                this.playChapterMusic(
+                                    this.ui
+                                        ? this.ui.currentChapter
+                                        : 1
+                                );
+                            }
+                        },
+                        0
+                    );
+                }
+            );
+        }
+    }
 
-this.openSettings(
-"game"
-);
 
-}
-);
+    // =====================================================
+    // INTRO
+    // =====================================================
 
+    startIntro() {
 
-this.el(
-"settings-back-button"
-)
-?.addEventListener(
-"click",
-() => {
+        this.clearIntroTimers();
 
-this.closeSettings();
+        this.introFinished = false;
 
-}
-);
+        const screen =
+            document.getElementById(
+                "intro-screen"
+            );
 
+        if (!screen) {
 
-this.el(
-"menu-button"
-)
-?.addEventListener(
-"click",
-() => {
+            this.finishIntro();
+            return;
+        }
 
-this.ui.stopAnimation();
+        screen.classList.remove(
+            "intro-arrive",
+            "intro-y",
+            "intro-happy",
+            "intro-finished"
+        );
 
-if (
-typeof this.ui.closeCodeWindow
-=== "function"
-) {
 
-this.ui.closeCodeWindow();
-}
+        this.playMusic(
+            "music-intro"
+        );
 
-this.showMainMenu();
 
-}
-);
+        this.introTimers.push(
 
+            setTimeout(
+                () => {
 
-/* MUSIQUE ON / OFF */
+                    screen.classList.add(
+                        "intro-arrive"
+                    );
+                },
+                300
+            )
+        );
 
-const enabled =
-this.el(
-"music-enabled"
-);
 
-const slider =
-this.el(
-"volume-slider"
-);
+        this.introTimers.push(
 
+            setTimeout(
+                () => {
 
-enabled
-?.addEventListener(
-"change",
-() => {
+                    screen.classList.add(
+                        "intro-y"
+                    );
+                },
+                1500
+            )
+        );
 
-this.musicEnabled =
-enabled.checked;
 
-if (
-!this.musicEnabled
-) {
+        this.introTimers.push(
 
-this.stopMusic();
+            setTimeout(
+                () => {
 
-} else if (
-this.settingsReturnTarget
-=== "game"
-) {
+                    screen.classList.add(
+                        "intro-happy",
+                        "intro-finished"
+                    );
+                },
+                2200
+            )
+        );
 
-this.playChapterMusic(
-this.currentChapter
-);
-}
 
-this.saveAudioSettings();
+        this.introTimers.push(
 
-}
-);
+            setTimeout(
+                () => {
 
+                    this.finishIntro();
+                },
+                3800
+            )
+        );
+    }
 
-/* VOLUME */
 
-slider
-?.addEventListener(
-"input",
-() => {
+    clearIntroTimers() {
 
-this.musicVolume =
-Math.max(
-0,
-Math.min(
-1,
-Number(
-slider.value
-)
-/ 100
-)
-);
+        for (
+            const timer
+            of this.introTimers
+        ) {
 
-this.applyVolume();
+            clearTimeout(timer);
+        }
 
-this.refreshSettingsControls();
+        this.introTimers = [];
+    }
 
-this.saveAudioSettings();
 
-}
-);
-}
+    finishIntro() {
 
+        if (
+            this.introFinished
+        ) {
 
-/* =========================================================
-   PARAMÈTRES AUDIO
-========================================================= */
+            return;
+        }
 
-loadAudioSettings() {
+        this.introFinished = true;
 
-try {
+        this.clearIntroTimers();
 
-const enabled =
-localStorage.getItem(
-"pyt-music-enabled"
-);
+        this.hide(
+            "intro-screen"
+        );
 
-const volume =
-localStorage.getItem(
-"pyt-music-volume"
-);
+        this.openMainMenu();
+    }
 
-if (
-enabled !== null
-) {
 
-this.musicEnabled =
-enabled === "true";
-}
+    // =====================================================
+    // MENU
+    // =====================================================
 
-if (
-volume !== null
-&&
-Number.isFinite(
-Number(volume)
-)
-) {
-
-this.musicVolume =
-Math.max(
-0,
-Math.min(
-1,
-Number(volume)
-)
-);
-}
+    openMainMenu() {
 
-} catch (_) {
+        this.hide(
+            "intro-screen"
+        );
 
-/*
-Le jeu doit fonctionner même si
-localStorage est indisponible.
-*/
+        this.hide(
+            "settings-screen"
+        );
 
-}
+        this.hide(
+            "game-interface"
+        );
 
-this.applyVolume();
-}
+        this.show(
+            "main-menu"
+        );
 
-saveAudioSettings() {
+        this.stopMusic();
+    }
 
-try {
 
-localStorage.setItem(
-"pyt-music-enabled",
-String(
-this.musicEnabled
-)
-);
+    startGame() {
 
-localStorage.setItem(
-"pyt-music-volume",
-String(
-this.musicVolume
-)
-);
+        this.hide(
+            "main-menu"
+        );
 
-} catch (_) {
+        this.hide(
+            "settings-screen"
+        );
 
-/*
-Aucune erreur de sauvegarde ne
-doit bloquer le jeu.
-*/
+        this.show(
+            "game-interface"
+        );
 
-}
-}
 
-refreshSettingsControls() {
+        if (
+            this.ui &&
+            typeof this.ui.showCourseAtChapterStart ===
+            "function"
+        ) {
 
-const enabled =
-this.el(
-"music-enabled"
-);
+            const courseShown =
+                this.ui.showCourseAtChapterStart();
 
-const slider =
-this.el(
-"volume-slider"
-);
+            if (courseShown) {
 
-const display =
-this.el(
-"volume-value"
-);
+                this.playTheoryMusic();
+                return;
+            }
+        }
 
-if (enabled) {
 
-enabled.checked =
-this.musicEnabled;
-}
+        if (
+            this.ui &&
+            typeof this.ui.showMap ===
+            "function"
+        ) {
 
-if (slider) {
-
-slider.value =
-String(
-Math.round(
-this.musicVolume
-*
-100
-)
-);
-}
+            this.ui.showMap();
+        }
 
-if (display) {
-
-display.textContent =
-`${Math.round(
-this.musicVolume
-*
-100
-)}%`;
-}
-}
 
+        this.playChapterMusic(
+            this.ui
+                ? this.ui.currentChapter
+                : 1
+        );
+    }
 
-/* =========================================================
-   AUDIO
-========================================================= */
 
-getAudio(name) {
+    // =====================================================
+    // PARAMÈTRES
+    // =====================================================
 
-if (
-name === "intro"
-) {
+    openSettings(
+        returnTarget = "menu"
+    ) {
 
-return this.el(
-"music-intro"
-);
-}
+        this.settingsReturnTarget =
+            returnTarget;
 
-if (
-name === "theory"
-) {
+        this.hide(
+            "main-menu"
+        );
 
-return this.el(
-"music-theory"
-);
-}
+        if (
+            returnTarget === "game"
+        ) {
 
-const match =
-String(name)
-.match(
-/^chapter(\d)$/
-);
-
-if (!match) {
-return null;
-}
+            this.hide(
+                "game-interface"
+            );
+        }
 
-return this.el(
-`music-chapter-${match[1]}`
-);
-}
+        this.syncSettingsControls();
 
-hasAudioSource(audio) {
+        this.show(
+            "settings-screen"
+        );
+    }
 
-if (!audio) {
-return false;
-}
 
-if (
-audio.getAttribute(
-"src"
-)
-) {
-return true;
-}
+    closeSettings() {
 
-return [
-...audio.querySelectorAll(
-"source"
-)
-].some(
-source =>
-source.getAttribute(
-"src"
-)
-);
-}
+        this.hide(
+            "settings-screen"
+        );
 
-async playMusic(name) {
+        if (
+            this.settingsReturnTarget ===
+            "game"
+        ) {
 
-if (
-!this.musicEnabled
-) {
-return;
-}
+            this.show(
+                "game-interface"
+            );
 
-const audio =
-this.getAudio(
-name
-);
-
-/*
-Aucun fichier audio ?
-Pas grave : le jeu continue.
-*/
-
-if (
-!this.hasAudioSource(
-audio
-)
-) {
-return;
-}
+            this.resumeCorrectMusic();
 
-if (
-this.currentMusic
-&&
-this.currentMusic
-!== audio
-) {
+        } else {
 
-try {
+            this.show(
+                "main-menu"
+            );
+        }
+    }
 
-this.currentMusic.pause();
 
-} catch (_) {}
-}
+    // =====================================================
+    // AUDIO
+    // =====================================================
 
-this.currentMusic =
-audio;
+    loadAudioSettings() {
 
-audio.volume =
-this.musicVolume;
+        try {
 
-try {
+            const enabled =
+                localStorage.getItem(
+                    "pyt-music-enabled"
+                );
 
-const promise =
-audio.play();
+            const volume =
+                localStorage.getItem(
+                    "pyt-music-volume"
+                );
 
-if (
-promise
-&&
-typeof promise.catch
-=== "function"
-) {
 
-await promise.catch(
-() => {}
-);
-}
+            if (
+                enabled !== null
+            ) {
 
-} catch (_) {
+                this.musicEnabled =
+                    enabled === "true";
+            }
 
-/*
-Autoplay bloqué ou fichier absent :
-aucun blocage.
-*/
 
-}
-}
+            if (
+                volume !== null
+            ) {
 
-playChapterMusic(chapter) {
+                const parsed =
+                    Number(volume);
 
-this.playMusic(
-`chapter${Number(chapter)}`
-);
-}
+                if (
+                    Number.isFinite(parsed)
+                ) {
 
-stopMusic() {
+                    this.musicVolume =
+                        Math.max(
+                            0,
+                            Math.min(
+                                1,
+                                parsed
+                            )
+                        );
+                }
+            }
 
-if (
-this.currentMusic
-) {
+        } catch (error) {
 
-try {
+            /*
+            localStorage peut être indisponible.
+            Le jeu continue normalement.
+            */
+        }
 
-this.currentMusic.pause();
 
-} catch (_) {}
+        this.syncSettingsControls();
+        this.applyVolume();
+    }
 
-this.currentMusic =
-null;
-}
-}
 
-applyVolume() {
+    saveAudioSettings() {
 
-document
-.querySelectorAll(
-"#audio-container audio"
-)
-.forEach(
-audio => {
+        try {
 
-audio.volume =
-this.musicVolume;
+            localStorage.setItem(
+                "pyt-music-enabled",
+                String(
+                    this.musicEnabled
+                )
+            );
 
-}
-);
-}
+            localStorage.setItem(
+                "pyt-music-volume",
+                String(
+                    this.musicVolume
+                )
+            );
 
+        } catch (error) {
 
-/* =========================================================
-   CONNEXION AVEC UI.JS
-========================================================= */
+            /*
+            Pas bloquant.
+            */
+        }
+    }
 
-connectUI() {
 
-this.ui.onSelectLevel =
-(
-chapter,
-exercise
-) => {
+    syncSettingsControls() {
 
-if (
-this.loadLevel(
-chapter,
-exercise
-)
-) {
+        const enabled =
+            document.getElementById(
+                "music-enabled"
+            );
 
-this.ui.showGame();
+        const slider =
+            document.getElementById(
+                "volume-slider"
+            );
 
-this.ui.setStatus(
-"Pyt attend ton programme."
-);
+        if (enabled) {
 
-this.playChapterMusic(
-chapter
-);
-}
-};
+            enabled.checked =
+                this.musicEnabled;
+        }
 
+        if (slider) {
 
-this.ui.onRestart =
-() => {
+            slider.value =
+                String(
+                    Math.round(
+                        this.musicVolume *
+                        100
+                    )
+                );
+        }
 
-this.restartLevel();
+        this.updateVolumeLabel();
+    }
 
-};
 
+    updateVolumeLabel() {
 
-this.ui.onRunCode =
-async code => {
+        const label =
+            document.getElementById(
+                "volume-value"
+            );
 
-await this.runStudentCode(
-code
-);
+        if (label) {
 
-};
-}
+            label.textContent =
+                `${Math.round(
+                    this.musicVolume *
+                    100
+                )}%`;
+        }
+    }
 
 
-/* =========================================================
-   CHARGER UN NIVEAU
-========================================================= */
+    applyVolume() {
 
-loadLevel(
-chapter,
-exercise
-) {
+        const audioElements =
+            document.querySelectorAll(
+                "#audio-container audio"
+            );
 
-const newLevel =
-getLevel(
-chapter,
-exercise
-);
+        for (
+            const audio
+            of audioElements
+        ) {
 
-if (!newLevel) {
+            audio.volume =
+                this.musicVolume;
+        }
+    }
 
-if (this.ui) {
 
-this.ui.showMessage(
-"Niveau introuvable",
-"Impossible de charger cet exercice."
-);
-}
+    audioHasSource(audio) {
 
-return false;
-}
+        if (!audio) {
 
-this.currentChapter =
-Number(chapter);
+            return false;
+        }
 
-this.currentExercise =
-Number(exercise);
+        const src =
+            audio.getAttribute(
+                "src"
+            );
 
-this.level =
-newLevel;
+        if (
+            src &&
+            src.trim() !== ""
+        ) {
 
+            return true;
+        }
 
-this.robot =
-new Robot();
+        const source =
+            audio.querySelector(
+                "source[src]"
+            );
 
+        return Boolean(
+            source &&
+            source.getAttribute("src")
+        );
+    }
 
-this.game =
-new Game(
-this.level,
-this.robot
-);
 
+    playMusic(id) {
 
-this.ui.currentChapter =
-this.currentChapter;
+        if (
+            !this.musicEnabled
+        ) {
 
-this.ui.currentExercise =
-this.currentExercise;
+            return;
+        }
 
+        const audio =
+            document.getElementById(
+                id
+            );
 
-this.ui.setGame(
-this.game
-);
+        /*
+        Aucun fichier audio n'est obligatoire.
+        Une balise sans src est simplement ignorée.
+        */
 
+        if (
+            !this.audioHasSource(audio)
+        ) {
 
-this.ui.setLevel(
-this.level
-);
+            this.stopMusic();
+            return;
+        }
 
+        if (
+            this.currentMusic === audio &&
+            !audio.paused
+        ) {
 
-this.ui.clearConsole();
+            return;
+        }
 
-this.ui.hideThought?.();
+        this.stopMusic();
 
-this.ui.drawWorld();
+        this.currentMusic =
+            audio;
 
-return true;
-}
+        audio.volume =
+            this.musicVolume;
 
+        audio.loop = true;
 
-/* =========================================================
-   RECOMMENCER
-========================================================= */
+        try {
 
-restartLevel() {
+            const promise =
+                audio.play();
 
-if (
-!this.game
-) {
-return;
-}
+            if (
+                promise &&
+                typeof promise.catch ===
+                "function"
+            ) {
 
-this.ui.stopAnimation();
+                promise.catch(
+                    () => {
+                        /*
+                        Certains navigateurs bloquent
+                        l'audio avant une interaction.
+                        Ce n'est jamais une erreur du jeu.
+                        */
+                    }
+                );
+            }
 
-this.game.reset();
+        } catch (error) {
 
-this.ui.hideThought?.();
+            /*
+            Audio non bloquant.
+            */
+        }
+    }
 
-this.ui.clearCodeErrorHighlight?.();
 
-this.ui.clearConsole();
+    stopMusic() {
 
-this.ui.drawWorld();
+        const audioElements =
+            document.querySelectorAll(
+                "#audio-container audio"
+            );
 
-this.ui.setStatus(
-"Niveau recommencé."
-);
-}
+        for (
+            const audio
+            of audioElements
+        ) {
 
+            try {
 
-/* =========================================================
-   EXÉCUTER LE CODE DE L'ÉLÈVE
-========================================================= */
+                audio.pause();
 
-async runStudentCode(code) {
+            } catch (error) {
 
-if (
-!this.game
-) {
-return;
-}
+                /*
+                Rien à faire.
+                */
+            }
+        }
 
+        this.currentMusic = null;
+    }
 
-/*
-Chaque tentative recommence depuis
-l'état initial du niveau.
-*/
 
-this.game.reset();
+    playTheoryMusic() {
 
-this.ui.hideThought?.();
+        this.playMusic(
+            "music-theory"
+        );
+    }
 
-this.ui.clearCodeErrorHighlight?.();
 
-this.ui.drawWorld();
+    playChapterMusic(
+        chapter
+    ) {
 
-this.ui.setConsole(
-"Analyse du programme..."
-);
+        const safeChapter =
+            Math.max(
+                1,
+                Math.min(
+                    9,
+                    Number(chapter) || 1
+                )
+            );
 
+        this.playMusic(
+            `music-chapter-${safeChapter}`
+        );
+    }
 
-let result;
 
-try {
+    resumeCorrectMusic() {
 
-result =
-this.runner.run(
-code
-);
+        if (
+            !this.musicEnabled
+        ) {
 
-} catch (error) {
+            return;
+        }
 
-this.ui.setConsole(
-"Erreur interne :\n"
-+
-error.message
-);
+        if (
+            this.isElementVisible(
+                "chapter-screen"
+            )
+        ) {
 
-this.ui.setStatus(
-"Le programme n'a pas pu être analysé."
-);
+            this.playTheoryMusic();
+            return;
+        }
 
-this.ui.handleFailedAttempt({
-message:
-"Je n'arrive pas encore à exécuter ce programme."
-});
+        if (
+            this.isElementVisible(
+                "game-interface"
+            )
+        ) {
 
-return;
-}
+            this.playChapterMusic(
+                this.ui
+                    ? this.ui.currentChapter
+                    : 1
+            );
+        }
+    }
 
 
-const actions =
-Array.isArray(
-result?.actions
-)
-?
-result.actions
-:
-[];
-
-
-/*
-============================================================
-ERREUR PYTHON
-
-Les actions valides déjà comprises sont
-quand même jouées avant d'afficher l'erreur.
-============================================================
-*/
-
-if (
-!result
-||
-result.success === false
-) {
-
-let message =
-result?.error
-||
-"Programme invalide.";
-
-if (
-result?.output
-) {
-
-message =
-result.output
-+
-"\n"
-+
-message;
-}
+    // =====================================================
+    // NIVEAUX
+    // =====================================================
 
-this.ui.setConsole(
-message
-);
+    loadLevel(
+        chapter,
+        exercise,
+        showGame = true
+    ) {
 
+        const level =
+            typeof getLevel ===
+            "function"
+                ? getLevel(
+                    chapter,
+                    exercise
+                )
+                : null;
 
-const afterAnimation =
-() => {
+        if (!level) {
 
-this.ui.setStatus(
-"Corrige ton programme puis réessaie."
-);
+            console.error(
+                `Niveau ${chapter}-${exercise} introuvable.`
+            );
 
-this.ui.handleFailedAttempt({
+            return false;
+        }
 
-line:
-result?.errorLine
-||
-null,
+        this.level =
+            level;
 
-message:
-"J'ai exécuté tout ce que j'ai pu comprendre avant l'erreur."
 
-});
+        this.robot =
+            new Robot();
 
-};
 
+        this.game =
+            new Game(
+                level,
+                this.robot
+            );
 
-if (
-actions.length > 0
-) {
 
-this.ui.playActions(
+        if (
+            this.ui
+        ) {
 
-actions,
+            this.ui.currentChapter =
+                Number(chapter);
 
-action =>
-this.performAction(
-action
-),
+            this.ui.currentExercise =
+                Number(exercise);
 
-afterAnimation
 
-);
+            if (
+                typeof this.ui.setGame ===
+                "function"
+            ) {
 
-} else {
+                this.ui.setGame(
+                    this.game
+                );
+            }
 
-afterAnimation();
 
-}
+            if (
+                typeof this.ui.setLevel ===
+                "function"
+            ) {
 
-return;
-}
+                this.ui.setLevel(
+                    level
+                );
+            }
 
 
-/* SORTIE PRINT */
+            if (
+                showGame &&
+                typeof this.ui.showGame ===
+                "function"
+            ) {
 
-this.ui.setConsole(
-result.output
-||
-"Programme accepté."
-);
+                this.ui.showGame();
+            }
+        }
 
 
-/* AUCUNE ACTION */
+        return true;
+    }
 
-if (
-actions.length === 0
-) {
 
-this.finishAttempt(
-true,
-null
-);
+    restartCurrentLevel() {
 
-return;
-}
+        if (
+            this.isRunning
+        ) {
 
+            return;
+        }
 
-/* ANIMATION */
+        const chapter =
+            this.ui
+                ? this.ui.currentChapter
+                : this.level?.chapter;
 
-this.ui.playActions(
+        const exercise =
+            this.ui
+                ? this.ui.currentExercise
+                : this.level?.exercise;
 
-actions,
 
-action =>
-this.performAction(
-action
-),
+        this.loadLevel(
+            chapter,
+            exercise,
+            true
+        );
 
-(
-completed,
-details
-) => {
 
-this.finishAttempt(
-completed,
-details
-);
+        if (
+            this.ui &&
+            typeof this.ui.clearCodeError ===
+            "function"
+        ) {
 
-}
+            this.ui.clearCodeError();
+        }
 
-);
-}
 
+        if (
+            this.ui &&
+            typeof this.ui.hideThought ===
+            "function"
+        ) {
 
-/* =========================================================
-   ACTION DU ROBOT
-========================================================= */
+            this.ui.hideThought();
+        }
 
-performAction(action) {
 
-if (
-!this.game
-||
-!this.robot
-) {
+        if (
+            this.ui &&
+            typeof this.ui.setStatus ===
+            "function"
+        ) {
 
-return false;
-}
+            this.ui.setStatus(
+                "PRÊT"
+            );
+        }
 
-let type;
-let value;
-
-if (
-Array.isArray(action)
-) {
-
-type =
-action[0];
-
-value =
-action.length > 1
-?
-action[1]
-:
-1;
-
-} else if (
-action
-&&
-typeof action
-=== "object"
-) {
-
-type =
-action.type
-||
-action.action;
-
-value =
-action.value
-??
-action.amount
-??
-1;
-
-} else {
-
-return false;
-}
 
-try {
+        this.playChapterMusic(
+            chapter
+        );
+    }
 
-switch (type) {
 
-case "forward":
+    // =====================================================
+    // EXÉCUTION DU CODE
+    // =====================================================
 
-return this.game
-.moveForward();
+    runStudentCode(code) {
 
+        if (
+            this.isRunning ||
+            !this.level
+        ) {
 
-case "backward":
+            return;
+        }
 
-return this.game
-.moveBackward();
 
+        this.isRunning = true;
 
-case "right":
 
-this.robot
-.rotateRight(
-Number(value)
-||
-90
-);
+        /*
+        Chaque exécution repart de l'état
+        initial du niveau, mais le texte du code
+        reste dans l'éditeur.
+        */
 
-return true;
+        const chapter =
+            this.ui.currentChapter;
 
+        const exercise =
+            this.ui.currentExercise;
 
-case "left":
 
-this.robot
-.rotateLeft(
-Number(value)
-||
-90
-);
+        this.loadLevel(
+            chapter,
+            exercise,
+            true
+        );
 
-return true;
 
+        if (
+            this.ui &&
+            typeof this.ui.clearCodeError ===
+            "function"
+        ) {
 
-default:
+            this.ui.clearCodeError();
+        }
 
-console.warn(
-"Action inconnue :",
-action
-);
 
-return false;
-}
+        if (
+            this.ui &&
+            typeof this.ui.hideThought ===
+            "function"
+        ) {
 
-} catch (error) {
+            this.ui.hideThought();
+        }
 
-console.error(
-error
-);
 
-return false;
-}
-}
+        if (
+            this.ui &&
+            typeof this.ui.setStatus ===
+            "function"
+        ) {
 
+            this.ui.setStatus(
+                "EXÉCUTION..."
+            );
+        }
 
-/* =========================================================
-   COMPRENDRE POURQUOI LA MISSION A ÉCHOUÉ
-========================================================= */
 
-getFailureFeedback(
-animationCompleted = true
-) {
+        if (
+            this.ui &&
+            typeof this.ui.setConsole ===
+            "function"
+        ) {
 
-if (
-!animationCompleted
-) {
+            this.ui.setConsole(
+                "Exécution du programme..."
+            );
+        }
 
-return {
 
-thought:
-"Oups... mon trajet est bloqué.",
+        const result =
+            this.runner.run(
+                code
+            );
 
-message:
-"Mon déplacement s'est arrêté avant la fin. Vérifie les murs et les directions."
 
-};
-}
+        this.lastRunResult =
+            result;
 
 
-/*
-Objet non récupéré.
-*/
+        /*
+        Vérification pédagogique indépendante
+        du trajet.
 
-if (
-this.game?.objects?.size > 0
-) {
+        On ne compare jamais le programme à
+        une solution exacte : plusieurs solutions
+        restent donc possibles.
+        */
 
-return {
+        this.lastConceptResult =
+            this.validateRequiredConcepts(
+                code,
+                this.level
+            );
 
-thought:
-"J'ai oublié quelque chose...",
 
-message:
-"Il reste un objet à récupérer."
+        const actions =
+            Array.isArray(
+                result.actions
+            )
+                ? result.actions
+                : [];
 
-};
-}
 
+        const finish =
+            animationResult => {
 
-/*
-Objet récupéré mais pas déposé.
-*/
+                this.finishAttempt(
+                    code,
+                    result,
+                    animationResult
+                );
+            };
 
-if (
-this.robot?.inventory > 0
-&&
-this.game?.deposits?.size > 0
-) {
 
-return {
+        /*
+        Même si le programme contient ensuite
+        une erreur, toutes les actions valides
+        déjà produites sont animées.
+        */
 
-thought:
-"J'ai encore l'objet avec moi...",
+        if (
+            actions.length > 0 &&
+            this.ui &&
+            typeof this.ui.playActions ===
+            "function"
+        ) {
 
-message:
-"J'ai récupéré l'objet, mais je ne l'ai pas encore déposé au bon endroit."
+            this.ui.playActions(
+                actions,
 
-};
-}
+                action =>
+                    this.performAction(
+                        action
+                    ),
 
+                (
+                    completed,
+                    details
+                ) => {
 
-/*
-Nettoyage incomplet.
-*/
+                    finish({
+                        completed,
+                        details:
+                            details || null
+                    });
+                }
+            );
 
-if (
-this.game?.dirt?.size > 0
-) {
+        } else {
 
-return {
+            finish({
+                completed: true,
+                details: null
+            });
+        }
+    }
 
-thought:
-"Il reste encore quelque chose à faire...",
 
-message:
-"Certaines cases doivent encore être nettoyées."
+    // =====================================================
+    // ACTIONS DU ROBOT
+    // =====================================================
 
-};
-}
+    performAction(action) {
 
+        if (
+            !action ||
+            !this.game ||
+            !this.robot
+        ) {
 
-/*
-Mauvaise destination finale.
-*/
+            return false;
+        }
 
-const goal =
-this.level?.goal;
 
-if (
-Array.isArray(goal)
-&&
-(
-this.robot?.row !== goal[0]
-||
-this.robot?.col !== goal[1]
-)
-) {
+        let type;
+        let value;
 
-return {
 
-thought:
-"Ce n’est pas là que je voulais aller...",
+        if (
+            Array.isArray(action)
+        ) {
 
-message:
-"Je ne suis pas arrivé à la bonne destination."
+            type =
+                action[0];
 
-};
-}
+            value =
+                action[1];
 
+        } else {
 
-/*
-Message précis du moteur.
-*/
+            type =
+                action.type;
 
-if (
-this.game?.message
-) {
+            value =
+                action.value;
+        }
 
-return {
 
-thought:
-"La mission n'est pas encore terminée...",
+        if (
+            type === "forward"
+        ) {
 
-message:
-this.game.message
+            return this.performMovement(
+                "forward",
+                value
+            );
+        }
 
-};
-}
 
+        if (
+            type === "backward"
+        ) {
 
-return {
+            return this.performMovement(
+                "backward",
+                value
+            );
+        }
 
-thought:
-"La mission n'est pas encore terminée...",
 
-message:
-"Observe le résultat et cherche ce qu'il manque pour terminer l'objectif."
+        if (
+            type === "right"
+        ) {
 
-};
-}
+            if (
+                typeof this.robot.rotateRight ===
+                "function"
+            ) {
 
+                this.robot.rotateRight(
+                    value || 90
+                );
 
-/* =========================================================
-   FIN D'UNE TENTATIVE
-========================================================= */
+            } else if (
+                typeof this.robot.turnRight ===
+                "function"
+            ) {
 
-finishAttempt(
-animationCompleted = true,
-animationDetails = null
-) {
+                this.robot.turnRight();
+            }
 
-if (
-!this.game
-) {
-return;
-}
+            return true;
+        }
 
-this.ui.drawWorld();
 
+        if (
+            type === "left"
+        ) {
 
-const success =
-this.game.checkSuccess();
+            if (
+                typeof this.robot.rotateLeft ===
+                "function"
+            ) {
 
+                this.robot.rotateLeft(
+                    value || 90
+                );
 
-/* RÉUSSITE */
+            } else if (
+                typeof this.robot.turnLeft ===
+                "function"
+            ) {
 
-if (
-success
-) {
+                this.robot.turnLeft();
+            }
 
-this.ui.hideThought?.();
+            return true;
+        }
 
-this.appendConsole(
-"✓ Mission réussie !"
-);
 
-this.ui.setStatus(
-"Mission réussie !"
-);
+        return false;
+    }
 
-this.ui.completeCurrentLevel();
 
-return;
-}
+    performMovement(
+        direction,
+        amount
+    ) {
 
+        const steps =
+            Math.max(
+                0,
+                Number(amount) || 0
+            );
 
-/* ÉCHEC */
 
-const feedback =
-this.getFailureFeedback(
-animationCompleted
-);
+        for (
+            let i = 0;
+            i < steps;
+            i++
+        ) {
 
-this.appendConsole(
-"✗ La mission n'est pas encore réussie.\n"
-+
-feedback.message
-);
+            let success = false;
 
-this.ui.setStatus(
-feedback.message
-);
 
-this.ui.showThought?.(
-feedback.thought
-);
+            if (
+                direction === "forward"
+            ) {
 
+                if (
+                    typeof this.game.moveForward ===
+                    "function"
+                ) {
 
-/*
-Un résultat incorrect ne signifie pas
-forcément qu'une ligne Python est fausse.
+                    success =
+                        this.game.moveForward();
 
-On n'envoie donc une ligne que si
-l'animation peut réellement identifier
-l'action concernée.
-*/
+                } else if (
+                    typeof this.robot.forward ===
+                    "function"
+                ) {
 
-const action =
-animationDetails?.action;
+                    success =
+                        this.robot.forward(
+                            this.game,
+                            1
+                        );
+                }
 
-const line =
-action
-&&
-typeof action === "object"
-&&
-!Array.isArray(action)
-?
-action.line || null
-:
-null;
+            } else {
 
+                if (
+                    typeof this.game.moveBackward ===
+                    "function"
+                ) {
 
-this.ui.handleFailedAttempt({
+                    success =
+                        this.game.moveBackward();
 
-line,
+                } else if (
+                    typeof this.robot.backward ===
+                    "function"
+                ) {
 
-message:
-feedback.message
+                    success =
+                        this.robot.backward(
+                            this.game,
+                            1
+                        );
+                }
+            }
 
-});
-}
 
+            if (
+                success === false
+            ) {
 
-/* =========================================================
-   CONSOLE
-========================================================= */
-
-appendConsole(text) {
-
-const current =
-this.ui
-.consoleOutput
-.textContent
-.trim();
-
-if (
-!current
-||
-current === "Prêt."
-||
-current === "Programme accepté."
-||
-current === "Analyse du programme..."
-) {
-
-this.ui.setConsole(
-text
-);
-
-return;
-}
+                return false;
+            }
+        }
 
-this.ui.setConsole(
-current
-+
-"\n"
-+
-text
-);
-}
 
-}
+        return true;
+    }
 
 
-/* =========================================================
-   DÉMARRAGE AUTOMATIQUE
-========================================================= */
+    // =====================================================
+    // FIN D'ESSAI
+    // =====================================================
 
-function startPytApplication() {
+    finishAttempt(
+        code,
+        runnerResult,
+        animationResult
+    ) {
 
-try {
+        this.isRunning = false;
 
-const app =
-new PytApplication();
 
-app.start();
+        const output =
+            Array.isArray(
+                runnerResult.output
+            )
+                ? runnerResult.output
+                : [];
 
 
-/*
-Disponible dans la console pour les tests.
-*/
+        /*
+        1. Erreur Python / syntaxique.
+        */
 
-window.pytApp =
-app;
+        if (
+            !runnerResult.success
+        ) {
 
+            const consoleText = [
+                ...output,
+                "",
+                `Erreur : ${runnerResult.error}`
+            ]
+                .filter(
+                    line =>
+                        line !== undefined
+                )
+                .join("\n");
 
-window.runPythonCode =
-async function(code) {
 
-return app.runner.run(
-code
-);
+            this.setConsole(
+                consoleText
+            );
 
-};
 
+            this.failAttempt({
 
-console.log(
-"PYT démarré."
-);
+                type:
+                    "python_error",
 
-} catch (error) {
+                message:
+                    runnerResult.error,
 
-console.error(
-"Impossible de démarrer PYT :",
-error
-);
+                line:
+                    runnerResult.errorLine
+            });
 
-const status =
-document.getElementById(
-"game-status"
-);
+            return;
+        }
 
-if (status) {
 
-status.textContent =
-"Erreur au démarrage : "
-+
-error.message;
-}
-}
+        /*
+        2. Action impossible :
+        mur, porte fermée, sortie de carte...
+        */
+
+        if (
+            animationResult &&
+            animationResult.completed === false
+        ) {
+
+            const action =
+                animationResult
+                    .details
+                    ?.action;
+
+            const line =
+                action &&
+                !Array.isArray(action)
+                    ? action.line
+                    : null;
+
+
+            this.setConsole(
+                [
+                    ...output,
+                    "",
+                    "Pyt n'a pas pu terminer un déplacement."
+                ].join("\n")
+            );
+
+
+            this.failAttempt({
+
+                type:
+                    "blocked",
+
+                message:
+                    "Mon trajet est bloqué. Regarde où je me suis arrêté et vérifie le déplacement correspondant.",
+
+                line
+            });
+
+            return;
+        }
+
+
+        /*
+        3. Objectif réel du niveau.
+        */
+
+        const success =
+            this.game &&
+            typeof this.game.checkSuccess ===
+            "function"
+                ? this.game.checkSuccess()
+                : false;
+
+
+        if (!success) {
+
+            const feedback =
+                this.getFailureFeedback();
+
+
+            this.setConsole(
+                [
+                    ...output,
+                    "",
+                    feedback.message
+                ].join("\n")
+            );
+
+
+            if (
+                feedback.thought &&
+                this.ui &&
+                typeof this.ui.showThought ===
+                "function"
+            ) {
+
+                this.ui.showThought(
+                    feedback.thought
+                );
+            }
+
+
+            this.failAttempt(
+                feedback
+            );
+
+            return;
+        }
+
+
+        /*
+        4. Le trajet est correct, mais l'exercice
+        demande une notion du chapitre.
+
+        Exemple :
+        le niveau sur les boucles ne doit pas
+        être validé avec 10 forward() écrits à la main.
+
+        On vérifie seulement la présence des
+        structures demandées, jamais une solution
+        exacte.
+        */
+
+        if (
+            this.lastConceptResult &&
+            !this.lastConceptResult.success
+        ) {
+
+            const message =
+                this.lastConceptResult.message;
+
+
+            this.setConsole(
+                [
+                    ...output,
+                    "",
+                    message
+                ].join("\n")
+            );
+
+
+            this.failAttempt({
+
+                type:
+                    "missing_concept",
+
+                message,
+
+                line: null
+            });
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // SUCCÈS
+        // ---------------------------------------------
+
+        this.setConsole(
+            [
+                ...output,
+                "",
+                this.level.successMessage ||
+                "Mission réussie !"
+            ].join("\n")
+        );
+
+
+        if (
+            this.ui &&
+            typeof this.ui.setStatus ===
+            "function"
+        ) {
+
+            this.ui.setStatus(
+                "RÉUSSI"
+            );
+        }
+
+
+        if (
+            this.ui &&
+            typeof this.ui.showGuide ===
+            "function"
+        ) {
+
+            this.ui.showGuide(
+                this.level.successMessage ||
+                "Bravo ! Mission réussie."
+            );
+        }
+
+
+        if (
+            this.ui &&
+            typeof this.ui.completeCurrentLevel ===
+            "function"
+        ) {
+
+            this.ui.completeCurrentLevel();
+        }
+    }
+
+
+    failAttempt(details) {
+
+        if (
+            this.ui &&
+            typeof this.ui.setStatus ===
+            "function"
+        ) {
+
+            this.ui.setStatus(
+                "À CORRIGER"
+            );
+        }
+
+
+        if (
+            this.ui &&
+            typeof this.ui.handleFailedAttempt ===
+            "function"
+        ) {
+
+            this.ui.handleFailedAttempt(
+                details
+            );
+        }
+    }
+
+
+    // =====================================================
+    // RETOURS D'ERREUR DU MONDE
+    // =====================================================
+
+    getFailureFeedback() {
+
+        const state =
+            this.game &&
+            typeof this.game.getState ===
+            "function"
+                ? this.game.getState()
+                : null;
+
+
+        // ---------------------------------------------
+        // OBJETS NON RAMASSÉS
+        // ---------------------------------------------
+
+        if (
+            this.collectionHasItems(
+                this.game?.objects
+            )
+        ) {
+
+            return {
+                type:
+                    "object_not_picked",
+
+                message:
+                    "Il reste un objet à récupérer. Regarde le trajet de Pyt et vérifie qu'il passe bien dessus.",
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // SALETÉS
+        // ---------------------------------------------
+
+        if (
+            this.collectionHasItems(
+                this.game?.dirt
+            )
+        ) {
+
+            return {
+                type:
+                    "unfinished_cleaning",
+
+                message:
+                    "Il reste encore une zone à nettoyer. Pyt doit passer sur toutes les cases sales.",
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // BOUTONS
+        // ---------------------------------------------
+
+        if (
+            this.collectionHasItems(
+                this.game?.buttons
+            )
+        ) {
+
+            const inactive =
+                this.countInactiveButtons(
+                    this.game.buttons
+                );
+
+            if (
+                inactive > 0
+            ) {
+
+                return {
+                    type:
+                        "button_not_activated",
+
+                    message:
+                        "Un bouton n'a pas encore été activé. Fais passer Pyt dessus avant de continuer.",
+
+                    line:
+                        null
+                };
+            }
+        }
+
+
+        // ---------------------------------------------
+        // DÉPÔT
+        // ---------------------------------------------
+
+        if (
+            this.objectiveContains(
+                "deposit"
+            )
+        ) {
+
+            return {
+                type:
+                    "object_misplaced",
+
+                message:
+                    "L'objet n'est pas encore au bon endroit. Vérifie la zone de dépôt.",
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // CAISSES
+        // ---------------------------------------------
+
+        if (
+            this.objectiveContains(
+                "boxes"
+            )
+        ) {
+
+            return {
+                type:
+                    "boxes_unfinished",
+
+                message:
+                    "Toutes les caisses ne sont pas encore à leur place.",
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // MAUVAISE CASE FINALE
+        // ---------------------------------------------
+
+        if (
+            this.objectiveContains(
+                "reach_goal"
+            )
+        ) {
+
+            return {
+                type:
+                    "wrong_destination",
+
+                message:
+                    "Pyt a exécuté le programme, mais il ne termine pas sur la bonne case.",
+
+                thought:
+                    "Ce n’est pas là que je voulais aller...",
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // MESSAGE DU MOTEUR
+        // ---------------------------------------------
+
+        if (
+            this.game &&
+            typeof this.game.message ===
+            "string" &&
+            this.game.message.trim() !== ""
+        ) {
+
+            return {
+                type:
+                    "unfinished_objective",
+
+                message:
+                    this.game.message,
+
+                line:
+                    null
+            };
+        }
+
+
+        // ---------------------------------------------
+        // GÉNÉRIQUE
+        // ---------------------------------------------
+
+        return {
+            type:
+                "unfinished_objective",
+
+            message:
+                "La mission n'est pas encore terminée. Observe le trajet de Pyt et compare-le à l'objectif.",
+
+            line:
+                null,
+
+            state
+        };
+    }
+
+
+    collectionHasItems(
+        collection
+    ) {
+
+        if (!collection) {
+
+            return false;
+        }
+
+        if (
+            typeof collection.size ===
+            "number"
+        ) {
+
+            return collection.size > 0;
+        }
+
+        if (
+            Array.isArray(collection)
+        ) {
+
+            return collection.length > 0;
+        }
+
+        return false;
+    }
+
+
+    countInactiveButtons(
+        buttons
+    ) {
+
+        if (!buttons) {
+
+            return 0;
+        }
+
+        if (
+            buttons instanceof Set
+        ) {
+
+            /*
+            Dans certains moteurs, les boutons
+            restants sont simplement ceux qui ne
+            sont pas encore activés.
+            */
+
+            return buttons.size;
+        }
+
+        if (
+            buttons instanceof Map
+        ) {
+
+            let count = 0;
+
+            for (
+                const value
+                of buttons.values()
+            ) {
+
+                if (
+                    value === false ||
+                    value?.active === false
+                ) {
+
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
+        if (
+            Array.isArray(buttons)
+        ) {
+
+            return buttons.filter(
+                value =>
+                    value === false ||
+                    value?.active === false
+            ).length;
+        }
+
+        return 0;
+    }
+
+
+    objectiveContains(type) {
+
+        const objective =
+            this.level?.objective;
+
+        if (!objective) {
+
+            return false;
+        }
+
+        if (
+            objective.type === type
+        ) {
+
+            return true;
+        }
+
+        if (
+            objective.type ===
+            "combined" &&
+            Array.isArray(
+                objective.requirements
+            )
+        ) {
+
+            return objective
+                .requirements
+                .some(
+                    requirement =>
+                        requirement &&
+                        requirement.type ===
+                        type
+                );
+        }
+
+        return false;
+    }
+
+
+    // =====================================================
+    // VALIDATION DES NOTIONS
+    // =====================================================
+
+    validateRequiredConcepts(
+        code,
+        level
+    ) {
+
+        const required =
+            Array.isArray(
+                level?.requiredConcepts
+            )
+                ? level.requiredConcepts
+                : [];
+
+
+        if (
+            required.length === 0
+        ) {
+
+            return {
+                success: true,
+                missing: [],
+                message: ""
+            };
+        }
+
+
+        /*
+        "revision" signifie que l'élève choisit
+        lui-même les notions utiles.
+        */
+
+        const conceptsToCheck =
+            required.filter(
+                concept =>
+                    concept !== "revision"
+            );
+
+
+        if (
+            conceptsToCheck.length === 0
+        ) {
+
+            return {
+                success: true,
+                missing: [],
+                message: ""
+            };
+        }
+
+
+        const source =
+            String(code || "");
+
+
+        const tests = {
+
+            forward:
+                /\bforward\s*\(/,
+
+            backward:
+                /\bbackward\s*\(/,
+
+            turn:
+                /\b(?:left|right)\s*\(/,
+
+            movement:
+                /\b(?:forward|backward|left|right)\s*\(/,
+
+            variable:
+                /^[ \t]*[A-Za-z_]\w*[ \t]*=(?!=)/m,
+
+            arithmetic:
+                /(?:\+|-|\*|\/|%)/,
+
+            conversion:
+                /\b(?:int|float|str)\s*\(/,
+
+            if:
+                /^[ \t]*if\s+.+:/m,
+
+            elif:
+                /^[ \t]*elif\s+.+:/m,
+
+            else:
+                /^[ \t]*else\s*:/m,
+
+            condition:
+                /^[ \t]*(?:if|elif)\s+.+:/m,
+
+            boolean:
+                /\b(?:and|or|not)\b/,
+
+            for:
+                /^[ \t]*for\s+[A-Za-z_]\w*\s+in\s+.+:/m,
+
+            range:
+                /\brange\s*\(/,
+
+            while:
+                /^[ \t]*while\s+.+:/m,
+
+            break:
+                /^[ \t]*break\b/m,
+
+            list:
+                /=\s*\[[\s\S]*?\]/m,
+
+            index:
+                /\b[A-Za-z_]\w*\s*\[[^\]]+\]/,
+
+            append:
+                /\.append\s*\(/,
+
+            function:
+                /^[ \t]*def\s+[A-Za-z_]\w*\s*\(/m,
+
+            parameter:
+                /^[ \t]*def\s+[A-Za-z_]\w*\s*\(\s*[A-Za-z_]\w+/m,
+
+            loop:
+                /^[ \t]*(?:for|while)\s+.+:/m
+        };
+
+
+        const labels = {
+
+            forward:
+                "forward()",
+
+            backward:
+                "backward()",
+
+            turn:
+                "un virage avec left() ou right()",
+
+            movement:
+                "les commandes de déplacement",
+
+            variable:
+                "une variable",
+
+            arithmetic:
+                "un calcul",
+
+            conversion:
+                "une conversion int(), float() ou str()",
+
+            if:
+                "une condition if",
+
+            elif:
+                "elif",
+
+            else:
+                "else",
+
+            condition:
+                "une condition",
+
+            boolean:
+                "and, or ou not",
+
+            for:
+                "une boucle for",
+
+            range:
+                "range()",
+
+            while:
+                "une boucle while",
+
+            break:
+                "break",
+
+            list:
+                "une liste",
+
+            index:
+                "l'accès à un élément de liste",
+
+            append:
+                "append()",
+
+            function:
+                "une fonction avec def",
+
+            parameter:
+                "un paramètre de fonction",
+
+            loop:
+                "une boucle"
+        };
+
+
+        const missing = [];
+
+
+        for (
+            const concept
+            of conceptsToCheck
+        ) {
+
+            const test =
+                tests[concept];
+
+            /*
+            Si une future notion n'a pas encore
+            de test, elle ne bloque pas le jeu.
+            */
+
+            if (!test) {
+
+                continue;
+            }
+
+            if (
+                !test.test(source)
+            ) {
+
+                missing.push(
+                    concept
+                );
+            }
+        }
+
+
+        if (
+            missing.length === 0
+        ) {
+
+            return {
+                success: true,
+                missing: [],
+                message: ""
+            };
+        }
+
+
+        const missingLabels =
+            missing.map(
+                concept =>
+                    labels[concept] ||
+                    concept
+            );
+
+
+        let listText = "";
+
+        if (
+            missingLabels.length === 1
+        ) {
+
+            listText =
+                missingLabels[0];
+
+        } else {
+
+            listText =
+                missingLabels
+                    .slice(
+                        0,
+                        -1
+                    )
+                    .join(", ") +
+                " et " +
+                missingLabels[
+                    missingLabels.length - 1
+                ];
+        }
+
+
+        return {
+            success: false,
+            missing,
+
+            message:
+                `Ton trajet fonctionne peut-être, mais cet exercice te demande d'utiliser ${listText}. Il peut y avoir plusieurs solutions : modifie ton programme en utilisant la notion du chapitre.`
+        };
+    }
+
+
+    // =====================================================
+    // CONSOLE
+    // =====================================================
+
+    setConsole(text) {
+
+        if (
+            this.ui &&
+            typeof this.ui.setConsole ===
+            "function"
+        ) {
+
+            this.ui.setConsole(
+                text
+            );
+
+            return;
+        }
+
+        const consoleOutput =
+            document.getElementById(
+                "console-output"
+            );
+
+        if (consoleOutput) {
+
+            consoleOutput.textContent =
+                text;
+        }
+    }
+
+
+    // =====================================================
+    // OUTILS DOM
+    // =====================================================
+
+    show(id) {
+
+        const element =
+            document.getElementById(
+                id
+            );
+
+        if (element) {
+
+            element.classList.remove(
+                "hidden"
+            );
+        }
+    }
+
+
+    hide(id) {
+
+        const element =
+            document.getElementById(
+                id
+            );
+
+        if (element) {
+
+            element.classList.add(
+                "hidden"
+            );
+        }
+    }
+
+
+    isElementVisible(id) {
+
+        const element =
+            document.getElementById(
+                id
+            );
+
+        if (!element) {
+
+            return false;
+        }
+
+        return !element.classList.contains(
+            "hidden"
+        );
+    }
 }
 
 
-if (
-document.readyState
-=== "loading"
-) {
+// =========================================================
+// DÉMARRAGE AUTOMATIQUE
+// =========================================================
 
 document.addEventListener(
-"DOMContentLoaded",
-startPytApplication
+    "DOMContentLoaded",
+    () => {
+
+        const app =
+            new PytApplication();
+
+        window.pytApp =
+            app;
+
+        /*
+        Petit accès pratique depuis la console
+        du navigateur pendant le développement.
+        */
+
+        window.runPythonCode =
+            code =>
+                app.runner.run(
+                    code
+                );
+
+
+        app.start();
+    }
 );
 
-} else {
 
-startPytApplication();
-}
+// =========================================================
+// EXPOSITION
+// =========================================================
+
+window.BrowserPythonRunner =
+    BrowserPythonRunner;
+
+window.PytApplication =
+    PytApplication;
