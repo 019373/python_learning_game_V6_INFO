@@ -902,7 +902,6 @@ L’exercice doit rester réalisable uniquement avec les notions enseignées aup
 - le moteur doit vérifier le résultat obtenu, pas imposer une seule manière exacte d’écrire le code.
 
 Une fois l’exercice difficile réussi, le jeu considère que l’élève a terminé le parcours principal.
-
 # Capacités de Pyt
 
 ## Déplacement
@@ -958,3 +957,231 @@ pick_up()
 clean()
 drop()
 open_door()
+Finalement, Z et A travaillent sur le moteur ; T et N travaillent eux sur l'interface
+# MISE À JOUR PRIORITAIRE — VERSION NAVIGATEUR
+
+Cette section est plus récente que les règles précédentes.
+
+Si une règle écrite plus haut contredit cette section, **cette section a priorité**.
+
+À partir de maintenant, le jeu doit être développé pour pouvoir être **joué directement dans un navigateur web**.
+
+L'objectif final est que l'élève puisse ouvrir une URL et jouer sans avoir à :
+
+- installer Python ;
+- installer Thonny ;
+- installer une bibliothèque ;
+- télécharger le projet ;
+- lancer un fichier `.py`.
+
+## Technologie
+
+La version finale du jeu doit utiliser principalement :
+
+```text
+HTML
+CSS
+JavaScript
+## dossier
+
+les dossiers maintenant disponible sont les suivants : 
+
+app.js
+game.js
+index.html
+levels.js
+robot.js
+runner.py
+style.css
+ui.js
+PROJECT_RULES.md
+README.md
+assets/
+# Améliorations à ajouter au jeu
+
+Il faut maintenant améliorer le jeu avec les éléments suivants. Ces modifications doivent être intégrées sans supprimer ou modifier inutilement ce qui fonctionne déjà.
+
+- Ajouter un **menu principal** avec au minimum les boutons `Play` et `Settings`.
+
+- Dans `Settings`, permettre au joueur :
+- d’activer ou désactiver la musique ;
+- de régler le volume sonore.
+
+- Ajouter une **cinématique animée d’introduction** avant le menu ou au lancement du jeu. Au début, seules les lettres **P** et **T** du titre sont affichées. Pyt arrive depuis la droite de l’écran, se place entre les deux lettres et lève les bras afin que sa silhouette représente le **Y**. L’ensemble forme alors **PYT**, qui est le titre du jeu. Les lettres et le robot doivent avoir une taille visuellement cohérente. Pendant cette animation, Pyt montre uniquement avec ses yeux qu’il est content. Il ne faut pas utiliser une image fixe : la scène doit réellement être animée.
+
+- Prévoir le système audio de manière à pouvoir utiliser plusieurs musiques différentes :
+- une musique pour la cinématique d’introduction ;
+- une musique pour les parties d’explication / théorie ;
+- une musique différente pour chaque chapitre pendant le jeu.
+
+Cependant, **le jeu doit fonctionner normalement même si aucun fichier musical n’a encore été ajouté**. L’absence d’une musique ne doit jamais provoquer d’erreur ou empêcher le jeu de démarrer.
+
+- Ajouter beaucoup plus de **décoration dans les niveaux**. Chaque chapitre se déroule dans une pièce différente d’une maison. Le décor doit donc correspondre à la pièce associée au chapitre et rendre les niveaux beaucoup moins vides.
+
+- Ajouter également du décor sur la **carte de sélection des niveaux**. L’apparence de la carte doit évoluer ou contenir des éléments visuels correspondant à la pièce / au thème du chapitre sélectionné.
+
+- Modifier la vitesse de déplacement de Pyt. Un déplacement d’une case doit prendre environ **0,5 seconde**, et non environ 2 secondes.
+
+- Rendre la progression des niveaux beaucoup plus progressive en difficulté. Les exercices faciles doivent rester accessibles, puis les niveaux moyens et difficiles doivent demander de plus en plus de raisonnement et combiner davantage de notions.
+
+- Les exercices doivent être conçus pour pousser réellement l’élève à utiliser **toutes les notions importantes du chapitre**, et si possible certaines notions apprises dans les chapitres précédents. Il ne faut pas qu’une notion puisse être complètement évitée avec une solution beaucoup trop simple.
+
+Exemple pour le chapitre 1 : Pyt peut devoir avancer jusqu’à un livre, le récupérer automatiquement, puis revenir en arrière pour atteindre l’objectif. Cela oblige notamment l’élève à comprendre différents déplacements au lieu de simplement utiliser `forward()` une fois.
+
+- Il faut cependant continuer à accepter **plusieurs solutions correctes** lorsqu’elles permettent réellement d’atteindre l’objectif. Le jeu ne doit pas comparer le code de l’élève à une seule solution enregistrée.
+
+- Lorsqu’un élève exécute un programme incorrect, **Pyt doit quand même effectuer les actions valides du programme**. Il ne faut pas empêcher le robot de bouger simplement parce que la solution finale est incorrecte. Voir Pyt se déplacer doit permettre à l’élève de comprendre visuellement où son raisonnement s’est trompé.
+
+- Si Pyt termine son programme mais se trouve au mauvais endroit, une petite **bulle de pensée** doit apparaître au-dessus ou près de lui avec un message du type :
+
+`Ce n’est pas là que je voulais aller...`
+
+- Prévoir correctement les différents cas d’échec : mauvaise destination, trajet incomplet, objet non récupéré, objet mal placé, objectif non terminé, etc. Le feedback doit correspondre à ce qui s’est réellement passé.
+
+- Lors de la **première tentative incorrecte**, ne pas souligner immédiatement la faute dans le code. Le jeu doit indiquer à l’élève qu’il peut revoir la théorie et lui préciser que, s’il se trompe encore, le jeu pourra lui montrer plus précisément où se trouve son erreur.
+
+- Après cette première erreur, proposer de **revoir la théorie**. Lorsque l’élève termine cette révision, il doit revenir directement au même exercice avec son code, et non être renvoyé sur la carte des niveaux.
+
+- À partir de la **deuxième tentative incorrecte**, lorsque cela est techniquement possible et pertinent, la partie problématique du code doit être **soulignée en rouge** afin d’aider l’élève à identifier son erreur.
+
+- Le système d’aide doit tenir compte du fait qu’un programme peut être syntaxiquement correct mais produire un mauvais résultat. Il ne faut donc pas forcément signaler une ligne comme « fausse » lorsqu’il existe plusieurs solutions possibles. L’aide doit uniquement être donnée lorsqu’il est possible d’identifier raisonnablement le problème.
+
+- Sur la **carte des niveaux**, ajouter une indication claire expliquant qu’il faut cliquer sur un exercice pour le lancer. Cette indication doit apparaître naturellement dans l’interface, notamment lors de la première utilisation.
+
+- Ajouter des boutons permettant de **passer d’un chapitre à l’autre** depuis la carte.
+
+- Le joueur doit pouvoir revenir sur un chapitre précédent et **refaire un exercice déjà terminé**.
+
+- Pour toutes les informations données directement au joueur dans le jeu, utiliser Pyt comme personnage-guide. Pyt apparaît en **bas à gauche de l’écran** et parle avec une bulle de dialogue.
+
+- **Ne pas réécrire inutilement le contenu actuel des bulles de dialogue**, car leur contenu actuel convient. Il faut conserver ce contenu et uniquement appliquer les modifications demandées précédemment lorsqu’elles sont nécessaires.
+
+- Pyt doit donc servir à présenter les explications, les indications, certains messages d’erreur et les conseils, afin de garder une interface cohérente.
+
+Toutes ces fonctionnalités doivent respecter l’architecture actuelle du projet, rester compatibles avec la version navigateur et ne pas casser les fonctionnalités déjà opérationnelles.
+# Modifications à apporter au jeu
+
+## Règle importante
+
+**NE TOUCHE PAS AUX GRAPHISMES ACTUELS DU JEU POUR L’INSTANT. GARDE-LES COMME ILS SONT.**
+
+Les modifications demandées ici concernent principalement le fonctionnement, les animations, la navigation, la carte, les messages et l’adaptation mobile. Ne refais pas le style graphique général du jeu.
+
+---
+
+## 1. Version mobile
+
+Rendre le jeu utilisable également sur mobile.
+
+Sur ordinateur, garder le fonctionnement actuel avec les fenêtres / pop-ups.
+
+Sur mobile, à la demande du professeur, les éléments qui apparaissent normalement sous forme de pop-up doivent apparaître **directement dans la page** plutôt que dans des fenêtres flottantes.
+
+Le contenu doit rester le même. Seule la manière de l’afficher change selon l’appareil.
+
+---
+
+## 2. Cinématique d’introduction
+
+Améliorer la cinématique actuelle sans changer son principe.
+
+Actuellement, Pyt arrive trop rapidement.
+
+Modifier son arrivée pour que :
+
+- Pyt arrive plus lentement ;
+- il se déplace en **sautillant**, un peu comme la lampe dans l’introduction Pixar ;
+- l’animation reste fluide ;
+- Pyt soit légèrement plus éloigné des lettres lorsqu’il arrive à sa position finale ;
+- Pyt soit légèrement réduit car il paraît actuellement un peu plus grand que les lettres ;
+- Pyt et les lettres aient finalement une taille cohérente.
+
+Ajouter également un message clignotant doucement du type :
+
+**« Appuyez sur une touche pour continuer »**
+
+Sur mobile, cela doit plutôt indiquer qu’il faut toucher l’écran.
+
+Tant que l’utilisateur n’a :
+
+- appuyé sur aucune touche sur ordinateur ;
+- ou touché l’écran sur mobile ;
+
+**rien ne doit continuer.**
+
+L’introduction reste figée sur sa scène finale jusqu’à cette interaction.
+
+---
+
+## 3. Bouton Crédits
+
+Dans les paramètres, ajouter un bouton :
+
+**Crédits**
+
+Lorsqu’on clique dessus, lancer une cinématique de crédits avec un défilement dans le style d’un générique spatial à la Star Wars.
+
+Les crédits défilent progressivement.
+
+Contenu :
+
+### Son
+
+Jean Noah
+Tom Kahle
+
+### Graphisme
+
+Noah Jean
+Tom Kahle
+Zéphyr Thomas
+Adrian Thiébaud
+
+### Moteur du jeu
+
+Adrian Thiébaud
+Zéphyr Thomas
+
+Après ces catégories, ajouter un texte de remerciements volontairement assez solennel et pompeux, remerciant notamment les personnes ayant participé au projet, les professeurs et les personnes ayant permis sa réalisation.
+
+À la fin :
+
+- le titre du jeu **PYT** apparaît en grand ;
+- il arrive progressivement au centre de l’écran ;
+- une fois arrivé au milieu, l’animation se fige.
+
+À ce moment-là, le générique reste affiché.
+
+Ajouter une **croix en haut à droite** permettant de fermer les crédits et de revenir aux paramètres.
+
+---
+
+## 4. Messages de Pyt
+
+Pour les messages où Pyt apparaît en bas de l’écran avec sa bulle de dialogue :
+
+- conserver le contenu actuel des messages sauf modifications déjà demandées auparavant ;
+- ajouter une petite **croix en haut à droite de la bulle** pour pouvoir la fermer.
+
+Lorsque Pyt apparaît pour donner un message :
+
+- ajouter une petite animation d’entrée de Pyt.
+
+Lorsque l’utilisateur ferme la bulle :
+
+- Pyt doit quitter l’écran avec une petite animation de sortie.
+
+Il ne doit pas simplement apparaître et disparaître instantanément.
+
+---
+
+## 5. Paramètre musique
+
+Dans les paramètres, lorsqu’on choisit :
+
+**Musique = Non**
+
+le volume doit automatiquement passer à :
+
+```text
+0 %
