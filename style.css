@@ -1,0 +1,1433 @@
+/* =========================================================
+   PYT - STYLE.CSS
+   Interface navigateur rétro / pixel art
+========================================================= */
+
+
+/* =========================================================
+   VARIABLES
+========================================================= */
+
+:root {
+    --background: #100d1c;
+    --background-light: #171228;
+
+    --panel: #211943;
+    --panel-light: #302653;
+    --panel-hover: #3d3164;
+
+    --black: #08070d;
+    --white: #f5f2f7;
+    --muted: #b8b0c8;
+
+    --pink: #dc4d9b;
+    --pink-dark: #a93475;
+
+    --cyan: #42d6d1;
+    --cyan-dark: #278e9a;
+
+    --yellow: #f4d75e;
+    --orange: #ee9147;
+
+    --green: #58d68d;
+    --red: #e05b6f;
+
+    --grid-dark: #352c59;
+    --grid-light: #40356a;
+
+    --border-size: 4px;
+
+    --shadow:
+        6px 6px 0 var(--black);
+}
+
+
+/* =========================================================
+   RESET
+========================================================= */
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+
+    width: 100%;
+    min-width: 100%;
+    height: 100%;
+
+    overflow: hidden;
+}
+
+body {
+    background:
+        radial-gradient(
+            circle at top,
+            #201742 0%,
+            var(--background) 55%
+        );
+
+    color: var(--white);
+
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+}
+
+
+/* =========================================================
+   APPLICATION
+========================================================= */
+
+#app {
+    width: 100vw;
+    height: 100vh;
+
+    display: flex;
+    flex-direction: column;
+
+    position: relative;
+}
+
+
+/* =========================================================
+   CLASSE HIDDEN
+========================================================= */
+
+.hidden {
+    display: none !important;
+}
+
+
+/* =========================================================
+   BARRE DU HAUT
+========================================================= */
+
+#top-bar {
+    min-height: 76px;
+
+    display: flex;
+    align-items: center;
+    gap: 24px;
+
+    padding: 10px 20px;
+
+    background: var(--panel);
+
+    border-bottom:
+        var(--border-size)
+        solid
+        var(--black);
+
+    box-shadow:
+        0 5px 0
+        rgba(0, 0, 0, 0.22);
+
+    z-index: 20;
+}
+
+
+/* =========================================================
+   LOGO
+========================================================= */
+
+#brand {
+    display: flex;
+    align-items: center;
+
+    gap: 12px;
+
+    flex-shrink: 0;
+}
+
+#logo {
+    color: var(--white);
+
+    font-family:
+        "Courier New",
+        monospace;
+
+    font-size: 30px;
+    font-weight: 900;
+
+    letter-spacing: 2px;
+
+    text-shadow:
+        3px 3px 0
+        var(--pink-dark);
+}
+
+#brand-subtitle {
+    color: var(--cyan);
+
+    font-size: 11px;
+    font-weight: 800;
+
+    letter-spacing: 1.5px;
+}
+
+
+/* =========================================================
+   INFORMATIONS NIVEAU
+========================================================= */
+
+#level-information {
+    display: flex;
+    align-items: center;
+
+    gap: 9px;
+
+    flex: 1;
+}
+
+#chapter-badge,
+#difficulty-badge {
+    padding: 7px 12px;
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    font-size: 11px;
+    font-weight: 800;
+
+    letter-spacing: 0.5px;
+
+    box-shadow:
+        3px 3px 0
+        var(--black);
+}
+
+#chapter-badge {
+    background: var(--pink);
+    color: var(--white);
+}
+
+#difficulty-badge {
+    background: var(--cyan);
+    color: var(--black);
+}
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+#top-navigation {
+    display: flex;
+    gap: 10px;
+}
+
+button {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+}
+
+button:focus-visible {
+    outline:
+        3px
+        solid
+        var(--yellow);
+
+    outline-offset: 3px;
+}
+
+.top-button {
+    min-width: 88px;
+
+    padding: 9px 15px;
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    background: var(--panel-light);
+    color: var(--white);
+
+    font-size: 11px;
+    font-weight: 800;
+
+    cursor: pointer;
+
+    box-shadow:
+        3px 3px 0
+        var(--black);
+
+    transition:
+        transform 80ms ease,
+        background 80ms ease;
+}
+
+.top-button.primary {
+    background: var(--yellow);
+    color: var(--black);
+}
+
+.top-button:hover {
+    background: var(--pink);
+}
+
+.top-button.primary:hover {
+    background: var(--orange);
+}
+
+.top-button:active {
+    transform:
+        translate(3px, 3px);
+
+    box-shadow: none;
+}
+
+
+/* =========================================================
+   ÉCRAN DU JEU
+========================================================= */
+
+#game-screen {
+    flex: 1;
+
+    min-height: 0;
+
+    display: grid;
+
+    grid-template-columns:
+        minmax(0, 1fr)
+        minmax(280px, 360px);
+
+    gap: 16px;
+
+    padding: 16px;
+
+    overflow: hidden;
+}
+
+
+/* =========================================================
+   ZONE DU MONDE
+========================================================= */
+
+#world-section {
+    min-width: 0;
+    min-height: 0;
+
+    display: flex;
+    flex-direction: column;
+}
+
+.section-title {
+    margin-bottom: 8px;
+
+    color: var(--white);
+
+    font-family:
+        "Courier New",
+        monospace;
+
+    font-size: 12px;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+}
+
+#game-container {
+    flex: 1;
+
+    min-height: 0;
+
+    position: relative;
+
+    overflow: hidden;
+
+    background: var(--black);
+
+    border:
+        var(--border-size)
+        solid
+        var(--black);
+
+    box-shadow:
+        var(--shadow);
+}
+
+#game-canvas {
+    display: block;
+
+    width: 100%;
+    height: 100%;
+
+    background: var(--black);
+
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+}
+
+
+/* =========================================================
+   STATUT
+========================================================= */
+
+#game-status {
+    min-height: 43px;
+
+    margin-top: 10px;
+
+    padding: 11px 14px;
+
+    background: var(--panel);
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    color: var(--white);
+
+    font-size: 13px;
+
+    box-shadow:
+        3px 3px 0
+        var(--black);
+}
+
+
+/* =========================================================
+   PANNEAU MISSION
+========================================================= */
+
+#mission-panel {
+    min-height: 0;
+
+    padding: 20px;
+
+    background: var(--panel);
+
+    border:
+        var(--border-size)
+        solid
+        var(--black);
+
+    box-shadow:
+        var(--shadow);
+
+    display: flex;
+    flex-direction: column;
+}
+
+.panel-label,
+.small-label {
+    color: var(--yellow);
+
+    font-family:
+        "Courier New",
+        monospace;
+
+    font-size: 13px;
+    font-weight: 900;
+
+    letter-spacing: 1.5px;
+}
+
+#mission-title {
+    margin:
+        18px
+        0
+        10px;
+
+    color: var(--white);
+
+    font-size: 24px;
+    line-height: 1.15;
+}
+
+#mission-instruction {
+    padding: 16px;
+
+    background: var(--panel-light);
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    color: var(--white);
+
+    line-height: 1.55;
+
+    font-size: 14px;
+}
+
+#mission-actions {
+    margin-top: auto;
+
+    display: flex;
+    flex-direction: column;
+
+    gap: 10px;
+
+    padding-top: 22px;
+}
+
+
+/* =========================================================
+   BOUTONS GÉNÉRAUX
+========================================================= */
+
+.large-button,
+.editor-button {
+    border:
+        3px
+        solid
+        var(--black);
+
+    padding: 12px 16px;
+
+    font-weight: 900;
+
+    cursor: pointer;
+
+    box-shadow:
+        4px 4px 0
+        var(--black);
+
+    transition:
+        transform 80ms ease,
+        filter 80ms ease;
+}
+
+.large-button:hover,
+.editor-button:hover {
+    filter: brightness(1.12);
+}
+
+.large-button:active,
+.editor-button:active {
+    transform:
+        translate(4px, 4px);
+
+    box-shadow: none;
+}
+
+.large-button:disabled,
+.editor-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+
+    transform: none;
+}
+
+.cyan-button {
+    background: var(--cyan);
+    color: var(--black);
+}
+
+.pink-button {
+    background: var(--pink);
+    color: var(--white);
+}
+
+.secondary-button {
+    background: var(--panel-light);
+    color: var(--white);
+}
+
+
+/* =========================================================
+   PAGES COURS / CARTE
+========================================================= */
+
+.overlay-screen {
+    position: absolute;
+
+    top: 76px;
+    right: 0;
+    bottom: 0;
+    left: 0;
+
+    z-index: 15;
+
+    overflow-y: auto;
+
+    padding: 30px;
+
+    background:
+        radial-gradient(
+            circle at top,
+            #251b4a 0%,
+            var(--background) 65%
+        );
+}
+
+.page-container {
+    width: min(
+        900px,
+        100%
+    );
+
+    min-height: calc(100% - 10px);
+
+    margin: 0 auto;
+
+    padding: 25px;
+
+    background: var(--background-light);
+
+    border:
+        var(--border-size)
+        solid
+        var(--black);
+
+    box-shadow:
+        8px 8px 0
+        var(--black);
+}
+
+.page-header {
+    padding-bottom: 20px;
+
+    border-bottom:
+        3px
+        solid
+        var(--panel-light);
+}
+
+.page-header h2 {
+    margin:
+        8px
+        0
+        5px;
+
+    color: var(--white);
+
+    font-size: 30px;
+}
+
+.page-header p {
+    margin: 0;
+
+    color: var(--cyan);
+
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.page-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+
+    gap: 12px;
+
+    margin-top: 24px;
+}
+
+
+/* =========================================================
+   COURS
+========================================================= */
+
+#course-content {
+    display: flex;
+    flex-direction: column;
+
+    gap: 14px;
+
+    padding-top: 20px;
+}
+
+.course-introduction {
+    margin: 0;
+
+    padding: 16px;
+
+    color: var(--white);
+
+    background: var(--panel);
+
+    border-left:
+        5px
+        solid
+        var(--pink);
+
+    line-height: 1.55;
+}
+
+.course-card {
+    padding: 18px;
+
+    background: var(--panel);
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    box-shadow:
+        4px 4px 0
+        var(--black);
+}
+
+.course-card h3 {
+    margin:
+        0
+        0
+        9px;
+
+    color: var(--yellow);
+
+    font-size: 17px;
+}
+
+.course-card p {
+    color: var(--white);
+
+    line-height: 1.5;
+}
+
+.course-example {
+    margin:
+        12px
+        0;
+
+    padding: 14px;
+
+    overflow-x: auto;
+
+    background: #0c0c14;
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    color: var(--cyan);
+
+    font-family:
+        "Courier New",
+        monospace;
+
+    font-size: 14px;
+
+    white-space: pre-wrap;
+}
+
+.course-explanation {
+    color: var(--muted) !important;
+
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   CARTE DES EXERCICES
+========================================================= */
+
+.map-page {
+    display: flex;
+    flex-direction: column;
+}
+
+#level-map {
+    flex: 1;
+
+    min-height: 280px;
+
+    position: relative;
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, 1fr);
+
+    align-items: center;
+
+    gap: 20px;
+
+    padding:
+        50px
+        35px;
+}
+
+#map-path {
+    position: absolute;
+
+    left: 18%;
+    right: 18%;
+
+    top: 50%;
+
+    height: 10px;
+
+    transform:
+        translateY(-50%);
+
+    background: #51446c;
+
+    border:
+        3px
+        solid
+        var(--black);
+
+    z-index: 0;
+}
+
+.level-node {
+    position: relative;
+
+    z-index: 2;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+
+    gap: 8px;
+
+    padding: 10px;
+
+    border: 0;
+
+    background: transparent;
+
+    color: var(--white);
+
+    cursor: pointer;
+}
+
+.node-circle {
+    width: 84px;
+    height: 84px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: var(--cyan);
+
+    border:
+        5px
+        solid
+        var(--black);
+
+    color: var(--black);
+
+    font-size: 26px;
+    font-weight: 900;
+
+    box-shadow:
+        6px 6px 0
+        var(--black);
+
+    transition:
+        transform 100ms ease;
+}
+
+.level-node:hover
+.node-circle {
+    transform:
+        translateY(-5px);
+}
+
+.level-node.current
+.node-circle {
+    background: var(--pink);
+    color: var(--white);
+}
+
+.level-node.completed
+.node-circle {
+    background: var(--green);
+    color: var(--black);
+}
+
+.level-node.locked {
+    opacity: 0.48;
+
+    cursor: not-allowed;
+}
+
+.level-node.locked
+.node-circle {
+    background: #4c435b;
+    color: var(--muted);
+}
+
+.node-title {
+    margin-top: 7px;
+
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.node-difficulty {
+    color: var(--muted);
+
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.map-help {
+    color: var(--muted);
+
+    font-size: 12px;
+}
+
+
+/* =========================================================
+   FENÊTRE DE CODE
+========================================================= */
+
+.code-window {
+    position: fixed;
+
+    z-index: 50;
+
+    top: 105px;
+    right: 25px;
+
+    width: min(
+        620px,
+        calc(100vw - 40px)
+    );
+
+    height: min(
+        610px,
+        calc(100vh - 130px)
+    );
+
+    min-width: 360px;
+    min-height: 350px;
+
+    display: flex;
+    flex-direction: column;
+
+    overflow: hidden;
+    resize: both;
+
+    background: #0d0d14;
+
+    border:
+        var(--border-size)
+        solid
+        var(--black);
+
+    box-shadow:
+        10px 10px 0
+        rgba(0, 0, 0, 0.65);
+}
+
+#code-window-header {
+    min-height: 46px;
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding:
+        7px
+        9px
+        7px
+        14px;
+
+    background: var(--panel);
+
+    border-bottom:
+        3px
+        solid
+        var(--black);
+
+    cursor: move;
+
+    user-select: none;
+}
+
+.code-window-title {
+    color: var(--white);
+
+    font-size: 12px;
+    font-weight: 900;
+
+    letter-spacing: 1px;
+}
+
+.window-control {
+    width: 32px;
+    height: 30px;
+
+    border:
+        2px
+        solid
+        var(--black);
+
+    background: var(--red);
+    color: var(--white);
+
+    font-size: 18px;
+    font-weight: 900;
+
+    cursor: pointer;
+}
+
+.window-control:hover {
+    background: var(--pink);
+}
+
+
+/* =========================================================
+   ÉDITEUR
+========================================================= */
+
+#editor-container {
+    flex: 1;
+
+    min-height: 150px;
+
+    padding: 10px;
+
+    background: #0d0d14;
+}
+
+#code-editor {
+    width: 100%;
+    height: 100%;
+
+    resize: none;
+
+    padding: 15px;
+
+    border:
+        2px
+        solid
+        #292638;
+
+    outline: none;
+
+    background: #11111a;
+    color: #f3f1f5;
+
+    caret-color: var(--cyan);
+
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+
+    font-size: 15px;
+    line-height: 1.5;
+
+    tab-size: 4;
+}
+
+#code-editor:focus {
+    border-color:
+        var(--cyan);
+}
+
+#code-editor::placeholder {
+    color: #716b7d;
+}
+
+
+/* =========================================================
+   CONSOLE
+========================================================= */
+
+#console-section {
+    padding:
+        0
+        10px
+        8px;
+
+    background: #0d0d14;
+}
+
+.console-title {
+    margin-bottom: 5px;
+
+    color: var(--muted);
+
+    font-size: 10px;
+    font-weight: 900;
+}
+
+#console-output {
+    height: 82px;
+
+    margin: 0;
+
+    padding: 10px;
+
+    overflow: auto;
+
+    background: #171720;
+
+    border:
+        2px
+        solid
+        #292638;
+
+    color: var(--cyan);
+
+    font-family:
+        Consolas,
+        "Courier New",
+        monospace;
+
+    font-size: 12px;
+
+    white-space: pre-wrap;
+}
+
+
+/* =========================================================
+   BOUTONS ÉDITEUR
+========================================================= */
+
+#code-actions {
+    display: flex;
+    align-items: center;
+
+    gap: 9px;
+
+    padding:
+        4px
+        10px
+        12px;
+
+    background: #0d0d14;
+}
+
+.editor-button {
+    padding:
+        9px
+        13px;
+
+    font-size: 11px;
+}
+
+.run-button {
+    margin-left: auto;
+
+    min-width: 100px;
+
+    background: var(--pink);
+    color: var(--white);
+}
+
+
+/* =========================================================
+   MODALE
+========================================================= */
+
+.modal-background {
+    position: fixed;
+
+    inset: 0;
+
+    z-index: 100;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 20px;
+
+    background:
+        rgba(5, 4, 10, 0.82);
+}
+
+#message-modal {
+    width: min(
+        470px,
+        100%
+    );
+
+    padding: 25px;
+
+    background: var(--panel);
+
+    border:
+        5px
+        solid
+        var(--black);
+
+    box-shadow:
+        10px 10px 0
+        var(--black);
+}
+
+#message-modal h2 {
+    margin:
+        10px
+        0;
+
+    color: var(--white);
+
+    font-size: 25px;
+}
+
+#modal-message {
+    color: var(--white);
+
+    line-height: 1.55;
+}
+
+#modal-actions {
+    display: flex;
+    justify-content: flex-end;
+
+    gap: 10px;
+
+    margin-top: 22px;
+}
+
+
+/* =========================================================
+   PETITS EFFETS RÉTRO
+========================================================= */
+
+#mission-panel,
+.page-container,
+.course-card,
+#game-status,
+.code-window,
+#message-modal {
+    image-rendering: pixelated;
+}
+
+::selection {
+    background: var(--pink);
+    color: var(--white);
+}
+
+
+/* =========================================================
+   SCROLLBARS
+========================================================= */
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color:
+        var(--pink)
+        #161321;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #161321;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--pink);
+
+    border:
+        2px
+        solid
+        #161321;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 900px) {
+
+    #top-bar {
+        gap: 12px;
+
+        padding:
+            9px
+            12px;
+    }
+
+    #brand-subtitle {
+        display: none;
+    }
+
+    #level-information {
+        gap: 5px;
+    }
+
+    #chapter-badge,
+    #difficulty-badge {
+        padding:
+            6px
+            8px;
+
+        font-size: 9px;
+    }
+
+    #game-screen {
+        grid-template-columns:
+            minmax(0, 1fr)
+            270px;
+
+        gap: 10px;
+
+        padding: 10px;
+    }
+
+    #mission-panel {
+        padding: 14px;
+    }
+
+    #mission-title {
+        font-size: 19px;
+    }
+
+    #mission-instruction {
+        font-size: 12px;
+    }
+
+}
+
+
+@media (max-width: 700px) {
+
+    html,
+    body {
+        overflow: auto;
+    }
+
+    #app {
+        min-height: 100vh;
+        height: auto;
+    }
+
+    #top-bar {
+        flex-wrap: wrap;
+    }
+
+    #level-information {
+        order: 3;
+
+        width: 100%;
+    }
+
+    #top-navigation {
+        margin-left: auto;
+    }
+
+    #game-screen {
+        min-height: 850px;
+
+        grid-template-columns: 1fr;
+        grid-template-rows:
+            minmax(500px, 1fr)
+            auto;
+
+        overflow: visible;
+    }
+
+    #mission-panel {
+        min-height: 300px;
+    }
+
+    .overlay-screen {
+        top: 122px;
+
+        padding: 15px;
+    }
+
+    .page-container {
+        padding: 17px;
+    }
+
+    #level-map {
+        min-height: 600px;
+
+        grid-template-columns: 1fr;
+
+        padding: 30px 10px;
+    }
+
+    #map-path {
+        top: 12%;
+        bottom: 12%;
+
+        left: 50%;
+        right: auto;
+
+        width: 10px;
+        height: auto;
+
+        transform:
+            translateX(-50%);
+    }
+
+    .map-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .map-help {
+        text-align: center;
+    }
+
+    .code-window {
+        top: 80px;
+        left: 10px !important;
+        right: 10px;
+
+        width:
+            calc(100vw - 20px);
+
+        height:
+            calc(100vh - 100px);
+
+        min-width: 0;
+    }
+
+}
+
+
+/* =========================================================
+   TRÈS PETITS ÉCRANS
+========================================================= */
+
+@media (max-width: 460px) {
+
+    #logo {
+        font-size: 24px;
+    }
+
+    .top-button {
+        min-width: 65px;
+
+        padding:
+            7px
+            9px;
+
+        font-size: 9px;
+    }
+
+    #difficulty-badge {
+        display: none;
+    }
+
+    .page-header h2 {
+        font-size: 24px;
+    }
+
+    #code-actions {
+        flex-wrap: wrap;
+    }
+
+    .run-button {
+        width: 100%;
+
+        margin-left: 0;
+    }
+
+}
