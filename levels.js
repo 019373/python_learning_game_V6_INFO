@@ -2,6747 +2,2651 @@
 
 /*
 ============================================================
-PYT - app.js
-Version navigateur
+PYT - levels.js
 
-Rôles :
-- démarre l'application ;
-- gère l'introduction ;
-- gère le menu principal ;
-- gère les paramètres ;
-- gère la musique ;
-- connecte UI / niveaux / robot / moteur ;
-- exécute le sous-ensemble Python pédagogique ;
-- conserve les actions valides avant une erreur ;
-- anime les déplacements ;
-- fournit des retours pédagogiques précis.
+27 exercices :
+- 9 chapitres
+- 3 exercices par chapitre
+- difficulté progressive
+
+Chaque chapitre correspond à une pièce de la maison.
+
+Chapitre 1 : Entrée        -> déplacements
+Chapitre 2 : Cuisine       -> variables
+Chapitre 3 : Salon         -> conditions
+Chapitre 4 : Bibliothèque  -> for / range
+Chapitre 5 : Salle de bain -> while / break
+Chapitre 6 : Chambre       -> listes
+Chapitre 7 : Atelier       -> fonctions
+Chapitre 8 : Grenier       -> combinaison
+Chapitre 9 : Laboratoire   -> examen final
 ============================================================
 */
 
 
 // =========================================================
-// RUNNER PYTHON PÉDAGOGIQUE
+// OUTILS
 // =========================================================
 
-class BrowserPythonRunner {
+function borderWalls(rows, cols) {
 
-    constructor() {
+    const grid = [];
 
-        this.maxActions = 250;
-        this.maxIterations = 1000;
-        this.maxFunctionCalls = 100;
+    for (let row = 0; row < rows; row++) {
 
-        this.reset();
-    }
+        const line = [];
 
+        for (let col = 0; col < cols; col++) {
 
-    // =====================================================
-    // RESET
-    // =====================================================
+            const border =
+                row === 0 ||
+                col === 0 ||
+                row === rows - 1 ||
+                col === cols - 1;
 
-    reset() {
-
-        this.actions = [];
-        this.output = [];
-
-        this.variables =
-            Object.create(null);
-
-        this.functions =
-            Object.create(null);
-
-        this.iterations = 0;
-        this.functionCalls = 0;
-
-        this.currentLine = null;
-    }
-
-
-    // =====================================================
-    // EXÉCUTION
-    // =====================================================
-
-    run(code) {
-
-        this.reset();
-
-        try {
-
-            this.checkForbiddenCode(
-                code
+            line.push(
+                border
+                    ? "wall"
+                    : "floor"
             );
-
-
-            const lines =
-                this.prepareLines(
-                    code
-                );
-
-
-            this.executeBlock(
-                lines,
-                0,
-                0,
-                lines.length
-            );
-
-
-            return {
-                success: true,
-                error: null,
-                errorLine: null,
-                output:
-                    this.output.join("\n"),
-                actions:
-                    [...this.actions]
-            };
-
-        } catch (error) {
-
-            return {
-                success: false,
-
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : String(error),
-
-                errorLine:
-                    error?.lineNumber
-                    ??
-                    this.currentLine
-                    ??
-                    null,
-
-                output:
-                    this.output.join("\n"),
-
-                /*
-                IMPORTANT :
-                les actions valides déjà trouvées
-                sont conservées.
-
-                Ainsi, si l'élève écrit :
-
-                forward(2)
-                erreur()
-
-                Pyt avance d'abord de 2 cases,
-                puis l'erreur est affichée.
-                */
-                actions:
-                    [...this.actions]
-            };
         }
+
+        grid.push(line);
     }
 
+    return grid;
+}
 
-    // =====================================================
-    // ERREUR AVEC NUMÉRO DE LIGNE
-    // =====================================================
 
-    fail(
-        message,
-        lineNumber = null
+function cloneGrid(grid) {
+
+    return grid.map(
+        row => [...row]
+    );
+}
+
+
+function place(grid, row, col, type) {
+
+    if (
+        grid[row] &&
+        typeof grid[row][col] !== "undefined"
     ) {
 
-        const error =
-            new Error(message);
-
-
-        if (
-            Number.isInteger(
-                lineNumber
-            )
-        ) {
-
-            error.lineNumber =
-                lineNumber;
-        }
-
-
-        throw error;
+        grid[row][col] = type;
     }
 
-
-    // =====================================================
-    // PRÉPARATION DES LIGNES
-    // =====================================================
-
-    prepareLines(code) {
-
-        const rawLines =
-            String(code ?? "")
-                .replace(/\r/g, "")
-                .replace(/\t/g, "    ")
-                .split("\n");
+    return grid;
+}
 
 
-        const lines = [];
+function wall(grid, row, col) {
+
+    return place(
+        grid,
+        row,
+        col,
+        "wall"
+    );
+}
 
 
-        for (
-            let index = 0;
-            index < rawLines.length;
-            index++
-        ) {
+function goal(grid, row, col) {
 
-            const original =
-                rawLines[index];
-
-
-            const withoutComment =
-                this.removeComment(
-                    original
-                );
+    return place(
+        grid,
+        row,
+        col,
+        "goal"
+    );
+}
 
 
-            if (
-                withoutComment.trim()
-                === ""
-            ) {
-                continue;
-            }
+function object(grid, row, col) {
+
+    return place(
+        grid,
+        row,
+        col,
+        "object"
+    );
+}
 
 
-            const spaces =
-                withoutComment
-                    .match(/^ */)[0]
-                    .length;
+function dirt(grid, row, col) {
+
+    return place(
+        grid,
+        row,
+        col,
+        "dirt"
+    );
+}
 
 
-            if (
-                spaces % 4 !== 0
-            ) {
+function button(grid, row, col) {
 
-                this.fail(
-                    `Ligne ${index + 1} : utilise 4 espaces pour l'indentation.`,
-                    index + 1
-                );
-            }
-
-
-            lines.push({
-                number:
-                    index + 1,
-
-                indent:
-                    spaces,
-
-                text:
-                    withoutComment.trim()
-            });
-        }
+    return place(
+        grid,
+        row,
+        col,
+        "button"
+    );
+}
 
 
-        return lines;
-    }
+function door(grid, row, col) {
+
+    return place(
+        grid,
+        row,
+        col,
+        "door"
+    );
+}
 
 
-    removeComment(line) {
+function charger(grid, row, col) {
 
-        let result = "";
-        let quote = null;
-        let escaped = false;
-
-
-        for (
-            let i = 0;
-            i < line.length;
-            i++
-        ) {
-
-            const char =
-                line[i];
+    return place(
+        grid,
+        row,
+        col,
+        "charger"
+    );
+}
 
 
-            if (escaped) {
+function deposit(grid, row, col) {
 
-                result += char;
-                escaped = false;
-
-                continue;
-            }
-
-
-            if (
-                char === "\\"
-                &&
-                quote !== null
-            ) {
-
-                result += char;
-                escaped = true;
-
-                continue;
-            }
+    return place(
+        grid,
+        row,
+        col,
+        "deposit"
+    );
+}
 
 
-            if (
-                char === "'"
-                ||
-                char === "\""
-            ) {
+function box(grid, row, col) {
 
-                if (
-                    quote === null
-                ) {
+    return place(
+        grid,
+        row,
+        col,
+        "box"
+    );
+}
 
-                    quote = char;
 
-                } else if (
-                    quote === char
-                ) {
+function makeLevel(config) {
 
-                    quote = null;
+    return {
+
+        id:
+            `${config.chapter}-${config.exercise}`,
+
+        chapter:
+            config.chapter,
+
+        exercise:
+            config.exercise,
+
+        difficulty:
+            config.difficulty,
+
+        room:
+            config.room,
+
+        title:
+            config.title,
+
+        instruction:
+            config.instruction,
+
+        hint:
+            config.hint || "",
+
+        concept:
+            config.concept || "",
+
+        grid:
+            cloneGrid(config.grid),
+
+        robotStart: {
+            row:
+                config.robotStart.row,
+
+            col:
+                config.robotStart.col,
+
+            direction:
+                config.robotStart.direction || "NORTH"
+        },
+
+        objective:
+            config.objective || {
+                type: "reach_goal"
+            },
+
+        requiredConcepts:
+            config.requiredConcepts || [],
+
+        starterCode:
+            config.starterCode || "",
+
+        successMessage:
+            config.successMessage ||
+            "Mission réussie !"
+    };
+}
+
+
+// =========================================================
+// CHAPITRE 1
+// ENTRÉE
+// DÉPLACEMENTS
+// =========================================================
+
+const chapter1Level1Grid =
+    borderWalls(7, 9);
+
+/*
+Départ :
+Pyt est en bas à gauche.
+
+Il doit :
+1. aller chercher le livre ;
+2. le ramasser automatiquement ;
+3. revenir sur la case jaune.
+
+Le but n'est donc pas simplement
+d'atteindre une case une fois.
+*/
+
+object(
+    chapter1Level1Grid,
+    2,
+    2
+);
+
+goal(
+    chapter1Level1Grid,
+    5,
+    2
+);
+
+
+const chapter1Level2Grid =
+    borderWalls(8, 10);
+
+wall(chapter1Level2Grid, 5, 3);
+wall(chapter1Level2Grid, 4, 3);
+wall(chapter1Level2Grid, 3, 3);
+
+wall(chapter1Level2Grid, 3, 4);
+wall(chapter1Level2Grid, 3, 5);
+
+goal(
+    chapter1Level2Grid,
+    2,
+    7
+);
+
+
+const chapter1Level3Grid =
+    borderWalls(9, 11);
+
+wall(chapter1Level3Grid, 6, 3);
+wall(chapter1Level3Grid, 5, 3);
+wall(chapter1Level3Grid, 4, 3);
+wall(chapter1Level3Grid, 3, 3);
+
+wall(chapter1Level3Grid, 3, 4);
+wall(chapter1Level3Grid, 3, 5);
+wall(chapter1Level3Grid, 3, 6);
+
+wall(chapter1Level3Grid, 4, 6);
+wall(chapter1Level3Grid, 5, 6);
+
+object(
+    chapter1Level3Grid,
+    2,
+    8
+);
+
+goal(
+    chapter1Level3Grid,
+    7,
+    2
+);
+
+
+const CHAPTER_1 = [
+
+    makeLevel({
+
+        chapter: 1,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Entrée",
+
+        title:
+            "Le livre oublié",
+
+        instruction:
+            "Va jusqu'au livre. Pyt le ramassera automatiquement. Ensuite, reviens sur la case jaune.",
+
+        hint:
+            "Pyt regarde vers le nord. Utilise forward() pour avancer et backward() pour revenir sans te retourner.",
+
+        concept:
+            "forward() et backward()",
+
+        grid:
+            chapter1Level1Grid,
+
+        robotStart: {
+            row: 5,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "forward",
+            "backward"
+        ],
+
+        starterCode:
+`# Va chercher le livre puis reviens.
+forward(1)`
+
+    }),
 
 
-                result += char;
+    makeLevel({
 
-                continue;
-            }
+        chapter: 1,
+        exercise: 2,
 
+        difficulty:
+            "medium",
 
-            if (
-                char === "#"
-                &&
-                quote === null
-            ) {
+        room:
+            "Entrée",
 
-                break;
-            }
+        title:
+            "Contourne le meuble",
 
+        instruction:
+            "Rejoins la case jaune sans traverser les meubles.",
 
-            result += char;
-        }
+        hint:
+            "Tu vas devoir changer de direction avec right(90) ou left(90).",
 
+        concept:
+            "forward(), left() et right()",
 
-        return result.replace(
-            /\s+$/,
-            ""
-        );
-    }
+        grid:
+            chapter1Level2Grid,
 
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
 
-    // =====================================================
-    // BLOC
-    // =====================================================
+        objective: {
+            type:
+                "reach_goal"
+        },
 
-    executeBlock(
-        lines,
-        startIndex,
-        indent,
-        endIndex = lines.length
-    ) {
+        requiredConcepts: [
+            "forward",
+            "turn"
+        ],
 
-        let index =
-            startIndex;
+        starterCode:
+`# Rejoins la case jaune.
+forward(1)`
 
-
-        while (
-            index < endIndex
-            &&
-            index < lines.length
-        ) {
-
-            const line =
-                lines[index];
+    }),
 
 
-            if (
-                line.indent < indent
-            ) {
+    makeLevel({
 
-                break;
-            }
+        chapter: 1,
+        exercise: 3,
 
+        difficulty:
+            "hard",
 
-            if (
-                line.indent > indent
-            ) {
+        room:
+            "Entrée",
 
-                this.fail(
-                    `Ligne ${line.number} : indentation inattendue.`,
-                    line.number
-                );
-            }
+        title:
+            "Le courrier de Pyt",
 
+        instruction:
+            "Récupère l'objet dans l'entrée puis reviens sur la case jaune. Choisis toi-même ton trajet.",
 
-            this.currentLine =
-                line.number;
+        hint:
+            "Découpe le trajet en lignes droites et en virages.",
 
+        concept:
+            "Combiner tous les déplacements",
 
-            const text =
-                line.text;
+        grid:
+            chapter1Level3Grid,
 
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
 
-            // -----------------------------------------
-            // IF
-            // -----------------------------------------
+        objective: {
+            type: "combined",
 
-            if (
-                /^if\s+.+:$/.test(text)
-            ) {
-
-                const result =
-                    this.executeIf(
-                        lines,
-                        index,
-                        indent,
-                        endIndex
-                    );
-
-
-                if (
-                    result.signal
-                ) {
-                    return result;
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "forward",
+            "backward",
+            "turn"
+        ],
+
+        starterCode:
+`# Récupère l'objet puis reviens.
+`
+
+    })
+];
 
 
-                index =
-                    result.nextIndex;
+// =========================================================
+// CHAPITRE 2
+// CUISINE
+// VARIABLES ET CALCULS
+// =========================================================
 
-                continue;
-            }
+const chapter2Level1Grid =
+    borderWalls(7, 10);
 
-
-            // -----------------------------------------
-            // FOR
-            // -----------------------------------------
-
-            if (
-                /^for\s+/.test(text)
-                &&
-                text.endsWith(":")
-            ) {
-
-                const result =
-                    this.executeFor(
-                        lines,
-                        index,
-                        indent,
-                        endIndex
-                    );
+goal(
+    chapter2Level1Grid,
+    2,
+    2
+);
 
 
-                if (
-                    result.signal
-                    === "return"
-                ) {
+const chapter2Level2Grid =
+    borderWalls(8, 10);
 
-                    return result;
+wall(chapter2Level2Grid, 5, 4);
+wall(chapter2Level2Grid, 4, 4);
+wall(chapter2Level2Grid, 3, 4);
+
+goal(
+    chapter2Level2Grid,
+    2,
+    7
+);
+
+
+const chapter2Level3Grid =
+    borderWalls(9, 11);
+
+object(
+    chapter2Level3Grid,
+    2,
+    7
+);
+
+goal(
+    chapter2Level3Grid,
+    7,
+    2
+);
+
+wall(chapter2Level3Grid, 6, 5);
+wall(chapter2Level3Grid, 5, 5);
+wall(chapter2Level3Grid, 4, 5);
+
+
+const CHAPTER_2 = [
+
+    makeLevel({
+
+        chapter: 2,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Cuisine",
+
+        title:
+            "La bonne distance",
+
+        instruction:
+            "Crée une variable distance contenant le nombre de cases à parcourir, puis utilise-la pour rejoindre la case jaune.",
+
+        hint:
+            "Exemple : distance = 3 puis forward(distance).",
+
+        concept:
+            "Créer et utiliser une variable",
+
+        grid:
+            chapter2Level1Grid,
+
+        robotStart: {
+            row: 5,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "variable"
+        ],
+
+        starterCode:
+`distance = 1
+
+forward(distance)`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 2,
+        exercise: 2,
+
+        difficulty:
+            "medium",
+
+        room:
+            "Cuisine",
+
+        title:
+            "Mesure la cuisine",
+
+        instruction:
+            "Utilise plusieurs variables et un calcul pour atteindre la case jaune en contournant le plan de travail.",
+
+        hint:
+            "Tu peux créer des variables comme vertical = 3 et horizontal = 5.",
+
+        concept:
+            "Variables et opérations",
+
+        grid:
+            chapter2Level2Grid,
+
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "variable",
+            "arithmetic",
+            "movement"
+        ],
+
+        starterCode:
+`a = 1
+b = 2
+distance = a + b
+
+# Utilise tes variables pour le trajet.
+`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 2,
+        exercise: 3,
+
+        difficulty:
+            "hard",
+
+        room:
+            "Cuisine",
+
+        title:
+            "La recette perdue",
+
+        instruction:
+            "Calcule les distances avec des variables, récupère la recette puis reviens sur la case jaune.",
+
+        hint:
+            "Les variables peuvent être réutilisées plusieurs fois dans le même programme.",
+
+        concept:
+            "Variables, calculs et déplacements",
+
+        grid:
+            chapter2Level3Grid,
+
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "variable",
+            "arithmetic",
+            "movement"
+        ],
+
+        starterCode:
+`vertical = 2
+horizontal = 3
+
+# Calcule les bonnes distances.
+`
+
+    })
+];
 
 
-                index =
-                    result.nextIndex;
+// =========================================================
+// CHAPITRE 3
+// SALON
+// CONDITIONS
+// =========================================================
 
-                continue;
-            }
+const chapter3Level1Grid =
+    borderWalls(7, 9);
 
-
-            // -----------------------------------------
-            // WHILE
-            // -----------------------------------------
-
-            if (
-                /^while\s+/.test(text)
-                &&
-                text.endsWith(":")
-            ) {
-
-                const result =
-                    this.executeWhile(
-                        lines,
-                        index,
-                        indent,
-                        endIndex
-                    );
+goal(
+    chapter3Level1Grid,
+    2,
+    2
+);
 
 
-                if (
-                    result.signal
-                    === "return"
-                ) {
+const chapter3Level2Grid =
+    borderWalls(8, 10);
 
-                    return result;
+goal(
+    chapter3Level2Grid,
+    2,
+    7
+);
+
+wall(chapter3Level2Grid, 4, 4);
+wall(chapter3Level2Grid, 5, 4);
+
+
+const chapter3Level3Grid =
+    borderWalls(9, 11);
+
+button(
+    chapter3Level3Grid,
+    6,
+    3
+);
+
+door(
+    chapter3Level3Grid,
+    4,
+    5
+);
+
+goal(
+    chapter3Level3Grid,
+    2,
+    8
+);
+
+wall(chapter3Level3Grid, 3, 5);
+wall(chapter3Level3Grid, 5, 5);
+
+
+const CHAPTER_3 = [
+
+    makeLevel({
+
+        chapter: 3,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Salon",
+
+        title:
+            "Choisis le mouvement",
+
+        instruction:
+            "Utilise une condition if pour décider si Pyt doit avancer jusqu'à la case jaune.",
+
+        hint:
+            "Crée une variable puis teste sa valeur avec if.",
+
+        concept:
+            "if",
+
+        grid:
+            chapter3Level1Grid,
+
+        robotStart: {
+            row: 5,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "if"
+        ],
+
+        starterCode:
+`distance = 3
+
+if distance == 3:
+    forward(distance)`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 3,
+        exercise: 2,
+
+        difficulty:
+            "medium",
+
+        room:
+            "Salon",
+
+        title:
+            "Deux possibilités",
+
+        instruction:
+            "Utilise if et else pour choisir le bon trajet jusqu'à la case jaune.",
+
+        hint:
+            "Une condition choisit le bloc de code qui sera exécuté.",
+
+        concept:
+            "if / else",
+
+        grid:
+            chapter3Level2Grid,
+
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "if",
+            "else",
+            "movement"
+        ],
+
+        starterCode:
+`passage_libre = False
+
+if passage_libre:
+    forward(1)
+else:
+    # Écris le trajet alternatif ici.
+    forward(1)`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 3,
+        exercise: 3,
+
+        difficulty:
+            "hard",
+
+        room:
+            "Salon",
+
+        title:
+            "La porte du salon",
+
+        instruction:
+            "Active le bouton pour ouvrir la porte puis rejoins la sortie. Utilise des conditions dans ton programme.",
+
+        hint:
+            "Tu peux combiner plusieurs tests avec and, or ou not.",
+
+        concept:
+            "if / elif / else / and / or / not",
+
+        grid:
+            chapter3Level3Grid,
+
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
 
+        requiredConcepts: [
+            "condition",
+            "boolean",
+            "movement"
+        ],
 
-                index =
-                    result.nextIndex;
+        starterCode:
+`bouton_necessaire = True
 
-                continue;
-            }
+if bouton_necessaire:
+    # Va d'abord sur le bouton.
+    pass
+`
 
+    })
+];
 
-            // -----------------------------------------
-            // DEF
-            // -----------------------------------------
 
-            if (
-                /^def\s+/.test(text)
-                &&
-                text.endsWith(":")
-            ) {
+// =========================================================
+// CHAPITRE 4
+// BIBLIOTHÈQUE
+// FOR / RANGE
+// =========================================================
 
-                index =
-                    this.registerFunction(
-                        lines,
-                        index,
-                        indent,
-                        endIndex
-                    );
+const chapter4Level1Grid =
+    borderWalls(8, 9);
 
-                continue;
-            }
+goal(
+    chapter4Level1Grid,
+    2,
+    2
+);
 
 
-            // -----------------------------------------
-            // ELIF / ELSE ISOLÉ
-            // -----------------------------------------
+const chapter4Level2Grid =
+    borderWalls(9, 10);
 
-            if (
-                text === "else:"
-                ||
-                text.startsWith("elif ")
-            ) {
+goal(
+    chapter4Level2Grid,
+    2,
+    7
+);
 
-                break;
-            }
+wall(chapter4Level2Grid, 5, 4);
+wall(chapter4Level2Grid, 4, 4);
+wall(chapter4Level2Grid, 3, 4);
 
 
-            // -----------------------------------------
-            // BREAK
-            // -----------------------------------------
+const chapter4Level3Grid =
+    borderWalls(9, 11);
 
-            if (
-                text === "break"
-            ) {
+object(chapter4Level3Grid, 6, 4);
+object(chapter4Level3Grid, 4, 4);
+object(chapter4Level3Grid, 2, 4);
 
-                return {
-                    nextIndex:
-                        index + 1,
+goal(
+    chapter4Level3Grid,
+    2,
+    8
+);
 
-                    signal:
-                        "break",
 
-                    value:
-                        null
-                };
-            }
+const CHAPTER_4 = [
 
+    makeLevel({
 
-            // -----------------------------------------
-            // RETURN
-            // -----------------------------------------
+        chapter: 4,
+        exercise: 1,
 
-            if (
-                text === "return"
-                ||
-                text.startsWith(
-                    "return "
-                )
-            ) {
+        difficulty:
+            "easy",
 
-                const value =
-                    text === "return"
-                        ? null
-                        : this.evaluateExpression(
-                            text.slice(7),
-                            line.number
-                        );
+        room:
+            "Bibliothèque",
 
+        title:
+            "Le long couloir",
 
-                return {
-                    nextIndex:
-                        index + 1,
+        instruction:
+            "Utilise une boucle for avec range() pour faire avancer Pyt jusqu'à la case jaune.",
 
-                    signal:
-                        "return",
+        hint:
+            "Évite d'écrire forward(1) plusieurs fois.",
 
-                    value
-                };
-            }
+        concept:
+            "for et range",
 
+        grid:
+            chapter4Level1Grid,
 
-            // -----------------------------------------
-            // PASS
-            // -----------------------------------------
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
 
-            if (
-                text === "pass"
-            ) {
+        objective: {
+            type:
+                "reach_goal"
+        },
 
-                index++;
-                continue;
-            }
+        requiredConcepts: [
+            "for",
+            "range"
+        ],
 
+        starterCode:
+`for i in range(1):
+    forward(1)`
 
-            // -----------------------------------------
-            // INSTRUCTION SIMPLE
-            // -----------------------------------------
+    }),
 
-            this.executeStatement(
-                text,
-                line.number
-            );
 
+    makeLevel({
 
-            index++;
-        }
+        chapter: 4,
+        exercise: 2,
 
+        difficulty:
+            "medium",
 
-        return {
-            nextIndex:
-                index,
+        room:
+            "Bibliothèque",
 
-            signal:
-                null,
+        title:
+            "Répète le motif",
 
-            value:
-                null
-        };
-    }
+        instruction:
+            "Utilise une boucle for pour répéter une partie du trajet et atteindre la sortie.",
 
+        hint:
+            "Une boucle peut contenir plusieurs instructions.",
 
-    // =====================================================
-    // BLOC ENFANT
-    // =====================================================
+        concept:
+            "Boucle contenant plusieurs actions",
 
-    findChildBlock(
-        lines,
-        parentIndex,
-        parentIndent,
-        maximumEnd = lines.length
-    ) {
+        grid:
+            chapter4Level2Grid,
 
-        const start =
-            parentIndex + 1;
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
 
+        objective: {
+            type:
+                "reach_goal"
+        },
 
-        if (
-            start >= maximumEnd
-            ||
-            start >= lines.length
-            ||
-            lines[start].indent
-            <= parentIndent
-        ) {
+        requiredConcepts: [
+            "for",
+            "range",
+            "turn"
+        ],
 
-            this.fail(
-                `Ligne ${lines[parentIndex].number} : bloc indenté attendu.`,
-                lines[parentIndex].number
-            );
-        }
+        starterCode:
+`for i in range(2):
+    # Complète le motif.
+    forward(1)`
 
+    }),
 
-        const childIndent =
-            lines[start].indent;
 
+    makeLevel({
 
-        let end =
-            start;
+        chapter: 4,
+        exercise: 3,
 
+        difficulty:
+            "hard",
 
-        while (
-            end < maximumEnd
-            &&
-            end < lines.length
-            &&
-            lines[end].indent
-            >= childIndent
-        ) {
+        room:
+            "Bibliothèque",
 
-            end++;
-        }
+        title:
+            "Range les livres",
 
+        instruction:
+            "Récupère tous les livres puis rejoins la case jaune. Utilise au moins une boucle for pour éviter les répétitions.",
 
-        return {
-            start,
-            end,
-            indent:
-                childIndent
-        };
-    }
+        hint:
+            "Repère les déplacements qui se répètent.",
 
+        concept:
+            "Boucles et trajet complet",
 
-    // =====================================================
-    // IF / ELIF / ELSE
-    // =====================================================
+        grid:
+            chapter4Level3Grid,
 
-    executeIf(
-        lines,
-        index,
-        indent,
-        maximumEnd
-    ) {
+        robotStart: {
+            row: 7,
+            col: 4,
+            direction: "NORTH"
+        },
 
-        let cursor =
-            index;
+        objective: {
+            type: "combined",
 
-        let executed =
-            false;
-
-
-        while (
-            cursor < maximumEnd
-            &&
-            cursor < lines.length
-        ) {
-
-            const line =
-                lines[cursor];
-
-
-            if (
-                line.indent !== indent
-            ) {
-                break;
-            }
-
-
-            let condition;
-            let isElse = false;
-
-
-            if (
-                line.text.startsWith(
-                    "if "
-                )
-                &&
-                line.text.endsWith(":")
-            ) {
-
-                condition =
-                    line.text.slice(
-                        3,
-                        -1
-                    );
-
-            } else if (
-                line.text.startsWith(
-                    "elif "
-                )
-                &&
-                line.text.endsWith(":")
-            ) {
-
-                condition =
-                    line.text.slice(
-                        5,
-                        -1
-                    );
-
-            } else if (
-                line.text === "else:"
-            ) {
-
-                isElse = true;
-
-            } else {
-
-                break;
-            }
-
-
-            const block =
-                this.findChildBlock(
-                    lines,
-                    cursor,
-                    indent,
-                    maximumEnd
-                );
-
-
-            let shouldRun =
-                false;
-
-
-            if (!executed) {
-
-                if (isElse) {
-
-                    shouldRun =
-                        true;
-
-                } else {
-
-                    shouldRun =
-                        this.pythonTruthy(
-                            this.evaluateExpression(
-                                condition,
-                                line.number
-                            )
-                        );
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
-            }
+            ]
+        },
+
+        requiredConcepts: [
+            "for",
+            "range",
+            "movement"
+        ],
+
+        starterCode:
+`# Ramasse les livres avec une boucle.
+for i in range(1):
+    forward(1)
+`
+
+    })
+];
 
 
-            if (shouldRun) {
+// =========================================================
+// CHAPITRE 5
+// SALLE DE BAIN
+// WHILE / BREAK
+// =========================================================
 
-                const result =
-                    this.executeBlock(
-                        lines,
-                        block.start,
-                        block.indent,
-                        block.end
-                    );
+const chapter5Level1Grid =
+    borderWalls(8, 9);
+
+goal(
+    chapter5Level1Grid,
+    2,
+    2
+);
 
 
-                executed =
-                    true;
+const chapter5Level2Grid =
+    borderWalls(9, 10);
+
+goal(
+    chapter5Level2Grid,
+    2,
+    7
+);
+
+wall(chapter5Level2Grid, 4, 5);
+wall(chapter5Level2Grid, 5, 5);
 
 
-                if (
-                    result.signal
-                ) {
+const chapter5Level3Grid =
+    borderWalls(9, 11);
 
-                    return {
-                        nextIndex:
-                            block.end,
+dirt(chapter5Level3Grid, 6, 3);
+dirt(chapter5Level3Grid, 5, 3);
+dirt(chapter5Level3Grid, 4, 3);
+dirt(chapter5Level3Grid, 3, 3);
 
-                        signal:
-                            result.signal,
+goal(
+    chapter5Level3Grid,
+    2,
+    7
+);
 
-                        value:
-                            result.value
-                    };
+
+const CHAPTER_5 = [
+
+    makeLevel({
+
+        chapter: 5,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Salle de bain",
+
+        title:
+            "Avance tant que...",
+
+        instruction:
+            "Utilise while pour faire avancer Pyt jusqu'à la case jaune.",
+
+        hint:
+            "Fais évoluer une variable dans la boucle pour qu'elle finisse par s'arrêter.",
+
+        concept:
+            "while",
+
+        grid:
+            chapter5Level1Grid,
+
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "while"
+        ],
+
+        starterCode:
+`distance = 0
+
+while distance < 1:
+    forward(1)
+    distance += 1`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 5,
+        exercise: 2,
+
+        difficulty:
+            "medium",
+
+        room:
+            "Salle de bain",
+
+        title:
+            "Arrête la boucle",
+
+        instruction:
+            "Utilise while et break pour contrôler le déplacement de Pyt jusqu'à la sortie.",
+
+        hint:
+            "break permet de quitter immédiatement une boucle.",
+
+        concept:
+            "while et break",
+
+        grid:
+            chapter5Level2Grid,
+
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "while",
+            "break",
+            "condition"
+        ],
+
+        starterCode:
+`distance = 0
+
+while True:
+    forward(1)
+    distance += 1
+
+    if distance == 1:
+        break`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 5,
+        exercise: 3,
+
+        difficulty:
+            "hard",
+
+        room:
+            "Salle de bain",
+
+        title:
+            "Nettoyage automatique",
+
+        instruction:
+            "Traverse la zone sale, nettoie toutes les cases automatiquement puis rejoins la sortie. Utilise une boucle while.",
+
+        hint:
+            "Les saletés sont nettoyées automatiquement lorsque Pyt passe dessus.",
+
+        concept:
+            "while, condition et déplacements",
+
+        grid:
+            chapter5Level3Grid,
+
+        robotStart: {
+            row: 7,
+            col: 3,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "clean_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
-            }
+            ]
+        },
 
+        requiredConcepts: [
+            "while",
+            "condition",
+            "movement"
+        ],
 
-            cursor =
-                block.end;
+        starterCode:
+`nettoyees = 0
 
+while nettoyees < 4:
+    forward(1)
+    nettoyees += 1
 
-            if (
-                cursor >= maximumEnd
-                ||
-                cursor >= lines.length
-            ) {
+# Rejoins ensuite la sortie.
+`
 
-                break;
-            }
+    })
+];
 
 
-            const next =
-                lines[cursor];
+// =========================================================
+// CHAPITRE 6
+// CHAMBRE
+// LISTES
+// =========================================================
 
+const chapter6Level1Grid =
+    borderWalls(8, 10);
 
-            if (
-                next.indent !== indent
-            ) {
+goal(
+    chapter6Level1Grid,
+    2,
+    2
+);
 
-                break;
-            }
 
+const chapter6Level2Grid =
+    borderWalls(9, 11);
 
-            if (
-                !next.text.startsWith(
-                    "elif "
-                )
-                &&
-                next.text !== "else:"
-            ) {
+goal(
+    chapter6Level2Grid,
+    2,
+    8
+);
 
-                break;
-            }
-        }
+wall(chapter6Level2Grid, 5, 4);
+wall(chapter6Level2Grid, 4, 4);
 
 
-        return {
-            nextIndex:
-                cursor,
+const chapter6Level3Grid =
+    borderWalls(10, 12);
 
-            signal:
-                null,
+object(chapter6Level3Grid, 7, 4);
+object(chapter6Level3Grid, 4, 4);
+object(chapter6Level3Grid, 4, 8);
 
-            value:
-                null
-        };
-    }
+goal(
+    chapter6Level3Grid,
+    2,
+    9
+);
 
+wall(chapter6Level3Grid, 6, 6);
+wall(chapter6Level3Grid, 5, 6);
+wall(chapter6Level3Grid, 4, 6);
 
-    // =====================================================
-    // FOR
-    // =====================================================
 
-    executeFor(
-        lines,
-        index,
-        indent,
-        maximumEnd
-    ) {
+const CHAPTER_6 = [
 
-        const line =
-            lines[index];
+    makeLevel({
 
+        chapter: 6,
+        exercise: 1,
 
-        const match =
-            line.text.match(
-                /^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
-            );
+        difficulty:
+            "easy",
 
+        room:
+            "Chambre",
 
-        if (!match) {
+        title:
+            "Une liste de distances",
 
-            this.fail(
-                `Ligne ${line.number} : boucle for invalide.`,
-                line.number
-            );
-        }
+        instruction:
+            "Crée une liste de distances et utilise une valeur de la liste pour rejoindre la case jaune.",
 
+        hint:
+            "Le premier élément d'une liste est à l'indice 0.",
 
-        const variableName =
-            match[1];
+        concept:
+            "Créer et lire une liste",
 
+        grid:
+            chapter6Level1Grid,
 
-        const iterable =
-            this.evaluateExpression(
-                match[2],
-                line.number
-            );
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
 
+        objective: {
+            type:
+                "reach_goal"
+        },
 
-        if (
-            !Array.isArray(
-                iterable
-            )
-            &&
-            typeof iterable !== "string"
-        ) {
+        requiredConcepts: [
+            "list",
+            "index"
+        ],
 
-            this.fail(
-                `Ligne ${line.number} : la boucle for attend range(...), une liste ou un texte.`,
-                line.number
-            );
-        }
+        starterCode:
+`distances = [1, 2, 4]
 
+forward(distances[0])`
 
-        const block =
-            this.findChildBlock(
-                lines,
-                index,
-                indent,
-                maximumEnd
-            );
+    }),
 
 
-        for (
-            const value
-            of iterable
-        ) {
+    makeLevel({
 
-            this.countIteration(
-                line.number
-            );
+        chapter: 6,
+        exercise: 2,
 
+        difficulty:
+            "medium",
 
-            this.variables[
-                variableName
-            ] = value;
+        room:
+            "Chambre",
 
+        title:
+            "Le trajet enregistré",
 
-            const result =
-                this.executeBlock(
-                    lines,
-                    block.start,
-                    block.indent,
-                    block.end
-                );
+        instruction:
+            "Stocke plusieurs distances dans une liste puis parcours-la avec une boucle for pour rejoindre la sortie.",
 
+        hint:
+            "Tu peux écrire : for distance in trajet:",
 
-            if (
-                result.signal
-                === "break"
-            ) {
-                break;
-            }
+        concept:
+            "Liste et boucle for",
 
+        grid:
+            chapter6Level2Grid,
 
-            if (
-                result.signal
-                === "return"
-            ) {
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
 
-                return {
-                    nextIndex:
-                        block.end,
+        objective: {
+            type:
+                "reach_goal"
+        },
 
-                    signal:
-                        "return",
+        requiredConcepts: [
+            "list",
+            "for",
+            "movement"
+        ],
 
-                    value:
-                        result.value
-                };
-            }
-        }
+        starterCode:
+`trajet = [2, 3]
 
+for distance in trajet:
+    forward(distance)
+    # Il faut peut-être tourner ici.
+`
 
-        return {
-            nextIndex:
-                block.end,
+    }),
 
-            signal:
-                null,
 
-            value:
-                null
-        };
-    }
+    makeLevel({
 
+        chapter: 6,
+        exercise: 3,
 
-    // =====================================================
-    // WHILE
-    // =====================================================
+        difficulty:
+            "hard",
 
-    executeWhile(
-        lines,
-        index,
-        indent,
-        maximumEnd
-    ) {
+        room:
+            "Chambre",
 
-        const line =
-            lines[index];
+        title:
+            "Les objets perdus",
 
+        instruction:
+            "Utilise une liste pour organiser ton trajet, récupère tous les objets puis rejoins la case jaune.",
 
-        const condition =
-            line.text.slice(
-                6,
-                -1
-            );
+        hint:
+            "Une liste peut décrire les différentes longueurs de ton parcours.",
 
+        concept:
+            "Listes, boucles et déplacements",
 
-        const block =
-            this.findChildBlock(
-                lines,
-                index,
-                indent,
-                maximumEnd
-            );
+        grid:
+            chapter6Level3Grid,
 
+        robotStart: {
+            row: 8,
+            col: 2,
+            direction: "NORTH"
+        },
 
-        while (
-            this.pythonTruthy(
-                this.evaluateExpression(
-                    condition,
-                    line.number
-                )
-            )
-        ) {
+        objective: {
+            type: "combined",
 
-            this.countIteration(
-                line.number
-            );
-
-
-            const result =
-                this.executeBlock(
-                    lines,
-                    block.start,
-                    block.indent,
-                    block.end
-                );
-
-
-            if (
-                result.signal
-                === "break"
-            ) {
-
-                break;
-            }
-
-
-            if (
-                result.signal
-                === "return"
-            ) {
-
-                return {
-                    nextIndex:
-                        block.end,
-
-                    signal:
-                        "return",
-
-                    value:
-                        result.value
-                };
-            }
-        }
-
-
-        return {
-            nextIndex:
-                block.end,
-
-            signal:
-                null,
-
-            value:
-                null
-        };
-    }
-
-
-    countIteration(lineNumber) {
-
-        this.iterations++;
-
-
-        if (
-            this.iterations
-            >
-            this.maxIterations
-        ) {
-
-            this.fail(
-                "Boucle arrêtée : trop d'itérations. Vérifie la condition de ta boucle.",
-                lineNumber
-            );
-        }
-    }
-
-
-    // =====================================================
-    // FONCTIONS
-    // =====================================================
-
-    registerFunction(
-        lines,
-        index,
-        indent,
-        maximumEnd
-    ) {
-
-        const line =
-            lines[index];
-
-
-        const match =
-            line.text.match(
-                /^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:$/
-            );
-
-
-        if (!match) {
-
-            this.fail(
-                `Ligne ${line.number} : définition de fonction invalide.`,
-                line.number
-            );
-        }
-
-
-        const name =
-            match[1];
-
-
-        const parameters =
-            match[2]
-                .split(",")
-                .map(
-                    value =>
-                        value.trim()
-                )
-                .filter(Boolean);
-
-
-        for (
-            const parameter
-            of parameters
-        ) {
-
-            if (
-                !/^[A-Za-z_]\w*$/
-                    .test(parameter)
-            ) {
-
-                this.fail(
-                    `Ligne ${line.number} : paramètre "${parameter}" invalide.`,
-                    line.number
-                );
-            }
-        }
-
-
-        const block =
-            this.findChildBlock(
-                lines,
-                index,
-                indent,
-                maximumEnd
-            );
-
-
-        this.functions[name] = {
-            name,
-            parameters,
-            lines,
-            start:
-                block.start,
-            end:
-                block.end,
-            indent:
-                block.indent
-        };
-
-
-        return block.end;
-    }
-
-
-    callFunction(
-        name,
-        args,
-        lineNumber
-    ) {
-
-        const func =
-            this.functions[name];
-
-
-        if (!func) {
-
-            this.fail(
-                `Ligne ${lineNumber} : fonction inconnue : ${name}().`,
-                lineNumber
-            );
-        }
-
-
-        if (
-            args.length
-            !==
-            func.parameters.length
-        ) {
-
-            this.fail(
-                `Ligne ${lineNumber} : ${name}() attend ${func.parameters.length} argument(s).`,
-                lineNumber
-            );
-        }
-
-
-        this.functionCalls++;
-
-
-        if (
-            this.functionCalls
-            >
-            this.maxFunctionCalls
-        ) {
-
-            this.fail(
-                "Trop d'appels de fonctions.",
-                lineNumber
-            );
-        }
-
-
-        const previousVariables =
-            this.variables;
-
-
-        const localVariables =
-            Object.assign(
-                Object.create(
-                    previousVariables
-                ),
-                {}
-            );
-
-
-        for (
-            let i = 0;
-            i < func.parameters.length;
-            i++
-        ) {
-
-            localVariables[
-                func.parameters[i]
-            ] = args[i];
-        }
-
-
-        this.variables =
-            localVariables;
-
-
-        let result;
-
-
-        try {
-
-            result =
-                this.executeBlock(
-                    func.lines,
-                    func.start,
-                    func.indent,
-                    func.end
-                );
-
-        } finally {
-
-            this.variables =
-                previousVariables;
-        }
-
-
-        return (
-            result?.signal
-            === "return"
-                ? result.value
-                : null
-        );
-    }
-
-
-    // =====================================================
-    // INSTRUCTIONS SIMPLES
-    // =====================================================
-
-    executeStatement(
-        text,
-        lineNumber
-    ) {
-
-        this.currentLine =
-            lineNumber;
-
-
-        // -----------------------------------------
-        // += -= *= /= //= %=
-        // -----------------------------------------
-
-        const compound =
-            text.match(
-                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=|\/\/=|%=)\s*(.+)$/
-            );
-
-
-        if (compound) {
-
-            const name =
-                compound[1];
-
-            const operator =
-                compound[2];
-
-
-            if (
-                !(name in this.variables)
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : variable inconnue "${name}".`,
-                    lineNumber
-                );
-            }
-
-
-            const right =
-                this.evaluateExpression(
-                    compound[3],
-                    lineNumber
-                );
-
-
-            const left =
-                this.variables[name];
-
-
-            switch (operator) {
-
-                case "+=":
-
-                    this.variables[name] =
-                        left + right;
-
-                    break;
-
-
-                case "-=":
-
-                    this.variables[name] =
-                        Number(left)
-                        -
-                        Number(right);
-
-                    break;
-
-
-                case "*=":
-
-                    this.variables[name] =
-                        Number(left)
-                        *
-                        Number(right);
-
-                    break;
-
-
-                case "/=":
-
-                    if (
-                        Number(right)
-                        === 0
-                    ) {
-
-                        this.fail(
-                            `Ligne ${lineNumber} : division par zéro.`,
-                            lineNumber
-                        );
-                    }
-
-
-                    this.variables[name] =
-                        Number(left)
-                        /
-                        Number(right);
-
-                    break;
-
-
-                case "//=":
-
-                    if (
-                        Number(right)
-                        === 0
-                    ) {
-
-                        this.fail(
-                            `Ligne ${lineNumber} : division par zéro.`,
-                            lineNumber
-                        );
-                    }
-
-
-                    this.variables[name] =
-                        Math.floor(
-                            Number(left)
-                            /
-                            Number(right)
-                        );
-
-                    break;
-
-
-                case "%=":
-
-                    if (
-                        Number(right)
-                        === 0
-                    ) {
-
-                        this.fail(
-                            `Ligne ${lineNumber} : division par zéro.`,
-                            lineNumber
-                        );
-                    }
-
-
-                    this.variables[name] =
-                        Number(left)
-                        %
-                        Number(right);
-
-                    break;
-            }
-
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // APPEND
-        // -----------------------------------------
-
-        const appendMatch =
-            text.match(
-                /^([A-Za-z_]\w*)\.append\s*\((.*)\)$/
-            );
-
-
-        if (appendMatch) {
-
-            const name =
-                appendMatch[1];
-
-
-            const list =
-                this.variables[name];
-
-
-            if (
-                !Array.isArray(list)
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : append() s'utilise sur une liste.`,
-                    lineNumber
-                );
-            }
-
-
-            const value =
-                this.evaluateExpression(
-                    appendMatch[2],
-                    lineNumber
-                );
-
-
-            list.push(value);
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // AFFECTATION INDEX
-        // -----------------------------------------
-
-        const indexAssignment =
-            text.match(
-                /^([A-Za-z_]\w*)\s*\[(.+)\]\s*=\s*(.+)$/
-            );
-
-
-        if (indexAssignment) {
-
-            const name =
-                indexAssignment[1];
-
-
-            const container =
-                this.variables[name];
-
-
-            if (
-                !Array.isArray(container)
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : "${name}" n'est pas une liste modifiable.`,
-                    lineNumber
-                );
-            }
-
-
-            let index =
-                Number(
-                    this.evaluateExpression(
-                        indexAssignment[2],
-                        lineNumber
-                    )
-                );
-
-
-            if (
-                !Number.isInteger(index)
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : l'index doit être un entier.`,
-                    lineNumber
-                );
-            }
-
-
-            if (
-                index < 0
-            ) {
-
-                index =
-                    container.length
-                    +
-                    index;
-            }
-
-
-            if (
-                index < 0
-                ||
-                index >= container.length
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : index hors de la liste.`,
-                    lineNumber
-                );
-            }
-
-
-            container[index] =
-                this.evaluateExpression(
-                    indexAssignment[3],
-                    lineNumber
-                );
-
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // AFFECTATION SIMPLE
-        // -----------------------------------------
-
-        const assignment =
-            text.match(
-                /^([A-Za-z_]\w*)\s*=\s*(?!=)(.+)$/
-            );
-
-
-        if (assignment) {
-
-            this.variables[
-                assignment[1]
-            ] =
-                this.evaluateExpression(
-                    assignment[2],
-                    lineNumber
-                );
-
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // APPEL
-        // -----------------------------------------
-
-        const call =
-            this.parseCall(text);
-
-
-        if (call) {
-
-            const args =
-                this.parseArguments(
-                    call.arguments
-                )
-                .map(
-                    argument =>
-                        this.evaluateExpression(
-                            argument,
-                            lineNumber
-                        )
-                );
-
-
-            this.executeCall(
-                call.name,
-                args,
-                lineNumber
-            );
-
-
-            return;
-        }
-
-
-        this.fail(
-            `Ligne ${lineNumber} : instruction non reconnue : ${text}`,
-            lineNumber
-        );
-    }
-
-
-    // =====================================================
-    // APPELS
-    // =====================================================
-
-    executeCall(
-        name,
-        args,
-        lineNumber
-    ) {
-
-        // -----------------------------------------
-        // MOUVEMENT
-        // -----------------------------------------
-
-        if (
-            name === "forward"
-            ||
-            name === "backward"
-        ) {
-
-            if (
-                args.length !== 1
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : ${name}() attend une distance.`,
-                    lineNumber
-                );
-            }
-
-
-            const amount =
-                Number(args[0]);
-
-
-            if (
-                !Number.isInteger(amount)
-                ||
-                amount < 0
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : ${name}() attend un entier positif.`,
-                    lineNumber
-                );
-            }
-
-
-            for (
-                let i = 0;
-                i < amount;
-                i++
-            ) {
-
-                this.addAction(
-                    name,
-                    1,
-                    lineNumber
-                );
-            }
-
-
-            return null;
-        }
-
-
-        // -----------------------------------------
-        // ROTATION
-        // -----------------------------------------
-
-        if (
-            name === "right"
-            ||
-            name === "left"
-        ) {
-
-            if (
-                args.length !== 1
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : ${name}() attend un angle.`,
-                    lineNumber
-                );
-            }
-
-
-            const angle =
-                Number(args[0]);
-
-
-            if (
-                !Number.isInteger(angle)
-                ||
-                angle < 0
-                ||
-                angle % 90 !== 0
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : les rotations doivent utiliser un multiple positif de 90°.`,
-                    lineNumber
-                );
-            }
-
-
-            const turns =
-                angle / 90;
-
-
-            for (
-                let i = 0;
-                i < turns;
-                i++
-            ) {
-
-                this.addAction(
-                    name,
-                    90,
-                    lineNumber
-                );
-            }
-
-
-            return null;
-        }
-
-
-        // -----------------------------------------
-        // PRINT
-        // -----------------------------------------
-
-        if (
-            name === "print"
-        ) {
-
-            this.output.push(
-                args
-                    .map(
-                        value =>
-                            this.pythonString(
-                                value
-                            )
-                    )
-                    .join(" ")
-            );
-
-
-            return null;
-        }
-
-
-        // -----------------------------------------
-        // FONCTION ÉLÈVE
-        // -----------------------------------------
-
-        if (
-            this.functions[name]
-        ) {
-
-            return this.callFunction(
-                name,
-                args,
-                lineNumber
-            );
-        }
-
-
-        this.fail(
-            `Ligne ${lineNumber} : fonction inconnue : ${name}().`,
-            lineNumber
-        );
-    }
-
-
-    addAction(
-        type,
-        value,
-        lineNumber
-    ) {
-
-        if (
-            this.actions.length
-            >=
-            this.maxActions
-        ) {
-
-            this.fail(
-                "Programme arrêté : trop d'actions demandées.",
-                lineNumber
-            );
-        }
-
-
-        this.actions.push({
-            type,
-            value,
-            line:
-                lineNumber
-        });
-    }
-
-
-    // =====================================================
-    // EXPRESSIONS
-    // =====================================================
-
-    evaluateExpression(
-        expression,
-        lineNumber = null
-    ) {
-
-        const text =
-            String(expression)
-                .trim();
-
-
-        if (
-            text === ""
-        ) {
-
-            this.fail(
-                `Ligne ${lineNumber} : expression vide.`,
-                lineNumber
-            );
-        }
-
-
-        return this.evaluateOr(
-            text,
-            lineNumber
-        );
-    }
-
-
-    // -----------------------------------------------------
-    // OR
-    // -----------------------------------------------------
-
-    evaluateOr(
-        text,
-        lineNumber
-    ) {
-
-        const parts =
-            this.splitTopLevelWord(
-                text,
-                "or"
-            );
-
-
-        if (
-            parts.length > 1
-        ) {
-
-            for (
-                const part
-                of parts
-            ) {
-
-                const value =
-                    this.evaluateAnd(
-                        part,
-                        lineNumber
-                    );
-
-
-                if (
-                    this.pythonTruthy(
-                        value
-                    )
-                ) {
-
-                    return true;
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
-            }
+            ]
+        },
+
+        requiredConcepts: [
+            "list",
+            "for",
+            "movement"
+        ],
+
+        starterCode:
+`trajet = []
+
+# Ajoute les distances utiles dans la liste.
+
+for distance in trajet:
+    forward(distance)
+`
+
+    })
+];
 
 
-            return false;
-        }
+// =========================================================
+// CHAPITRE 7
+// ATELIER
+// FONCTIONS
+// =========================================================
+
+const chapter7Level1Grid =
+    borderWalls(8, 10);
+
+goal(
+    chapter7Level1Grid,
+    2,
+    2
+);
 
 
-        return this.evaluateAnd(
-            text,
-            lineNumber
-        );
-    }
+const chapter7Level2Grid =
+    borderWalls(9, 11);
+
+goal(
+    chapter7Level2Grid,
+    2,
+    8
+);
+
+wall(chapter7Level2Grid, 5, 4);
+wall(chapter7Level2Grid, 4, 4);
 
 
-    // -----------------------------------------------------
-    // AND
-    // -----------------------------------------------------
+const chapter7Level3Grid =
+    borderWalls(10, 12);
 
-    evaluateAnd(
-        text,
-        lineNumber
-    ) {
+button(chapter7Level3Grid, 7, 4);
 
-        const parts =
-            this.splitTopLevelWord(
-                text,
-                "and"
-            );
+door(chapter7Level3Grid, 4, 7);
 
+object(chapter7Level3Grid, 3, 9);
 
-        if (
-            parts.length > 1
-        ) {
-
-            for (
-                const part
-                of parts
-            ) {
-
-                const value =
-                    this.evaluateNot(
-                        part,
-                        lineNumber
-                    );
+goal(
+    chapter7Level3Grid,
+    8,
+    2
+);
 
 
-                if (
-                    !this.pythonTruthy(
-                        value
-                    )
-                ) {
+const CHAPTER_7 = [
 
-                    return false;
+    makeLevel({
+
+        chapter: 7,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Atelier",
+
+        title:
+            "Ta première commande",
+
+        instruction:
+            "Crée une fonction qui fait avancer Pyt jusqu'à la case jaune puis appelle cette fonction.",
+
+        hint:
+            "Une fonction commence par def.",
+
+        concept:
+            "Créer et appeler une fonction",
+
+        grid:
+            chapter7Level1Grid,
+
+        robotStart: {
+            row: 6,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "function"
+        ],
+
+        starterCode:
+`def avancer():
+    forward(1)
+
+avancer()`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 7,
+        exercise: 2,
+
+        difficulty:
+            "medium",
+
+        room:
+            "Atelier",
+
+        title:
+            "Une fonction avec paramètre",
+
+        instruction:
+            "Crée une fonction qui reçoit une distance en paramètre et utilise-la plusieurs fois pour rejoindre la sortie.",
+
+        hint:
+            "Exemple : def avancer(distance):",
+
+        concept:
+            "Paramètres de fonction",
+
+        grid:
+            chapter7Level2Grid,
+
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type:
+                "reach_goal"
+        },
+
+        requiredConcepts: [
+            "function",
+            "parameter",
+            "movement"
+        ],
+
+        starterCode:
+`def avancer(distance):
+    forward(distance)
+
+# Appelle ta fonction avec les bonnes valeurs.
+`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 7,
+        exercise: 3,
+
+        difficulty:
+            "hard",
+
+        room:
+            "Atelier",
+
+        title:
+            "Programme l'atelier",
+
+        instruction:
+            "Crée des fonctions réutilisables, active le bouton, récupère l'objet puis reviens sur la case jaune.",
+
+        hint:
+            "Une fonction peut contenir des déplacements et des virages.",
+
+        concept:
+            "Fonctions réutilisables",
+
+        grid:
+            chapter7Level3Grid,
+
+        robotStart: {
+            row: 8,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
-            }
+            ]
+        },
 
+        requiredConcepts: [
+            "function",
+            "parameter",
+            "condition",
+            "movement"
+        ],
 
-            return true;
-        }
+        starterCode:
+`def avancer(distance):
+    forward(distance)
 
+def tourner():
+    right(90)
 
-        return this.evaluateNot(
-            text,
-            lineNumber
-        );
-    }
+# Construis ton programme avec tes fonctions.
+`
 
+    })
+];
 
-    // -----------------------------------------------------
-    // NOT
-    // -----------------------------------------------------
 
-    evaluateNot(
-        text,
-        lineNumber
-    ) {
+// =========================================================
+// CHAPITRE 8
+// GRENIER
+// COMBINAISON
+// =========================================================
 
-        const trimmed =
-            text.trim();
+const chapter8Level1Grid =
+    borderWalls(9, 11);
 
+object(chapter8Level1Grid, 3, 7);
 
-        if (
-            /^not\s+/.test(
-                trimmed
-            )
-        ) {
+goal(
+    chapter8Level1Grid,
+    7,
+    2
+);
 
-            return !this.pythonTruthy(
-                this.evaluateNot(
-                    trimmed.replace(
-                        /^not\s+/,
-                        ""
-                    ),
-                    lineNumber
-                )
-            );
-        }
+wall(chapter8Level1Grid, 5, 5);
+wall(chapter8Level1Grid, 4, 5);
 
 
-        return this.evaluateComparison(
-            trimmed,
-            lineNumber
-        );
-    }
+const chapter8Level2Grid =
+    borderWalls(10, 12);
 
+button(chapter8Level2Grid, 7, 4);
+door(chapter8Level2Grid, 5, 7);
+object(chapter8Level2Grid, 3, 9);
 
-    // -----------------------------------------------------
-    // COMPARAISONS
-    // -----------------------------------------------------
+goal(
+    chapter8Level2Grid,
+    8,
+    2
+);
 
-    evaluateComparison(
-        text,
-        lineNumber
-    ) {
 
-        const comparison =
-            this.findTopLevelOperator(
-                text,
-                [
-                    "==",
-                    "!=",
-                    ">=",
-                    "<=",
-                    ">",
-                    "<"
-                ]
-            );
+const chapter8Level3Grid =
+    borderWalls(11, 13);
 
+object(chapter8Level3Grid, 8, 4);
+dirt(chapter8Level3Grid, 6, 4);
+button(chapter8Level3Grid, 4, 4);
+door(chapter8Level3Grid, 4, 7);
+object(chapter8Level3Grid, 3, 10);
 
-        if (!comparison) {
+goal(
+    chapter8Level3Grid,
+    9,
+    2
+);
 
-            return this.evaluateAddSub(
-                text,
-                lineNumber
-            );
-        }
+wall(chapter8Level3Grid, 7, 6);
+wall(chapter8Level3Grid, 6, 6);
+wall(chapter8Level3Grid, 5, 6);
 
 
-        const left =
-            this.evaluateAddSub(
-                comparison.left,
-                lineNumber
-            );
+const CHAPTER_8 = [
 
+    makeLevel({
 
-        const right =
-            this.evaluateAddSub(
-                comparison.right,
-                lineNumber
-            );
+        chapter: 8,
+        exercise: 1,
 
+        difficulty:
+            "easy",
 
-        switch (
-            comparison.operator
-        ) {
+        room:
+            "Grenier",
 
-            case "==":
-                return left === right;
+        title:
+            "Prépare ton trajet",
 
-            case "!=":
-                return left !== right;
+        instruction:
+            "Combine variables, liste, boucle et fonction pour récupérer l'objet puis revenir sur la case jaune.",
 
-            case ">=":
-                return left >= right;
+        hint:
+            "Décompose ton programme : données, fonction, puis exécution.",
 
-            case "<=":
-                return left <= right;
-
-            case ">":
-                return left > right;
-
-            case "<":
-                return left < right;
-
-            default:
-                return false;
-        }
-    }
-
-
-    // -----------------------------------------------------
-    // + -
-    // -----------------------------------------------------
-
-    evaluateAddSub(
-        text,
-        lineNumber
-    ) {
-
-        const operation =
-            this.findTopLevelOperatorFromRight(
-                text,
-                [
-                    "+",
-                    "-"
-                ]
-            );
-
-
-        if (!operation) {
-
-            return this.evaluateMulDiv(
-                text,
-                lineNumber
-            );
-        }
-
-
-        const left =
-            this.evaluateAddSub(
-                operation.left,
-                lineNumber
-            );
-
-
-        const right =
-            this.evaluateMulDiv(
-                operation.right,
-                lineNumber
-            );
-
-
-        if (
-            operation.operator
-            === "+"
-        ) {
-
-            if (
-                Array.isArray(left)
-                &&
-                Array.isArray(right)
-            ) {
-
-                return [
-                    ...left,
-                    ...right
-                ];
-            }
-
-
-            return left + right;
-        }
-
-
-        return (
-            Number(left)
-            -
-            Number(right)
-        );
-    }
-
-
-    // -----------------------------------------------------
-    // * / // %
-    // -----------------------------------------------------
-
-    evaluateMulDiv(
-        text,
-        lineNumber
-    ) {
-
-        const operation =
-            this.findTopLevelOperatorFromRight(
-                text,
-                [
-                    "//",
-                    "*",
-                    "/",
-                    "%"
-                ]
-            );
-
-
-        if (!operation) {
-
-            return this.evaluatePower(
-                text,
-                lineNumber
-            );
-        }
-
-
-        const left =
-            this.evaluateMulDiv(
-                operation.left,
-                lineNumber
-            );
-
-
-        const right =
-            this.evaluatePower(
-                operation.right,
-                lineNumber
-            );
-
-
-        switch (
-            operation.operator
-        ) {
-
-            case "*":
-
-                return (
-                    Number(left)
-                    *
-                    Number(right)
-                );
-
-
-            case "/":
-
-                if (
-                    Number(right)
-                    === 0
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : division par zéro.`,
-                        lineNumber
-                    );
+        concept:
+            "Combiner les notions précédentes",
+
+        grid:
+            chapter8Level1Grid,
+
+        robotStart: {
+            row: 7,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "variable",
+            "list",
+            "for",
+            "function"
+        ],
+
+        starterCode:
+`trajet = []
+
+def avancer(distance):
+    forward(distance)
+
+# Complète le programme.
+`
+
+    }),
 
 
-                return (
-                    Number(left)
-                    /
-                    Number(right)
-                );
+    makeLevel({
 
+        chapter: 8,
+        exercise: 2,
 
-            case "//":
+        difficulty:
+            "medium",
 
-                if (
-                    Number(right)
-                    === 0
-                ) {
+        room:
+            "Grenier",
 
-                    this.fail(
-                        `Ligne ${lineNumber} : division par zéro.`,
-                        lineNumber
-                    );
+        title:
+            "La clé du grenier",
+
+        instruction:
+            "Active le bouton, traverse la porte, récupère l'objet puis retourne à la case jaune.",
+
+        hint:
+            "Utilise des fonctions pour les parties du trajet qui se ressemblent.",
+
+        concept:
+            "Conditions, boucles et fonctions",
+
+        grid:
+            chapter8Level2Grid,
+
+        robotStart: {
+            row: 8,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "condition",
+            "loop",
+            "function",
+            "movement"
+        ],
+
+        starterCode:
+`def avancer(distance):
+    for i in range(distance):
+        forward(1)
+
+# Active le bouton avant d'aller vers la porte.
+`
+
+    }),
 
 
-                return Math.floor(
-                    Number(left)
-                    /
-                    Number(right)
-                );
+    makeLevel({
 
+        chapter: 8,
+        exercise: 3,
 
-            case "%":
+        difficulty:
+            "hard",
 
-                if (
-                    Number(right)
-                    === 0
-                ) {
+        room:
+            "Grenier",
 
-                    this.fail(
-                        `Ligne ${lineNumber} : division par zéro.`,
-                        lineNumber
-                    );
+        title:
+            "Remets le grenier en ordre",
+
+        instruction:
+            "Récupère tous les objets, nettoie les saletés, active le bouton et reviens sur la case jaune.",
+
+        hint:
+            "Tu peux créer plusieurs petites fonctions au lieu d'une seule très grande.",
+
+        concept:
+            "Programme complet",
+
+        grid:
+            chapter8Level3Grid,
+
+        robotStart: {
+            row: 9,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "clean_all"
+                },
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "reach_goal"
                 }
+            ]
+        },
+
+        requiredConcepts: [
+            "variable",
+            "condition",
+            "for",
+            "while",
+            "list",
+            "function"
+        ],
+
+        starterCode:
+`def avancer(distance):
+    for i in range(distance):
+        forward(1)
+
+def tourner():
+    right(90)
+
+# Organise la mission en plusieurs étapes.
+`
+
+    })
+];
 
 
-                return (
-                    Number(left)
-                    %
-                    Number(right)
-                );
-        }
+// =========================================================
+// CHAPITRE 9
+// LABORATOIRE
+// EXAMEN FINAL
+// AUCUNE NOUVELLE NOTION
+// =========================================================
 
+const chapter9Level1Grid =
+    borderWalls(10, 12);
+
+object(chapter9Level1Grid, 3, 8);
+
+goal(
+    chapter9Level1Grid,
+    8,
+    2
+);
+
+wall(chapter9Level1Grid, 6, 5);
+wall(chapter9Level1Grid, 5, 5);
+wall(chapter9Level1Grid, 4, 5);
+
+
+const chapter9Level2Grid =
+    borderWalls(11, 13);
+
+button(chapter9Level2Grid, 8, 4);
+door(chapter9Level2Grid, 5, 7);
+object(chapter9Level2Grid, 3, 10);
+dirt(chapter9Level2Grid, 7, 9);
+
+goal(
+    chapter9Level2Grid,
+    9,
+    2
+);
+
+
+const chapter9Level3Grid =
+    borderWalls(12, 14);
+
+object(chapter9Level3Grid, 9, 4);
+dirt(chapter9Level3Grid, 7, 4);
+
+button(chapter9Level3Grid, 5, 4);
+
+door(chapter9Level3Grid, 5, 8);
+
+object(chapter9Level3Grid, 3, 11);
+dirt(chapter9Level3Grid, 7, 10);
+
+charger(chapter9Level3Grid, 9, 10);
+
+goal(
+    chapter9Level3Grid,
+    10,
+    2
+);
+
+wall(chapter9Level3Grid, 8, 6);
+wall(chapter9Level3Grid, 7, 6);
+wall(chapter9Level3Grid, 6, 6);
+
+wall(chapter9Level3Grid, 6, 9);
+wall(chapter9Level3Grid, 5, 9);
+wall(chapter9Level3Grid, 4, 9);
+
+
+const CHAPTER_9 = [
+
+    makeLevel({
+
+        chapter: 9,
+        exercise: 1,
+
+        difficulty:
+            "easy",
+
+        room:
+            "Laboratoire",
+
+        title:
+            "Examen — Mission 1",
+
+        instruction:
+            "Récupère l'objet puis reviens sur la case jaune. Choisis toi-même les notions Python les plus utiles.",
+
+        hint:
+            "Il n'y a aucune nouvelle commande dans ce chapitre.",
+
+        concept:
+            "Révision générale",
+
+        grid:
+            chapter9Level1Grid,
+
+        robotStart: {
+            row: 8,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "reach_goal"
+                }
+            ]
+        },
+
+        requiredConcepts: [
+            "revision"
+        ],
+
+        starterCode:
+`# Examen final.
+# Construis ton programme.
+`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 9,
+        exercise: 2,
+
+        difficulty:
+            "medium",
+
+        room:
+            "Laboratoire",
+
+        title:
+            "Examen — Mission 2",
+
+        instruction:
+            "Active le bouton, traverse la porte, récupère l'objet, nettoie la zone sale puis reviens au départ.",
+
+        hint:
+            "Réutilise les notions des huit chapitres précédents.",
+
+        concept:
+            "Révision générale",
+
+        grid:
+            chapter9Level2Grid,
+
+        robotStart: {
+            row: 9,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "clean_all"
+                },
+                {
+                    type:
+                        "reach_goal"
+                }
+            ]
+        },
+
+        requiredConcepts: [
+            "revision"
+        ],
+
+        starterCode:
+`# Examen final - mission 2.
+`
+
+    }),
+
+
+    makeLevel({
+
+        chapter: 9,
+        exercise: 3,
+
+        difficulty:
+            "hard",
+
+        room:
+            "Laboratoire",
+
+        title:
+            "Mission finale de Pyt",
+
+        instruction:
+            "Termine toutes les tâches du laboratoire et ramène Pyt sur la case jaune. Il existe plusieurs solutions correctes.",
+
+        hint:
+            "Planifie d'abord ton trajet. Utilise ensuite les structures Python qui rendent ton programme clair.",
+
+        concept:
+            "Examen final",
+
+        grid:
+            chapter9Level3Grid,
+
+        robotStart: {
+            row: 10,
+            col: 2,
+            direction: "NORTH"
+        },
+
+        objective: {
+            type: "combined",
+
+            requirements: [
+                {
+                    type:
+                        "collect_all"
+                },
+                {
+                    type:
+                        "clean_all"
+                },
+                {
+                    type:
+                        "activate_all"
+                },
+                {
+                    type:
+                        "reach_goal"
+                }
+            ]
+        },
+
+        requiredConcepts: [
+            "movement",
+            "variable",
+            "condition",
+            "for",
+            "while",
+            "list",
+            "function"
+        ],
+
+        starterCode:
+`# MISSION FINALE
+#
+# Utilise tout ce que tu as appris.
+#
+
+`
+
+    })
+];
+
+
+// =========================================================
+// TOUS LES CHAPITRES
+// =========================================================
+
+const COURSES = {
+
+    1: CHAPTER_1,
+
+    2: CHAPTER_2,
+
+    3: CHAPTER_3,
+
+    4: CHAPTER_4,
+
+    5: CHAPTER_5,
+
+    6: CHAPTER_6,
+
+    7: CHAPTER_7,
+
+    8: CHAPTER_8,
+
+    9: CHAPTER_9
+};
+
+
+// =========================================================
+// ACCÈS AUX NIVEAUX
+// =========================================================
+
+function getLevel(
+    chapter,
+    exercise
+) {
+
+    chapter =
+        Number(chapter);
+
+    exercise =
+        Number(exercise);
+
+
+    const levels =
+        COURSES[chapter];
+
+
+    if (
+        !levels ||
+        exercise < 1 ||
+        exercise > levels.length
+    ) {
 
         return null;
     }
 
 
-    // -----------------------------------------------------
-    // **
-    // -----------------------------------------------------
+    return levels[
+        exercise - 1
+    ];
+}
 
-    evaluatePower(
-        text,
-        lineNumber
+
+function getChapterLevels(
+    chapter
+) {
+
+    chapter =
+        Number(chapter);
+
+
+    return (
+        COURSES[chapter] ||
+        []
+    );
+}
+
+
+function getAllLevels() {
+
+    const result = [];
+
+
+    for (
+        let chapter = 1;
+        chapter <= 9;
+        chapter++
     ) {
 
-        const operation =
-            this.findTopLevelOperator(
-                text,
-                ["**"]
+        const levels =
+            getChapterLevels(
+                chapter
             );
-
-
-        if (!operation) {
-
-            return this.evaluateUnary(
-                text,
-                lineNumber
-            );
-        }
-
-
-        return Math.pow(
-            Number(
-                this.evaluateUnary(
-                    operation.left,
-                    lineNumber
-                )
-            ),
-
-            Number(
-                this.evaluatePower(
-                    operation.right,
-                    lineNumber
-                )
-            )
-        );
-    }
-
-
-    // -----------------------------------------------------
-    // UNARY
-    // -----------------------------------------------------
-
-    evaluateUnary(
-        text,
-        lineNumber
-    ) {
-
-        const trimmed =
-            text.trim();
-
-
-        if (
-            trimmed.startsWith("+")
-        ) {
-
-            return Number(
-                this.evaluateUnary(
-                    trimmed.slice(1),
-                    lineNumber
-                )
-            );
-        }
-
-
-        if (
-            trimmed.startsWith("-")
-        ) {
-
-            return -Number(
-                this.evaluateUnary(
-                    trimmed.slice(1),
-                    lineNumber
-                )
-            );
-        }
-
-
-        return this.evaluatePrimary(
-            trimmed,
-            lineNumber
-        );
-    }
-
-
-    // -----------------------------------------------------
-    // VALEURS
-    // -----------------------------------------------------
-
-    evaluatePrimary(
-        text,
-        lineNumber
-    ) {
-
-        let trimmed =
-            text.trim();
-
-
-        // Parenthèses externes.
-
-        while (
-            this.hasOuterParentheses(
-                trimmed
-            )
-        ) {
-
-            trimmed =
-                trimmed
-                    .slice(
-                        1,
-                        -1
-                    )
-                    .trim();
-        }
-
-
-        // Booléens / None.
-
-        if (
-            trimmed === "True"
-        ) {
-            return true;
-        }
-
-
-        if (
-            trimmed === "False"
-        ) {
-            return false;
-        }
-
-
-        if (
-            trimmed === "None"
-        ) {
-            return null;
-        }
-
-
-        // Nombre.
-
-        if (
-            /^-?(?:\d+(?:\.\d*)?|\.\d+)$/
-                .test(trimmed)
-        ) {
-
-            return Number(
-                trimmed
-            );
-        }
-
-
-        // Texte.
-
-        if (
-            this.isStringLiteral(
-                trimmed
-            )
-        ) {
-
-            return this.parseStringLiteral(
-                trimmed,
-                lineNumber
-            );
-        }
-
-
-        // Liste.
-
-        if (
-            trimmed.startsWith("[")
-            &&
-            trimmed.endsWith("]")
-            &&
-            this.isBalanced(
-                trimmed
-            )
-        ) {
-
-            const inside =
-                trimmed
-                    .slice(
-                        1,
-                        -1
-                    )
-                    .trim();
-
-
-            if (
-                inside === ""
-            ) {
-                return [];
-            }
-
-
-            return this.parseArguments(
-                inside
-            )
-            .map(
-                item =>
-                    this.evaluateExpression(
-                        item,
-                        lineNumber
-                    )
-            );
-        }
-
-
-        // Index.
-
-        const indexExpression =
-            this.parseIndexExpression(
-                trimmed
-            );
-
-
-        if (
-            indexExpression
-        ) {
-
-            const container =
-                this.evaluateExpression(
-                    indexExpression.base,
-                    lineNumber
-                );
-
-
-            let index =
-                Number(
-                    this.evaluateExpression(
-                        indexExpression.index,
-                        lineNumber
-                    )
-                );
-
-
-            if (
-                !Number.isInteger(index)
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : l'index doit être un entier.`,
-                    lineNumber
-                );
-            }
-
-
-            if (
-                index < 0
-            ) {
-
-                index =
-                    container.length
-                    +
-                    index;
-            }
-
-
-            if (
-                container == null
-                ||
-                index < 0
-                ||
-                index >= container.length
-            ) {
-
-                this.fail(
-                    `Ligne ${lineNumber} : index hors de la liste.`,
-                    lineNumber
-                );
-            }
-
-
-            return container[index];
-        }
-
-
-        // Appel.
-
-        const call =
-            this.parseCall(
-                trimmed
-            );
-
-
-        if (call) {
-
-            const args =
-                this.parseArguments(
-                    call.arguments
-                )
-                .map(
-                    argument =>
-                        this.evaluateExpression(
-                            argument,
-                            lineNumber
-                        )
-                );
-
-
-            return this.evaluateCall(
-                call.name,
-                args,
-                lineNumber
-            );
-        }
-
-
-        // Variable.
-
-        if (
-            /^[A-Za-z_]\w*$/
-                .test(trimmed)
-        ) {
-
-            if (
-                trimmed in this.variables
-            ) {
-
-                return this.variables[
-                    trimmed
-                ];
-            }
-
-
-            this.fail(
-                `Ligne ${lineNumber} : variable inconnue "${trimmed}".`,
-                lineNumber
-            );
-        }
-
-
-        this.fail(
-            `Ligne ${lineNumber} : expression non reconnue : ${trimmed}`,
-            lineNumber
-        );
-    }
-
-
-    // =====================================================
-    // APPELS DANS EXPRESSIONS
-    // =====================================================
-
-    evaluateCall(
-        name,
-        args,
-        lineNumber
-    ) {
-
-        switch (name) {
-
-            case "range":
-
-                return this.pythonRange(
-                    args,
-                    lineNumber
-                );
-
-
-            case "len":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : len() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                if (
-                    typeof args[0]
-                    !== "string"
-                    &&
-                    !Array.isArray(
-                        args[0]
-                    )
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : len() attend une liste ou un texte.`,
-                        lineNumber
-                    );
-                }
-
-
-                return args[0].length;
-
-
-            case "int":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : int() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                if (
-                    Number.isNaN(
-                        Number(args[0])
-                    )
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : impossible de convertir cette valeur en entier.`,
-                        lineNumber
-                    );
-                }
-
-
-                return Math.trunc(
-                    Number(args[0])
-                );
-
-
-            case "float":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : float() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                if (
-                    Number.isNaN(
-                        Number(args[0])
-                    )
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : impossible de convertir cette valeur en nombre.`,
-                        lineNumber
-                    );
-                }
-
-
-                return Number(
-                    args[0]
-                );
-
-
-            case "str":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : str() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                return this.pythonString(
-                    args[0]
-                );
-
-
-            case "bool":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : bool() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                return this.pythonTruthy(
-                    args[0]
-                );
-
-
-            case "abs":
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : abs() attend un argument.`,
-                        lineNumber
-                    );
-                }
-
-
-                return Math.abs(
-                    Number(args[0])
-                );
-
-
-            case "min":
-
-                if (
-                    args.length < 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : min() attend au moins une valeur.`,
-                        lineNumber
-                    );
-                }
-
-
-                return Math.min(
-                    ...args.map(Number)
-                );
-
-
-            case "max":
-
-                if (
-                    args.length < 1
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : max() attend au moins une valeur.`,
-                        lineNumber
-                    );
-                }
-
-
-                return Math.max(
-                    ...args.map(Number)
-                );
-
-
-            case "forward":
-            case "backward":
-            case "right":
-            case "left":
-            case "print":
-
-                return this.executeCall(
-                    name,
-                    args,
-                    lineNumber
-                );
-
-
-            default:
-
-                if (
-                    this.functions[name]
-                ) {
-
-                    return this.callFunction(
-                        name,
-                        args,
-                        lineNumber
-                    );
-                }
-
-
-                this.fail(
-                    `Ligne ${lineNumber} : fonction inconnue : ${name}().`,
-                    lineNumber
-                );
-        }
-    }
-
-
-    pythonRange(
-        args,
-        lineNumber
-    ) {
-
-        let start;
-        let stop;
-        let step;
-
-
-        if (
-            args.length === 1
-        ) {
-
-            start = 0;
-            stop =
-                Number(args[0]);
-            step = 1;
-
-        } else if (
-            args.length === 2
-        ) {
-
-            start =
-                Number(args[0]);
-
-            stop =
-                Number(args[1]);
-
-            step = 1;
-
-        } else if (
-            args.length === 3
-        ) {
-
-            start =
-                Number(args[0]);
-
-            stop =
-                Number(args[1]);
-
-            step =
-                Number(args[2]);
-
-        } else {
-
-            this.fail(
-                `Ligne ${lineNumber} : range() attend 1, 2 ou 3 arguments.`,
-                lineNumber
-            );
-        }
-
-
-        if (
-            !Number.isInteger(start)
-            ||
-            !Number.isInteger(stop)
-            ||
-            !Number.isInteger(step)
-        ) {
-
-            this.fail(
-                `Ligne ${lineNumber} : range() attend des entiers.`,
-                lineNumber
-            );
-        }
-
-
-        if (
-            step === 0
-        ) {
-
-            this.fail(
-                `Ligne ${lineNumber} : le pas de range() ne peut pas être 0.`,
-                lineNumber
-            );
-        }
-
-
-        const result = [];
-
-
-        if (
-            step > 0
-        ) {
-
-            for (
-                let value = start;
-                value < stop;
-                value += step
-            ) {
-
-                result.push(value);
-
-
-                if (
-                    result.length
-                    >
-                    this.maxIterations
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : range() est trop grand.`,
-                        lineNumber
-                    );
-                }
-            }
-
-        } else {
-
-            for (
-                let value = start;
-                value > stop;
-                value += step
-            ) {
-
-                result.push(value);
-
-
-                if (
-                    result.length
-                    >
-                    this.maxIterations
-                ) {
-
-                    this.fail(
-                        `Ligne ${lineNumber} : range() est trop grand.`,
-                        lineNumber
-                    );
-                }
-            }
-        }
-
-
-        return result;
-    }
-
-
-    // =====================================================
-    // PARSING
-    // =====================================================
-
-    parseCall(text) {
-
-        const trimmed =
-            text.trim();
-
-
-        const firstParenthesis =
-            trimmed.indexOf("(");
-
-
-        if (
-            firstParenthesis <= 0
-            ||
-            !trimmed.endsWith(")")
-        ) {
-
-            return null;
-        }
-
-
-        const name =
-            trimmed
-                .slice(
-                    0,
-                    firstParenthesis
-                )
-                .trim();
-
-
-        if (
-            !/^[A-Za-z_]\w*$/
-                .test(name)
-        ) {
-
-            return null;
-        }
-
-
-        const parentheses =
-            trimmed.slice(
-                firstParenthesis
-            );
-
-
-        if (
-            !this.hasOuterParentheses(
-                parentheses
-            )
-        ) {
-
-            return null;
-        }
-
-
-        return {
-            name,
-
-            arguments:
-                trimmed.slice(
-                    firstParenthesis + 1,
-                    -1
-                )
-        };
-    }
-
-
-    parseIndexExpression(text) {
-
-        const trimmed =
-            text.trim();
-
-
-        if (
-            !trimmed.endsWith("]")
-        ) {
-            return null;
-        }
-
-
-        let depth = 0;
-        let quote = null;
 
 
         for (
-            let i = trimmed.length - 1;
-            i >= 0;
-            i--
-        ) {
-
-            const char =
-                trimmed[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                trimmed[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-                continue;
-            }
-
-
-            if (
-                quote !== null
-            ) {
-                continue;
-            }
-
-
-            if (
-                char === "]"
-            ) {
-
-                depth++;
-                continue;
-            }
-
-
-            if (
-                char === "["
-            ) {
-
-                depth--;
-
-
-                if (
-                    depth === 0
-                ) {
-
-                    const base =
-                        trimmed
-                            .slice(
-                                0,
-                                i
-                            )
-                            .trim();
-
-
-                    if (
-                        base === ""
-                    ) {
-                        return null;
-                    }
-
-
-                    return {
-                        base,
-
-                        index:
-                            trimmed
-                                .slice(
-                                    i + 1,
-                                    -1
-                                )
-                    };
-                }
-            }
-        }
-
-
-        return null;
-    }
-
-
-    parseArguments(text) {
-
-        const trimmed =
-            String(text)
-                .trim();
-
-
-        if (
-            trimmed === ""
-        ) {
-            return [];
-        }
-
-
-        return this.splitTopLevel(
-            trimmed,
-            ","
-        );
-    }
-
-
-    splitTopLevel(
-        text,
-        separator
-    ) {
-
-        const result = [];
-
-        let current = "";
-        let depth = 0;
-        let quote = null;
-        let escaped = false;
-
-
-        for (
-            let i = 0;
-            i < text.length;
-            i++
-        ) {
-
-            const char =
-                text[i];
-
-
-            if (escaped) {
-
-                current += char;
-                escaped = false;
-
-                continue;
-            }
-
-
-            if (
-                char === "\\"
-                &&
-                quote !== null
-            ) {
-
-                current += char;
-                escaped = true;
-
-                continue;
-            }
-
-
-            if (
-                char === "'"
-                ||
-                char === "\""
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-
-                current += char;
-
-                continue;
-            }
-
-
-            if (
-                quote === null
-            ) {
-
-                if (
-                    char === "("
-                    ||
-                    char === "["
-                ) {
-
-                    depth++;
-
-                } else if (
-                    char === ")"
-                    ||
-                    char === "]"
-                ) {
-
-                    depth--;
-                }
-
-
-                if (
-                    depth === 0
-                    &&
-                    text.startsWith(
-                        separator,
-                        i
-                    )
-                ) {
-
-                    result.push(
-                        current.trim()
-                    );
-
-
-                    current = "";
-
-
-                    i +=
-                        separator.length
-                        -
-                        1;
-
-
-                    continue;
-                }
-            }
-
-
-            current += char;
-        }
-
-
-        if (
-            current.trim()
-            !== ""
+            const level
+            of levels
         ) {
 
             result.push(
-                current.trim()
+                level
             );
         }
-
-
-        return result;
     }
 
 
-    splitTopLevelWord(
-        text,
-        word
-    ) {
-
-        const result = [];
-
-        let current = "";
-        let depth = 0;
-        let quote = null;
-
-
-        for (
-            let i = 0;
-            i < text.length;
-            i++
-        ) {
-
-            const char =
-                text[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                text[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-
-                current += char;
-
-                continue;
-            }
-
-
-            if (
-                quote === null
-            ) {
-
-                if (
-                    char === "("
-                    ||
-                    char === "["
-                ) {
-
-                    depth++;
-
-                } else if (
-                    char === ")"
-                    ||
-                    char === "]"
-                ) {
-
-                    depth--;
-                }
-
-
-                if (
-                    depth === 0
-                    &&
-                    text.slice(
-                        i,
-                        i + word.length
-                    )
-                    === word
-                ) {
-
-                    const before =
-                        i === 0
-                            ? " "
-                            : text[i - 1];
-
-
-                    const after =
-                        i + word.length
-                        >= text.length
-                            ? " "
-                            : text[
-                                i
-                                +
-                                word.length
-                            ];
-
-
-                    if (
-                        /\s/.test(before)
-                        &&
-                        /\s/.test(after)
-                    ) {
-
-                        result.push(
-                            current.trim()
-                        );
-
-
-                        current = "";
-
-
-                        i +=
-                            word.length
-                            -
-                            1;
-
-
-                        continue;
-                    }
-                }
-            }
-
-
-            current += char;
-        }
-
-
-        if (
-            current.trim()
-            !== ""
-        ) {
-
-            result.push(
-                current.trim()
-            );
-        }
-
-
-        return result;
-    }
-
-
-    findTopLevelOperator(
-        text,
-        operators
-    ) {
-
-        let depth = 0;
-        let quote = null;
-
-
-        const sorted =
-            [...operators]
-                .sort(
-                    (a, b) =>
-                        b.length
-                        -
-                        a.length
-                );
-
-
-        for (
-            let i = 0;
-            i < text.length;
-            i++
-        ) {
-
-            const char =
-                text[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                text[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-                continue;
-            }
-
-
-            if (
-                quote !== null
-            ) {
-                continue;
-            }
-
-
-            if (
-                char === "("
-                ||
-                char === "["
-            ) {
-
-                depth++;
-                continue;
-            }
-
-
-            if (
-                char === ")"
-                ||
-                char === "]"
-            ) {
-
-                depth--;
-                continue;
-            }
-
-
-            if (
-                depth !== 0
-            ) {
-                continue;
-            }
-
-
-            for (
-                const operator
-                of sorted
-            ) {
-
-                if (
-                    text.startsWith(
-                        operator,
-                        i
-                    )
-                ) {
-
-                    return {
-                        left:
-                            text
-                                .slice(
-                                    0,
-                                    i
-                                )
-                                .trim(),
-
-                        right:
-                            text
-                                .slice(
-                                    i
-                                    +
-                                    operator.length
-                                )
-                                .trim(),
-
-                        operator
-                    };
-                }
-            }
-        }
-
-
-        return null;
-    }
-
-
-    findTopLevelOperatorFromRight(
-        text,
-        operators
-    ) {
-
-        let depth = 0;
-        let quote = null;
-
-
-        const sorted =
-            [...operators]
-                .sort(
-                    (a, b) =>
-                        b.length
-                        -
-                        a.length
-                );
-
-
-        for (
-            let i = text.length - 1;
-            i >= 0;
-            i--
-        ) {
-
-            const char =
-                text[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                text[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-                continue;
-            }
-
-
-            if (
-                quote !== null
-            ) {
-                continue;
-            }
-
-
-            if (
-                char === ")"
-                ||
-                char === "]"
-            ) {
-
-                depth++;
-                continue;
-            }
-
-
-            if (
-                char === "("
-                ||
-                char === "["
-            ) {
-
-                depth--;
-                continue;
-            }
-
-
-            if (
-                depth !== 0
-            ) {
-                continue;
-            }
-
-
-            for (
-                const operator
-                of sorted
-            ) {
-
-                const start =
-                    i
-                    -
-                    operator.length
-                    +
-                    1;
-
-
-                if (
-                    start < 0
-                ) {
-                    continue;
-                }
-
-
-                if (
-                    text.slice(
-                        start,
-                        i + 1
-                    )
-                    !== operator
-                ) {
-
-                    continue;
-                }
-
-
-                if (
-                    operator === "-"
-                    ||
-                    operator === "+"
-                ) {
-
-                    const before =
-                        text
-                            .slice(
-                                0,
-                                start
-                            )
-                            .trimEnd();
-
-
-                    if (
-                        before === ""
-                    ) {
-                        continue;
-                    }
-
-
-                    const previous =
-                        before[
-                            before.length - 1
-                        ];
-
-
-                    if (
-                        "+-*/%(,<>=!"
-                            .includes(
-                                previous
-                            )
-                    ) {
-
-                        continue;
-                    }
-                }
-
-
-                return {
-                    left:
-                        text
-                            .slice(
-                                0,
-                                start
-                            )
-                            .trim(),
-
-                    right:
-                        text
-                            .slice(
-                                i + 1
-                            )
-                            .trim(),
-
-                    operator
-                };
-            }
-        }
-
-
-        return null;
-    }
-
-
-    hasOuterParentheses(text) {
-
-        const trimmed =
-            text.trim();
-
-
-        if (
-            !trimmed.startsWith("(")
-            ||
-            !trimmed.endsWith(")")
-        ) {
-            return false;
-        }
-
-
-        let depth = 0;
-        let quote = null;
-
-
-        for (
-            let i = 0;
-            i < trimmed.length;
-            i++
-        ) {
-
-            const char =
-                trimmed[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                trimmed[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-                continue;
-            }
-
-
-            if (
-                quote !== null
-            ) {
-                continue;
-            }
-
-
-            if (
-                char === "("
-            ) {
-                depth++;
-            }
-
-
-            if (
-                char === ")"
-            ) {
-                depth--;
-            }
-
-
-            if (
-                depth === 0
-                &&
-                i
-                <
-                trimmed.length - 1
-            ) {
-
-                return false;
-            }
-        }
-
-
-        return depth === 0;
-    }
-
-
-    isBalanced(text) {
-
-        let depthRound = 0;
-        let depthSquare = 0;
-        let quote = null;
-
-
-        for (
-            let i = 0;
-            i < text.length;
-            i++
-        ) {
-
-            const char =
-                text[i];
-
-
-            if (
-                (
-                    char === "'"
-                    ||
-                    char === "\""
-                )
-                &&
-                text[i - 1] !== "\\"
-            ) {
-
-                if (
-                    quote === null
-                ) {
-
-                    quote = char;
-
-                } else if (
-                    quote === char
-                ) {
-
-                    quote = null;
-                }
-
-                continue;
-            }
-
-
-            if (
-                quote !== null
-            ) {
-                continue;
-            }
-
-
-            if (
-                char === "("
-            ) {
-                depthRound++;
-            }
-
-
-            if (
-                char === ")"
-            ) {
-                depthRound--;
-            }
-
-
-            if (
-                char === "["
-            ) {
-                depthSquare++;
-            }
-
-
-            if (
-                char === "]"
-            ) {
-                depthSquare--;
-            }
-
-
-            if (
-                depthRound < 0
-                ||
-                depthSquare < 0
-            ) {
-
-                return false;
-            }
-        }
-
-
-        return (
-            depthRound === 0
-            &&
-            depthSquare === 0
-            &&
-            quote === null
-        );
-    }
-
-
-    isStringLiteral(text) {
-
-        if (
-            text.length < 2
-        ) {
-            return false;
-        }
-
-
-        return (
-            (
-                text.startsWith("\"")
-                &&
-                text.endsWith("\"")
-            )
-            ||
-            (
-                text.startsWith("'")
-                &&
-                text.endsWith("'")
-            )
-        );
-    }
-
-
-    parseStringLiteral(
-        text,
-        lineNumber
-    ) {
-
-        const quote =
-            text[0];
-
-
-        if (
-            text[
-                text.length - 1
-            ]
-            !== quote
-        ) {
-
-            this.fail(
-                `Ligne ${lineNumber} : texte non terminé.`,
-                lineNumber
-            );
-        }
-
-
-        let value =
-            text.slice(
-                1,
-                -1
-            );
-
-
-        value =
-            value
-                .replace(
-                    /\\n/g,
-                    "\n"
-                )
-                .replace(
-                    /\\t/g,
-                    "\t"
-                )
-                .replace(
-                    /\\"/g,
-                    "\""
-                )
-                .replace(
-                    /\\'/g,
-                    "'"
-                )
-                .replace(
-                    /\\\\/g,
-                    "\\"
-                );
-
-
-        return value;
-    }
-
-
-    // =====================================================
-    // VALEURS PYTHON
-    // =====================================================
-
-    pythonTruthy(value) {
-
-        if (
-            value === false
-            ||
-            value === null
-            ||
-            value === 0
-            ||
-            value === ""
-        ) {
-
-            return false;
-        }
-
-
-        if (
-            Array.isArray(value)
-            &&
-            value.length === 0
-        ) {
-
-            return false;
-        }
-
-
-        return true;
-    }
-
-
-    pythonString(value) {
-
-        if (
-            value === true
-        ) {
-            return "True";
-        }
-
-
-        if (
-            value === false
-        ) {
-            return "False";
-        }
-
-
-        if (
-            value === null
-        ) {
-            return "None";
-        }
-
-
-        if (
-            Array.isArray(value)
-        ) {
-
-            return (
-                "["
-                +
-                value
-                    .map(
-                        item =>
-                            this.pythonString(
-                                item
-                            )
-                    )
-                    .join(", ")
-                +
-                "]"
-            );
-        }
-
-
-        return String(value);
-    }
-
-
-    // =====================================================
-    // SÉCURITÉ
-    // =====================================================
-
-    checkForbiddenCode(code) {
-
-        const forbidden = [
-            /\bimport\b/i,
-            /\bfrom\s+\w+\s+import\b/i,
-            /\beval\s*\(/i,
-            /\bexec\s*\(/i,
-            /\bopen\s*\(/i,
-            /__/,
-            /\bclass\s+/i,
-            /\bglobal\b/i,
-            /\bnonlocal\b/i,
-            /\blambda\b/i,
-            /\byield\b/i,
-            /\basync\b/i,
-            /\bawait\b/i
-        ];
-
-
-        for (
-            const pattern
-            of forbidden
-        ) {
-
-            if (
-                pattern.test(
-                    String(code)
-                )
-            ) {
-
-                this.fail(
-                    "Cette instruction Python n'est pas disponible dans PYT."
-                );
-            }
-        }
-    }
+    return result;
 }
 
 
 // =========================================================
-// AUDIO
+// INFORMATIONS SUR LES CHAPITRES
 // =========================================================
 
-class PytAudioManager {
+const CHAPTER_INFO = {
 
-    constructor() {
+    1: {
+        room:
+            "Entrée",
 
-        this.enabled =
-            true;
+        title:
+            "Déplacements",
 
-        this.volume =
-            0.6;
+        concepts: [
+            "forward",
+            "backward",
+            "left",
+            "right"
+        ]
+    },
 
-        this.currentTrack =
-            null;
 
-        this.tracks =
-            Object.create(null);
+    2: {
+        room:
+            "Cuisine",
+
+        title:
+            "Variables",
+
+        concepts: [
+            "variables",
+            "opérations",
+            "conversions"
+        ]
+    },
 
 
-        this.loadSettings();
-        this.findTracks();
-        this.applySettings();
+    3: {
+        room:
+            "Salon",
+
+        title:
+            "Conditions",
+
+        concepts: [
+            "if",
+            "elif",
+            "else",
+            "and",
+            "or",
+            "not"
+        ]
+    },
+
+
+    4: {
+        room:
+            "Bibliothèque",
+
+        title:
+            "Boucles for",
+
+        concepts: [
+            "for",
+            "range"
+        ]
+    },
+
+
+    5: {
+        room:
+            "Salle de bain",
+
+        title:
+            "Boucles while",
+
+        concepts: [
+            "while",
+            "break"
+        ]
+    },
+
+
+    6: {
+        room:
+            "Chambre",
+
+        title:
+            "Listes",
+
+        concepts: [
+            "listes",
+            "index",
+            "append"
+        ]
+    },
+
+
+    7: {
+        room:
+            "Atelier",
+
+        title:
+            "Fonctions",
+
+        concepts: [
+            "def",
+            "paramètres",
+            "appel de fonction"
+        ]
+    },
+
+
+    8: {
+        room:
+            "Grenier",
+
+        title:
+            "Combinaison",
+
+        concepts: [
+            "variables",
+            "conditions",
+            "boucles",
+            "listes",
+            "fonctions"
+        ]
+    },
+
+
+    9: {
+        room:
+            "Laboratoire",
+
+        title:
+            "Examen final",
+
+        concepts: [
+            "révision générale"
+        ]
     }
-
-
-    loadSettings() {
-
-        try {
-
-            const enabled =
-                localStorage.getItem(
-                    "pyt-music-enabled"
-                );
-
-
-            const volume =
-                localStorage.getItem(
-                    "pyt-music-volume"
-                );
-
-
-            if (
-                enabled !== null
-            ) {
-
-                this.enabled =
-                    enabled !== "false";
-            }
-
-
-            if (
-                volume !== null
-            ) {
-
-                const parsed =
-                    Number(volume);
-
-
-                if (
-                    Number.isFinite(parsed)
-                ) {
-
-                    this.volume =
-                        Math.max(
-                            0,
-                            Math.min(
-                                1,
-                                parsed
-                            )
-                        );
-                }
-            }
-
-        } catch (error) {
-
-            console.warn(
-                "Paramètres audio indisponibles.",
-                error
-            );
-        }
-    }
-
-
-    findTracks() {
-
-        this.tracks.intro =
-            document.getElementById(
-                "music-intro"
-            );
-
-
-        this.tracks.theory =
-            document.getElementById(
-                "music-theory"
-            );
-
-
-        for (
-            let chapter = 1;
-            chapter <= 9;
-            chapter++
-        ) {
-
-            this.tracks[
-                `chapter-${chapter}`
-            ] =
-                document.getElementById(
-                    `music-chapter-${chapter}`
-                );
-        }
-
-
-        /*
-        Les fichiers audio sont optionnels.
-
-        Si les <audio> du HTML n'ont pas de src,
-        aucune erreur ne bloque le jeu.
-
-        Si vous ajoutez plus tard les fichiers,
-        les chemins suivants seront utilisés.
-        */
-
-        const defaultSources = {
-            intro:
-                "assets/audio/intro.mp3",
-
-            theory:
-                "assets/audio/theory.mp3",
-
-            "chapter-1":
-                "assets/audio/chapter1.mp3",
-
-            "chapter-2":
-                "assets/audio/chapter2.mp3",
-
-            "chapter-3":
-                "assets/audio/chapter3.mp3",
-
-            "chapter-4":
-                "assets/audio/chapter4.mp3",
-
-            "chapter-5":
-                "assets/audio/chapter5.mp3",
-
-            "chapter-6":
-                "assets/audio/chapter6.mp3",
-
-            "chapter-7":
-                "assets/audio/chapter7.mp3",
-
-            "chapter-8":
-                "assets/audio/chapter8.mp3",
-
-            "chapter-9":
-                "assets/audio/chapter9.mp3"
-        };
-
-
-        for (
-            const [
-                name,
-                element
-            ]
-            of Object.entries(
-                this.tracks
-            )
-        ) {
-
-            if (!element) {
-                continue;
-            }
-
-
-            element.loop =
-                true;
-
-
-            element.preload =
-                "none";
-
-
-            /*
-            On n'impose PAS automatiquement
-            un src inexistant.
-
-            Si un src existe déjà dans index.html,
-            il sera utilisé.
-
-            Sinon le jeu reste parfaitement
-            fonctionnel sans musique.
-            */
-
-            element.dataset.defaultSrc =
-                defaultSources[name]
-                ||
-                "";
-        }
-    }
-
-
-    applySettings() {
-
-        for (
-            const audio
-            of Object.values(
-                this.tracks
-            )
-        ) {
-
-            if (!audio) {
-                continue;
-            }
-
-
-            audio.volume =
-                this.volume;
-
-
-            audio.muted =
-                !this.enabled;
-        }
-    }
-
-
-    setEnabled(enabled) {
-
-        this.enabled =
-            Boolean(enabled);
-
-
-        try {
-
-            localStorage.setItem(
-                "pyt-music-enabled",
-                String(
-                    this.enabled
-                )
-            );
-
-        } catch (error) {
-
-            console.warn(error);
-        }
-
-
-        this.applySettings();
-
-
-        if (
-            !this.enabled
-        ) {
-
-            this.pauseAll();
-
-        } else if (
-            this.currentTrack
-        ) {
-
-            this.play(
-                this.currentTrack
-            );
-        }
-    }
-
-
-    setVolume(value) {
-
-        const number =
-            Number(value);
-
-
-        this.volume =
-            Math.max(
-                0,
-                Math.min(
-                    1,
-                    Number.isFinite(number)
-                        ? number
-                        : 0.6
-                )
-            );
-
-
-        try {
-
-            localStorage.setItem(
-                "pyt-music-volume",
-                String(
-                    this.volume
-                )
-            );
-
-        } catch (error) {
-
-            console.warn(error);
-        }
-
-
-        this.applySettings();
-    }
-
-
-    pauseAll() {
-
-        for (
-            const audio
-            of Object.values(
-                this.tracks
-            )
-        ) {
-
-            if (!audio) {
-                continue;
-            }
-
-
-            try {
-
-                audio.pause();
-
-            } catch (error) {
-
-                /*
-                Une erreur audio ne doit
-                jamais bloquer PYT.
-                */
-            }
-        }
-    }
-
-
-    async play(name) {
-
-        this.currentTrack =
-            name;
-
-
-        this.pauseAll();
-
-
-        if (
-            !this.enabled
-        ) {
-            return;
-        }
-
-
-        const audio =
-            this.tracks[name];
-
-
-        if (!audio) {
-            return;
-        }
-
-
-        /*
-        Pas de fichier ?
-        On ne tente même pas de lecture.
-        */
-
-        if (
-            !audio.getAttribute(
-                "src"
-            )
-            &&
-            !audio.querySelector(
-                "source[src]"
-            )
-        ) {
-
-            return;
-        }
-
-
-        try {
-
-            audio.volume =
-                this.volume;
-
-
-            audio.muted =
-                false;
-
-
-            audio.currentTime =
-                0;
-
-
-            const promise =
-                audio.play();
-
-
-            if (
-                promise
-                &&
-                typeof promise.catch
-                === "function"
-            ) {
-
-                await promise.catch(
-                    () => {}
-                );
-            }
-
-        } catch (error) {
-
-            /*
-            Autoplay refusé ou fichier absent :
-            le jeu continue normalement.
-            */
-        }
-    }
-}
-
-
-// =========================================================
-// APPLICATION
-// =========================================================
-
-class PytApplication {
-
-    constructor() {
-
-        this.ui = null;
-
-        this.game = null;
-        this.robot = null;
-        this.level = null;
-
-        this.currentChapter = 1;
-        this.currentExercise = 1;
-
-        this.runner =
-            new BrowserPythonRunner();
-
-        this.audio = null;
-
-        this.introTimers = [];
-
-        this.introFinished =
-            false;
-
-        this.gameStarted =
-            false;
-
-        this.settingsReturnTarget =
-            "menu";
-
-        this.pendingProgramError =
-            null;
-
-        this.lastActionFailure =
-            null;
-    }
-
-
-    // =====================================================
-    // START
-    // =====================================================
-
-    start() {
-
-        this.checkDependencies();
-
-
-        this.ui =
-            new PytUI();
-
-
-        /*
-        Environ 0,5 seconde par action.
-        */
-        this.ui.actionDelay =
-            500;
-
-
-        this.audio =
-            new PytAudioManager();
-
-
-        this.connectUI();
-        this.connectShell();
-        this.wrapUINavigation();
-
-
-        const loaded =
-            this.loadLevel(
-                1,
-                1
-            );
-
-
-        if (!loaded) {
-            return;
-        }
-
-
-        this.syncSettingsControls();
-
-
-        this.showIntro();
-        this.startIntro();
-    }
-
-
-    // =====================================================
-    // DÉPENDANCES
-    // =====================================================
-
-    checkDependencies() {
-
-        if (
-            typeof PytUI
-            !== "function"
-        ) {
-
-            throw new Error(
-                "ui.js n'est pas chargé."
-            );
-        }
-
-
-        if (
-            typeof Robot
-            !== "function"
-        ) {
-
-            throw new Error(
-                "robot.js n'est pas chargé."
-            );
-        }
-
-
-        if (
-            typeof Game
-            !== "function"
-        ) {
-
-            throw new Error(
-                "game.js n'est pas chargé."
-            );
-        }
-
-
-        if (
-            typeof getLevel
-            !== "function"
-        ) {
-
-            throw new Error(
-                "levels.js n'est pas chargé."
-            );
-        }
-    }
-
-
-    // =====================================================
-    // RACCOURCIS DOM
-    // =====================================================
-
-    element(id) {
-
-        return document.getElementById(
-            id
-        );
-    }
-
-
-    hide(element) {
-
-        element
-            ?.classList
-            .add("hidden");
-    }
-
-
-    show(element) {
-
-        element
-            ?.classList
-            .remove("hidden");
-    }
-
-
-    // =====================================================
-    // SHELL : INTRO / MENU / PARAMÈTRES
-    // =====================================================
-
-    connectShell() {
-
-        const skipIntroButton =
-            this.element(
-                "skip-intro-button"
-            );
-
-
-        const playButton =
-            this.element(
-                "play-button"
-            );
-
-
-        const settingsButton =
-            this.element(
-                "settings-button"
-            );
-
-
-        const settingsBackButton =
-            this.element(
-                "settings-back-button"
-            );
-
-
-        const gameSettingsButton =
-            this.element(
-                "game-settings-button"
-            );
-
-
-        const menuButton =
-            this.element(
-                "menu-button"
-            );
-
-
-        const musicEnabled =
-            this.element(
-                "music-enabled"
-            );
-
-
-        const volumeSlider =
-            this.element(
-                "volume-slider"
-            );
-
-
-        skipIntroButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.finishIntro();
-                }
-            );
-
-
-        playButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.startGame();
-                }
-            );
-
-
-        settingsButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.openSettings(
-                        "menu"
-                    );
-                }
-            );
-
-
-        gameSettingsButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.openSettings(
-                        "game"
-                    );
-                }
-            );
-
-
-        settingsBackButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.closeSettings();
-                }
-            );
-
-
-        menuButton
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.returnToMenu();
-                }
-            );
-
-
-        musicEnabled
-            ?.addEventListener(
-                "change",
-                event => {
-
-                    this.audio
-                        ?.setEnabled(
-                            event.target.checked
-                        );
-
-
-                    this.syncSettingsControls();
-                }
-            );
-
-
-        volumeSlider
-            ?.addEventListener(
-                "input",
-                event => {
-
-                    const value =
-                        Number(
-                            event.target.value
-                        )
-                        /
-                        100;
-
-
-                    this.audio
-                        ?.setVolume(
-                            value
-                        );
-
-
-                    this.syncSettingsControls();
-                }
-            );
-    }
-
-
-    syncSettingsControls() {
-
-        const musicEnabled =
-            this.element(
-                "music-enabled"
-            );
-
-
-        const volumeSlider =
-            this.element(
-                "volume-slider"
-            );
-
-
-        const volumeValue =
-            this.element(
-                "volume-value"
-            );
-
-
-        if (
-            musicEnabled
-            &&
-            this.audio
-        ) {
-
-            musicEnabled.checked =
-                this.audio.enabled;
-        }
-
-
-        if (
-            volumeSlider
-            &&
-            this.audio
-        ) {
-
-            volumeSlider.value =
-                String(
-                    Math.round(
-                        this.audio.volume
-                        *
-                        100
-                    )
-                );
-        }
-
-
-        if (
-            volumeValue
-            &&
-            this.audio
-        ) {
-
-            volumeValue.textContent =
-                `${Math.round(
-                    this.audio.volume
-                    *
-                    100
-                )}%`;
-        }
-    }
-
-
-    // =====================================================
-    // INTRO
-    // =====================================================
-
-    showIntro() {
-
-        this.hide(
-            this.element(
-                "main-menu"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "settings-screen"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "game-interface"
-            )
-        );
-
-
-        this.show(
-            this.element(
-                "intro-screen"
-            )
-        );
-    }
-
-
-    startIntro() {
-
-        const intro =
-            this.element(
-                "intro-screen"
-            );
-
-
-        if (!intro) {
-
-            this.finishIntro();
-            return;
-        }
-
-
-        this.clearIntroTimers();
-
-
-        intro.classList.remove(
-            "intro-arrive",
-            "intro-y",
-            "intro-happy",
-            "intro-finished"
-        );
-
-
-        this.audio
-            ?.play(
-                "intro"
-            );
-
-
-        this.introTimers.push(
-
-            setTimeout(
-                () => {
-
-                    intro.classList.add(
-                        "intro-arrive"
-                    );
-
-                },
-                350
-            )
-        );
-
-
-        this.introTimers.push(
-
-            setTimeout(
-                () => {
-
-                    intro.classList.add(
-                        "intro-y"
-                    );
-
-                },
-                1650
-            )
-        );
-
-
-        this.introTimers.push(
-
-            setTimeout(
-                () => {
-
-                    /*
-                    La joie passe uniquement
-                    par les yeux.
-                    */
-                    intro.classList.add(
-                        "intro-happy"
-                    );
-
-
-                    intro.classList.add(
-                        "intro-finished"
-                    );
-
-                },
-                2400
-            )
-        );
-
-
-        this.introTimers.push(
-
-            setTimeout(
-                () => {
-
-                    this.finishIntro();
-
-                },
-                4100
-            )
-        );
-    }
-
-
-    clearIntroTimers() {
-
-        for (
-            const timer
-            of this.introTimers
-        ) {
-
-            clearTimeout(timer);
-        }
-
-
-        this.introTimers = [];
-    }
-
-
-    finishIntro() {
-
-        if (
-            this.introFinished
-        ) {
-            return;
-        }
-
-
-        this.introFinished =
-            true;
-
-
-        this.clearIntroTimers();
-
-
-        this.hide(
-            this.element(
-                "intro-screen"
-            )
-        );
-
-
-        this.showMainMenu();
-    }
-
-
-    // =====================================================
-    // MENU
-    // =====================================================
-
-    showMainMenu() {
-
-        this.gameStarted =
-            false;
-
-
-        this.hide(
-            this.element(
-                "intro-screen"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "settings-screen"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "game-interface"
-            )
-        );
-
-
-        this.show(
-            this.element(
-                "main-menu"
-            )
-        );
-
-
-        this.audio
-            ?.play(
-                "intro"
-            );
-    }
-
-
-    returnToMenu() {
-
-        this.ui
-            ?.stopAnimation();
-
-
-        this.showMainMenu();
-    }
-
-
-    // =====================================================
-    // PARAMÈTRES
-    // =====================================================
-
-    openSettings(
-        returnTarget = "menu"
-    ) {
-
-        this.settingsReturnTarget =
-            returnTarget;
-
-
-        this.syncSettingsControls();
-
-
-        this.hide(
-            this.element(
-                "intro-screen"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "main-menu"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "game-interface"
-            )
-        );
-
-
-        this.show(
-            this.element(
-                "settings-screen"
-            )
-        );
-    }
-
-
-    closeSettings() {
-
-        this.hide(
-            this.element(
-                "settings-screen"
-            )
-        );
-
-
-        if (
-            this.settingsReturnTarget
-            === "game"
-            &&
-            this.gameStarted
-        ) {
-
-            this.show(
-                this.element(
-                    "game-interface"
-                )
-            );
-
-
-            this.playChapterMusic();
-
-            return;
-        }
-
-
-        this.showMainMenu();
-    }
-
-
-    // =====================================================
-    // COMMENCER LE JEU
-    // =====================================================
-
-    startGame() {
-
-        this.gameStarted =
-            true;
-
-
-        this.hide(
-            this.element(
-                "intro-screen"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "main-menu"
-            )
-        );
-
-
-        this.hide(
-            this.element(
-                "settings-screen"
-            )
-        );
-
-
-        this.show(
-            this.element(
-                "game-interface"
-            )
-        );
-
-
-        const opened =
-            this.ui
-                .showCourseAtChapterStart(
-                    this.currentChapter
-                );
-
-
-        if (!opened) {
-
-            this.ui.showMap();
-        }
-
-
-        this.playChapterMusic();
-    }
-
-
-    // =====================================================
-    // MUSIQUE SELON L'ÉCRAN
-    // =====================================================
-
-    playChapterMusic() {
-
-        this.audio
-            ?.play(
-                `chapter-${this.currentChapter}`
-            );
-    }
-
-
-    wrapUINavigation() {
-
-        if (
-            !this.ui
-            ||
-            this.ui.__pytNavigationWrapped
-        ) {
-
-            return;
-        }
-
-
-        this.ui.__pytNavigationWrapped =
-            true;
-
-
-        const originalShowCourse =
-            this.ui.showCourse
-                .bind(this.ui);
-
-
-        const originalShowMap =
-            this.ui.showMap
-                .bind(this.ui);
-
-
-        const originalShowGame =
-            this.ui.showGame
-                .bind(this.ui);
-
-
-        this.ui.showCourse =
-            (...args) => {
-
-                const result =
-                    originalShowCourse(
-                        ...args
-                    );
-
-
-                this.audio
-                    ?.play(
-                        "theory"
-                    );
-
-
-                return result;
-            };
-
-
-        this.ui.showMap =
-            (...args) => {
-
-                const result =
-                    originalShowMap(
-                        ...args
-                    );
-
-
-                this.playChapterMusic();
-
-
-                return result;
-            };
-
-
-        this.ui.showGame =
-            (...args) => {
-
-                const result =
-                    originalShowGame(
-                        ...args
-                    );
-
-
-                this.playChapterMusic();
-
-
-                return result;
-            };
-    }
-
-
-    // =====================================================
-    // CONNEXION UI
-    // =====================================================
-
-    connectUI() {
-
-        this.ui.onSelectLevel =
-            (
-                chapter,
-                exercise
-            ) => {
-
-                if (
-                    this.loadLevel(
-                        chapter,
-                        exercise
-                    )
-                ) {
-
-                    this.ui.showGame();
-
-
-                    this.ui.setStatus(
-                        "Pyt attend ton programme."
-                    );
-
-
-                    this.ui.showGuide?.(
-                        this.getExerciseGuideMessage()
-                    );
-                }
-            };
-
-
-        this.ui.onRestart =
-            () => {
-
-                this.restartLevel();
-            };
-
-
-        this.ui.onRunCode =
-            async code => {
-
-                await this.runStudentCode(
-                    code
-                );
-            };
-    }
-
-
-    // =====================================================
-    // CHARGER NIVEAU
-    // =====================================================
-
-    loadLevel(
-        chapter,
-        exercise
-    ) {
-
-        const newLevel =
-            getLevel(
-                chapter,
-                exercise
-            );
-
-
-        if (!newLevel) {
-
-            this.ui
-                ?.showMessage(
-                    "Niveau introuvable",
-                    "Impossible de charger cet exercice."
-                );
-
-
-            return false;
-        }
-
-
-        this.currentChapter =
-            Number(chapter);
-
-
-        this.currentExercise =
-            Number(exercise);
-
-
-        this.level =
-            newLevel;
-
-
-        this.robot =
-            new Robot();
-
-
-        this.game =
-            new Game(
-                this.level,
-                this.robot
-            );
-
-
-        this.ui.currentChapter =
-            this.currentChapter;
-
-
-        this.ui.currentExercise =
-            this.currentExercise;
-
-
-        this.ui.setGame(
-            this.game
-        );
-
-
-        this.ui.setLevel(
-            this.level
-        );
-
-
-        this.ui.clearConsole();
-        this.ui.hideThought?.();
-        this.ui.clearCodeErrorHighlight?.();
-
-        this.ui.drawWorld();
-
-
-        return true;
-    }
-
-
-    getExerciseGuideMessage() {
-
-        if (
-            this.currentChapter === 1
-            &&
-            this.currentExercise === 1
-        ) {
-
-            return (
-                "Commence par observer la pièce. "
-                +
-                "Écris les déplacements de Pyt avec forward(), right() et left(). "
-                +
-                "Clique ensuite sur EXÉCUTER."
-            );
-        }
-
-
-        return (
-            "Observe la mission, écris ton programme puis lance-le. "
-            +
-            "Il peut exister plusieurs solutions correctes."
-        );
-    }
-
-
-    // =====================================================
-    // RESTART
-    // =====================================================
-
-    restartLevel() {
-
-        if (
-            !this.game
-        ) {
-            return;
-        }
-
-
-        this.ui.stopAnimation();
-
-
-        this.game.reset();
-
-
-        this.ui.clearConsole();
-        this.ui.hideThought?.();
-        this.ui.clearCodeErrorHighlight?.();
-
-        this.ui.drawWorld();
-
-
-        this.ui.setStatus(
-            "Niveau recommencé."
-        );
-
-
-        this.ui.showGuide?.(
-            "Niveau recommencé. Ton code est toujours là : tu peux le modifier et réessayer."
-        );
-    }
-
-
-    // =====================================================
-    // EXÉCUTION CODE ÉLÈVE
-    // =====================================================
-
-    async runStudentCode(code) {
-
-        if (
-            !this.game
-        ) {
-            return;
-        }
-
-
-        this.ui.stopAnimation();
-
-
-        /*
-        Chaque tentative repart du début.
-        Le code reste dans l'éditeur.
-        */
-
-        this.game.reset();
-
-
-        this.ui.hideThought?.();
-        this.ui.clearCodeErrorHighlight?.();
-
-        this.ui.drawWorld();
-
-
-        this.ui.setConsole(
-            "Analyse du programme..."
-        );
-
-
-        this.ui.setStatus(
-            "Pyt lit ton programme..."
-        );
-
-
-        this.pendingProgramError =
-            null;
-
-
-        this.lastActionFailure =
-            null;
-
-
-        let result;
-
-
-        try {
-
-            result =
-                this.runner.run(
-                    code
-                );
-
-        } catch (error) {
-
-            result = {
-                success: false,
-
-                error:
-                    error instanceof Error
-                        ? error.message
-                        : String(error),
-
-                errorLine:
-                    null,
-
-                output:
-                    "",
-
-                actions:
-                    []
-            };
-        }
-
-
-        const actions =
-            Array.isArray(
-                result?.actions
-            )
-                ? result.actions
-                : [];
-
-
-        /*
-        Si le programme contient une erreur,
-        on la garde en attente.
-
-        Les actions valides écrites AVANT
-        cette erreur sont jouées d'abord.
-        */
-
-        if (
-            !result
-            ||
-            result.success === false
-        ) {
-
-            this.pendingProgramError = {
-                message:
-                    result?.error
-                    ||
-                    "Programme invalide.",
-
-                line:
-                    result?.errorLine
-                    ??
-                    null
-            };
-        }
-
-
-        // -----------------------------------------
-        // CONSOLE PRINT
-        // -----------------------------------------
-
-        if (
-            result?.output
-        ) {
-
-            this.ui.setConsole(
-                result.output
-            );
-
-        } else if (
-            !this.pendingProgramError
-        ) {
-
-            this.ui.setConsole(
-                "Programme accepté."
-            );
-        }
-
-
-        // -----------------------------------------
-        // AUCUNE ACTION
-        // -----------------------------------------
-
-        if (
-            actions.length === 0
-        ) {
-
-            if (
-                this.pendingProgramError
-            ) {
-
-                this.finishProgramError();
-
-                return;
-            }
-
-
-            this.finishAttempt();
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // ANIMATION
-        // -----------------------------------------
-
-        this.ui.setStatus(
-            "Pyt exécute ton programme..."
-        );
-
-
-        await new Promise(
-            resolve => {
-
-                this.ui.playActions(
-                    actions,
-
-                    action =>
-                        this.performAction(
-                            action
-                        ),
-
-                    (
-                        completed,
-                        failureDetails
-                    ) => {
-
-                        /*
-                        Collision ou déplacement
-                        impossible.
-                        */
-
-                        if (
-                            !completed
-                            &&
-                            failureDetails
-                            &&
-                            failureDetails.reason
-                            === "blocked"
-                        ) {
-
-                            const action =
-                                failureDetails.action;
-
-
-                            this.lastActionFailure = {
-                                message:
-                                    this.getBlockedActionMessage(
-                                        action
-                                    ),
-
-                                line:
-                                    action?.line
-                                    ??
-                                    null
-                            };
-                        }
-
-
-                        resolve();
-                    }
-                );
-            }
-        );
-
-
-        // -----------------------------------------
-        // COLLISION AVANT ERREUR PYTHON
-        // -----------------------------------------
-
-        if (
-            this.lastActionFailure
-        ) {
-
-            this.finishBlockedAction();
-
-            return;
-        }
-
-
-        // -----------------------------------------
-        // ERREUR PYTHON APRÈS ACTIONS VALIDES
-        // -----------------------------------------
-
-        if (
-            this.pendingProgramError
-        ) {
-
-            this.finishProgramError();
-
-            return;
-        }
-
-
-        this.finishAttempt();
-    }
-
-
-    // =====================================================
-    // ACTION DU MOTEUR
-    // =====================================================
-
-    performAction(action) {
-
-        if (
-            !this.game
-            ||
-            !this.robot
-        ) {
-
-            return false;
-        }
-
-
-        let type;
-        let value;
-
-
-        if (
-            Array.isArray(action)
-        ) {
-
-            type =
-                action[0];
-
-
-            value =
-                action.length > 1
-                    ? action[1]
-                    : 1;
-
-        } else if (
-            action
-            &&
-            typeof action
-            === "object"
-        ) {
-
-            type =
-                action.type
-                ||
-                action.action;
-
-
-            value =
-                action.value
-                ??
-                action.amount
-                ??
-                1;
-
-        } else {
-
-            return false;
-        }
-
-
-        try {
-
-            switch (type) {
-
-                case "forward":
-
-                    return (
-                        this.game
-                            .moveForward()
-                        !== false
-                    );
-
-
-                case "backward":
-
-                    return (
-                        this.game
-                            .moveBackward()
-                        !== false
-                    );
-
-
-                case "right":
-
-                    this.robot
-                        .rotateRight(
-                            Number(value)
-                            ||
-                            90
-                        );
-
-
-                    return true;
-
-
-                case "left":
-
-                    this.robot
-                        .rotateLeft(
-                            Number(value)
-                            ||
-                            90
-                        );
-
-
-                    return true;
-
-
-                default:
-
-                    console.warn(
-                        "Action inconnue :",
-                        action
-                    );
-
-
-                    return false;
-            }
-
-        } catch (error) {
-
-            console.error(
-                error
-            );
-
-
-            return false;
-        }
-    }
-
-
-    getBlockedActionMessage(action) {
-
-        const type =
-            action?.type
-            ||
-            action?.action
-            ||
-            action?.[0]
-            ||
-            "";
-
-
-        if (
-            type === "forward"
-        ) {
-
-            return (
-                "Je ne peux pas avancer ici : "
-                +
-                "quelque chose bloque mon chemin."
-            );
-        }
-
-
-        if (
-            type === "backward"
-        ) {
-
-            return (
-                "Je ne peux pas reculer ici : "
-                +
-                "quelque chose bloque mon chemin."
-            );
-        }
-
-
-        return (
-            "Je ne peux pas effectuer cette action ici."
-        );
-    }
-
-
-    // =====================================================
-    // ERREUR TECHNIQUE
-    // =====================================================
-
-    finishProgramError() {
-
-        const error =
-            this.pendingProgramError;
-
-
-        if (!error) {
-            return;
-        }
-
-
-        this.appendConsole(
-            `✗ ${error.message}`
-        );
-
-
-        this.ui.setStatus(
-            "Corrige ton programme puis réessaie."
-        );
-
-
-        this.ui.handleFailedAttempt({
-            message:
-                error.message,
-
-            line:
-                error.line,
-
-            technical:
-                true
-        });
-
-
-        this.pendingProgramError =
-            null;
-    }
-
-
-    // =====================================================
-    // ACTION BLOQUÉE
-    // =====================================================
-
-    finishBlockedAction() {
-
-        const failure =
-            this.lastActionFailure;
-
-
-        if (!failure) {
-            return;
-        }
-
-
-        this.appendConsole(
-            `✗ ${failure.message}`
-        );
-
-
-        this.ui.setStatus(
-            "Le déplacement est bloqué."
-        );
-
-
-        /*
-        Une collision est liée à une action
-        précise : à partir de la deuxième
-        tentative ui.js pourra souligner
-        cette ligne.
-        */
-
-        this.ui.handleFailedAttempt({
-            message:
-                failure.message,
-
-            line:
-                failure.line,
-
-            technical:
-                true
-        });
-
-
-        this.lastActionFailure =
-            null;
-    }
-
-
-    // =====================================================
-    // FIN DE TENTATIVE
-    // =====================================================
-
-    finishAttempt() {
-
-        if (
-            !this.game
-        ) {
-            return;
-        }
-
-
-        this.ui.drawWorld();
-
-
-        let success =
-            false;
-
-
-        try {
-
-            success =
-                Boolean(
-                    this.game
-                        .checkSuccess()
-                );
-
-        } catch (error) {
-
-            console.error(error);
-        }
-
-
-        if (success) {
-
-            this.appendConsole(
-                "✓ Mission réussie !"
-            );
-
-
-            this.ui.setStatus(
-                "Mission réussie !"
-            );
-
-
-            this.ui.hideThought?.();
-            this.ui.clearCodeErrorHighlight?.();
-
-
-            this.ui
-                .completeCurrentLevel();
-
-
-            return;
-        }
-
-
-        const feedback =
-            this.getFailureFeedback();
-
-
-        this.appendConsole(
-            "✗ "
-            +
-            feedback.message
-        );
-
-
-        this.ui.setStatus(
-            "Essaie encore."
-        );
-
-
-        if (
-            feedback.thought
-        ) {
-
-            this.ui.showThought?.(
-                feedback.thought
-            );
-        }
-
-
-        /*
-        Une mission non réussie n'implique
-        PAS automatiquement qu'une ligne
-        de Python est fausse.
-
-        Donc pas de faux soulignement rouge.
-        */
-
-        this.ui.handleFailedAttempt({
-            message:
-                feedback.message,
-
-            line:
-                null,
-
-            technical:
-                false
-        });
-    }
-
-
-    // =====================================================
-    // DIAGNOSTIC DE MISSION
-    // =====================================================
-
-    getFailureFeedback() {
-
-        const game =
-            this.game;
-
-
-        const level =
-            this.level;
-
-
-        if (
-            !game
-            ||
-            !level
-        ) {
-
-            return {
-                message:
-                    "La mission n'est pas encore terminée.",
-
-                thought:
-                    null
-            };
-        }
-
-
-        // -----------------------------------------
-        // OBJETS NON RAMASSÉS
-        // -----------------------------------------
-
-        if (
-            game.objects
-            &&
-            typeof game.objects.size
-            === "number"
-            &&
-            game.objects.size > 0
-        ) {
-
-            return {
-                message:
-                    "Il reste encore un objet à récupérer.",
-
-                thought:
-                    "J'ai oublié quelque chose..."
-            };
-        }
-
-
-        // -----------------------------------------
-        // SALETÉ
-        // -----------------------------------------
-
-        if (
-            game.dirt
-            &&
-            typeof game.dirt.size
-            === "number"
-            &&
-            game.dirt.size > 0
-        ) {
-
-            return {
-                message:
-                    "Il reste encore une case à nettoyer.",
-
-                thought:
-                    "La pièce n'est pas encore propre..."
-            };
-        }
-
-
-        // -----------------------------------------
-        // BOUTONS
-        // -----------------------------------------
-
-        if (
-            game.buttons
-            &&
-            game.buttons instanceof Map
-        ) {
-
-            const inactive =
-                [...game.buttons.values()]
-                    .some(
-                        button =>
-                            button
-                            &&
-                            typeof button
-                            === "object"
-                            &&
-                            button.active
-                            === false
-                    );
-
-
-            if (inactive) {
-
-                return {
-                    message:
-                        "Tous les mécanismes ne sont pas encore activés.",
-
-                    thought:
-                        "Il reste un mécanisme à activer..."
-                };
-            }
-        }
-
-
-        // -----------------------------------------
-        // INVENTAIRE
-        // -----------------------------------------
-
-        const inventory =
-            this.robot?.inventory;
-
-
-        const objectiveType =
-            typeof level.objective
-            === "string"
-                ? level.objective
-                : level.objective?.type;
-
-
-        if (
-            objectiveType === "deposit"
-            &&
-            Array.isArray(inventory)
-            &&
-            inventory.length > 0
-        ) {
-
-            return {
-                message:
-                    "J'ai récupéré l'objet, mais je ne l'ai pas encore déposé au bon endroit.",
-
-                thought:
-                    "Je dois encore déposer ce que je transporte..."
-            };
-        }
-
-
-        // -----------------------------------------
-        // OBJECTIF POSITION
-        // -----------------------------------------
-
-        const goal =
-            level.goal;
-
-
-        if (
-            Array.isArray(goal)
-            &&
-            goal.length >= 2
-        ) {
-
-            const robotRow =
-                Number(
-                    this.robot?.row
-                    ??
-                    this.robot?.position?.row
-                );
-
-
-            const robotCol =
-                Number(
-                    this.robot?.col
-                    ??
-                    this.robot?.position?.col
-                );
-
-
-            if (
-                robotRow !== Number(goal[0])
-                ||
-                robotCol !== Number(goal[1])
-            ) {
-
-                return {
-                    message:
-                        "Le programme s'est terminé, mais Pyt n'est pas arrivé à la bonne destination.",
-
-                    thought:
-                        "Ce n’est pas là que je voulais aller..."
-                };
-            }
-        }
-
-
-        // -----------------------------------------
-        // MESSAGE MOTEUR
-        // -----------------------------------------
-
-        if (
-            typeof game.message
-            === "string"
-            &&
-            game.message.trim()
-            !== ""
-        ) {
-
-            return {
-                message:
-                    game.message,
-
-                thought:
-                    null
-            };
-        }
-
-
-        // -----------------------------------------
-        // GÉNÉRIQUE
-        // -----------------------------------------
-
-        return {
-            message:
-                "La mission n'est pas encore terminée. Observe ce que Pyt a fait et compare avec l'objectif.",
-
-            thought:
-                "Il me manque encore quelque chose..."
-        };
-    }
-
-
-    // =====================================================
-    // CONSOLE
-    // =====================================================
-
-    appendConsole(text) {
-
-        if (
-            !this.ui
-            ||
-            !this.ui.consoleOutput
-        ) {
-            return;
-        }
-
-
-        const current =
-            this.ui.consoleOutput
-                .textContent
-                .trim();
-
-
-        if (
-            !current
-            ||
-            current === "Prêt."
-            ||
-            current === "Programme accepté."
-            ||
-            current === "Analyse du programme..."
-        ) {
-
-            this.ui.setConsole(
-                text
-            );
-
-
-            return;
-        }
-
-
-        this.ui.setConsole(
-            current
-            +
-            "\n"
-            +
-            text
-        );
-    }
-}
-
-
-// =========================================================
-// DÉMARRAGE
-// =========================================================
-
-function startPytApplication() {
-
-    try {
-
-        const app =
-            new PytApplication();
-
-
-        app.start();
-
-
-        /*
-        Accessible depuis la console navigateur
-        pour faciliter les tests.
-        */
-
-        window.pytApp =
-            app;
-
-
-        window.runPythonCode =
-            async function(code) {
-
-                return app.runStudentCode(
-                    code
-                );
-            };
-
-
-    } catch (error) {
-
-        console.error(
-            "Impossible de démarrer PYT :",
-            error
-        );
-
-
-        const message =
-            document.createElement(
-                "div"
-            );
-
-
-        message.style.position =
-            "fixed";
-
-        message.style.inset =
-            "20px";
-
-        message.style.zIndex =
-            "99999";
-
-        message.style.padding =
-            "24px";
-
-        message.style.background =
-            "#171329";
-
-        message.style.color =
-            "#ffffff";
-
-        message.style.fontFamily =
-            "monospace";
-
-        message.style.whiteSpace =
-            "pre-wrap";
-
-        message.style.overflow =
-            "auto";
-
-
-        message.textContent =
-            "PYT n'a pas pu démarrer.\n\n"
-            +
-            (
-                error instanceof Error
-                    ? error.message
-                    : String(error)
-            );
-
-
-        document.body.appendChild(
-            message
-        );
-    }
-}
+};
 
 
 // =========================================================
 // EXPOSITION GLOBALE
 // =========================================================
 
-window.BrowserPythonRunner =
-    BrowserPythonRunner;
+window.COURSES =
+    COURSES;
 
+window.CHAPTER_1 =
+    CHAPTER_1;
 
-window.PytAudioManager =
-    PytAudioManager;
+window.CHAPTER_2 =
+    CHAPTER_2;
 
+window.CHAPTER_3 =
+    CHAPTER_3;
 
-window.PytApplication =
-    PytApplication;
+window.CHAPTER_4 =
+    CHAPTER_4;
 
+window.CHAPTER_5 =
+    CHAPTER_5;
 
-// =========================================================
-// LANCEMENT AUTOMATIQUE
-// =========================================================
+window.CHAPTER_6 =
+    CHAPTER_6;
 
-if (
-    document.readyState
-    === "loading"
-) {
+window.CHAPTER_7 =
+    CHAPTER_7;
 
-    document.addEventListener(
-        "DOMContentLoaded",
-        startPytApplication,
-        {
-            once: true
-        }
-    );
+window.CHAPTER_8 =
+    CHAPTER_8;
 
-} else {
+window.CHAPTER_9 =
+    CHAPTER_9;
 
-    startPytApplication();
-}
+window.CHAPTER_INFO =
+    CHAPTER_INFO;
+
+window.getLevel =
+    getLevel;
+
+window.getChapterLevels =
+    getChapterLevels;
+
+window.getAllLevels =
+    getAllLevels;
