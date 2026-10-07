@@ -1,3115 +1,2918 @@
 "use strict";
 
-/* =========================================================
-   PYT - app.js
+(() => {
 
-   CONTRÔLEUR PRINCIPAL DE L'APPLICATION
+    class PytApplication {
 
-   PARCOURS :
+        constructor() {
 
-   INTRO
-      ↓
-   CARTE DE LA MAISON
-      ↓
-   THÉORIE
-      ↓
-   CARTE DE LA PIÈCE
-      ↓
-   EXERCICE
+            this.currentChapter = 1;
+            this.currentLevel = 1;
 
-   ---------------------------------------------------------
+            this.activeGameScreen = "map";
 
-   Ce fichier gère :
+            this.settingsReturnState = {
+                screen: "game",
+                gameScreen: "map"
+            };
 
-   - cinématique d'introduction
-   - entrée directe dans la maison
-   - changement d'écrans
-   - paramètres
-   - crédits
-   - futur système audio
-   - éditeur Python
-   - fenêtre déplaçable sur ordinateur
-   - guide de Pyt
-   - bulle de pensée
-   - modales
-   - console
-   - informations du niveau
-   - clavier / tactile
-   - stockage des paramètres
+            this.introFinished = false;
+            this.introReady = false;
 
-========================================================= */
+            this.guideVisible = false;
 
+            this.codeWindowOpen = false;
+            this.draggingCodeWindow = false;
 
-class PytApplication {
+            this.creditsTimers = [];
 
-    constructor() {
+            this.settingsKey = "pyt-settings";
 
-        /* =====================================================
-           JEU
-        ===================================================== */
+            this.settings = this.loadSettings();
 
-        this.currentChapter =
-            1;
+            this.cacheDom();
 
+            this.prepareInitialState();
 
-        this.currentLevel =
-            1;
+            this.prepareIntro();
 
+            this.prepareSettings();
 
-        this.totalChapters =
-            9;
+            this.prepareCredits();
 
+            this.prepareNavigation();
 
-        this.currentLevelData =
-            null;
+            this.prepareCodeWindow();
+
+            this.prepareGuide();
+
+            this.prepareModal();
+
+            this.prepareResponsive();
+
+            this.applySettings();
+
+            this.dispatchReady();
+        }
+
 
 
         /* =====================================================
-           ÉCRANS
+           DOM
         ===================================================== */
 
-        this.activeGameScreen =
-            "map";
+        cacheDom() {
+
+            const byId = id =>
+                document.getElementById(id);
 
 
-        this.settingsReturnScreen =
-            "map";
+            /* INTRO */
+
+            this.introScreen =
+                byId("intro-screen");
+
+            this.skipIntroButton =
+                byId("skip-intro-button");
+
+            this.introScene =
+                byId("intro-scene");
+
+            this.introContinueMessage =
+                byId("intro-continue-message");
+
+
+            /* MENU */
+
+            this.mainMenu =
+                byId("main-menu");
+
+            this.playButton =
+                byId("play-button");
+
+            this.settingsButton =
+                byId("settings-button");
+
+
+            /* SETTINGS */
+
+            this.settingsScreen =
+                byId("settings-screen");
+
+            this.musicEnabled =
+                byId("music-enabled");
+
+            this.volumeSlider =
+                byId("volume-slider");
+
+            this.volumeValue =
+                byId("volume-value");
+
+            this.creditsButton =
+                byId("credits-button");
+
+            this.settingsBackButton =
+                byId("settings-back-button");
+
+
+            /* CREDITS */
+
+            this.creditsScreen =
+                byId("credits-screen");
+
+            this.closeCreditsButton =
+                byId("close-credits-button");
+
+            this.creditsScroll =
+                byId("credits-scroll");
+
+
+            /* GAME INTERFACE */
+
+            this.gameInterface =
+                byId("game-interface");
+
+            this.chapterBadge =
+                byId("chapter-badge");
+
+            this.difficultyBadge =
+                byId("difficulty-badge");
+
+            this.roomName =
+                byId("room-name");
+
+            this.courseButton =
+                byId("course-button");
+
+            this.mapButton =
+                byId("map-button");
+
+            this.gameSettingsButton =
+                byId("game-settings-button");
+
+            this.menuButton =
+                byId("menu-button");
+
+
+            /* GAME SCREENS */
+
+            this.chapterScreen =
+                byId("chapter-screen");
+
+            this.mapScreen =
+                byId("map-screen");
+
+            this.gameScreen =
+                byId("game-screen");
+
+
+            /* CODE */
+
+            this.openCodeButton =
+                byId("open-code-button");
+
+            this.codeWindow =
+                byId("code-window");
+
+            this.codeWindowHeader =
+                byId("code-window-header");
+
+            this.codeRestartButton =
+                byId("code-restart-button");
+
+            this.closeCodeButton =
+                byId("close-code-button");
+
+            this.codeEditor =
+                byId("code-editor");
+
+            this.clearCodeButton =
+                byId("clear-code-button");
+
+            this.runCodeButton =
+                byId("run-code-button");
+
+            this.consoleOutput =
+                byId("console-output");
+
+
+            /* GAME */
+
+            this.restartButton =
+                byId("restart-button");
+
+            this.gameCanvas =
+                byId("game-canvas");
+
+            this.robotThoughtBubble =
+                byId("robot-thought-bubble");
+
+
+            /* GUIDE */
+
+            this.pytGuide =
+                byId("pyt-guide");
+
+            this.closePytGuideButton =
+                byId("close-pyt-guide-button");
+
+            this.pytGuideMessage =
+                byId("pyt-guide-message");
+
+            this.pytGuideActions =
+                byId("pyt-guide-actions");
+
+
+            /* MODAL */
+
+            this.modalBackground =
+                byId("modal-background");
+
+            this.messageModal =
+                byId("message-modal");
+
+            this.modalLabel =
+                byId("modal-label");
+
+            this.modalTitle =
+                byId("modal-title");
+
+            this.modalMessage =
+                byId("modal-message");
+
+            this.modalSecondaryButton =
+                byId("modal-secondary-button");
+
+            this.modalPrimaryButton =
+                byId("modal-primary-button");
+
+
+            /* AUDIO */
+
+            this.musicAudio =
+                byId("music-audio");
+
+            this.theoryAudio =
+                byId("theory-audio");
+        }
+
+
+
+        /* =====================================================
+           UTILITAIRES
+        ===================================================== */
+
+        show(element) {
+
+            if (!element) {
+                return;
+            }
+
+            element.hidden = false;
+
+            element.classList.remove(
+                "hidden"
+            );
+        }
+
+
+
+        hide(element) {
+
+            if (!element) {
+                return;
+            }
+
+            element.hidden = true;
+
+            element.classList.add(
+                "hidden"
+            );
+        }
+
+
+
+        clamp(
+            value,
+            min,
+            max
+        ) {
+
+            return Math.max(
+                min,
+                Math.min(
+                    max,
+                    value
+                )
+            );
+        }
+
+
+
+        /* =====================================================
+           SETTINGS STORAGE
+        ===================================================== */
+
+        loadSettings() {
+
+            const defaults = {
+                music: true,
+                volume: 0.55
+            };
+
+
+            try {
+
+                const value =
+                    JSON.parse(
+                        localStorage.getItem(
+                            this.settingsKey
+                        ) ||
+                        "{}"
+                    );
+
+
+                return {
+                    ...defaults,
+                    ...value
+                };
+
+            } catch (error) {
+
+                console.warn(
+                    "[PYT] Réglages illisibles.",
+                    error
+                );
+
+                return defaults;
+            }
+        }
+
+
+
+        saveSettings() {
+
+            try {
+
+                localStorage.setItem(
+                    this.settingsKey,
+                    JSON.stringify(
+                        this.settings
+                    )
+                );
+
+            } catch (error) {
+
+                console.warn(
+                    "[PYT] Impossible de sauvegarder les réglages.",
+                    error
+                );
+            }
+        }
+
+
+
+        /* =====================================================
+           ÉTAT INITIAL
+        ===================================================== */
+
+        prepareInitialState() {
+
+            /*
+             * L'intro est la seule chose visible
+             * au chargement.
+             */
+
+            this.show(
+                this.introScreen
+            );
+
+            this.hide(
+                this.mainMenu
+            );
+
+            this.hide(
+                this.settingsScreen
+            );
+
+            this.hide(
+                this.creditsScreen
+            );
+
+            this.hide(
+                this.gameInterface
+            );
+
+            this.hide(
+                this.codeWindow
+            );
+
+            this.hide(
+                this.pytGuide
+            );
+
+            this.hide(
+                this.modalBackground
+            );
+
+            this.hide(
+                this.robotThoughtBubble
+            );
+
+
+            /*
+             * On retire définitivement
+             * les anciennes infos du haut.
+             */
+
+            if (
+                this.difficultyBadge
+            ) {
+
+                this.difficultyBadge.hidden =
+                    true;
+
+                this.difficultyBadge.style.display =
+                    "none";
+            }
+
+
+            if (
+                this.roomName
+            ) {
+
+                this.roomName.hidden =
+                    true;
+
+                this.roomName.style.display =
+                    "none";
+            }
+        }
+
 
 
         /* =====================================================
            INTRO
         ===================================================== */
 
-        this.introReady =
-            false;
+        prepareIntro() {
 
+            if (
+                !this.introScreen
+            ) {
 
-        this.introFinished =
-            false;
+                this.enterGame();
 
-
-        this.introTimer =
-            null;
-
-
-        /* =====================================================
-           GUIDE
-        ===================================================== */
-
-        this.guideClosing =
-            false;
-
-
-        /* =====================================================
-           MODALE
-        ===================================================== */
-
-        this.modalPrimaryAction =
-            null;
-
-
-        this.modalSecondaryAction =
-            null;
-
-
-        /* =====================================================
-           CODE WINDOW
-        ===================================================== */
-
-        this.codeDragging =
-            false;
-
-
-        this.codeDragOffsetX =
-            0;
-
-
-        this.codeDragOffsetY =
-            0;
-
-
-        /* =====================================================
-           CRÉDITS
-        ===================================================== */
-
-        this.creditsAnimationFrame =
-            null;
-
-
-        this.creditsStartTime =
-            null;
-
-
-        this.creditsDuration =
-            34000;
-
-
-        /* =====================================================
-           PARAMÈTRES
-        ===================================================== */
-
-        this.settings = {
-
-            music:
-                true,
-
-            volume:
-                50,
-
-            sfx:
-                true,
-
-            sfxVolume:
-                70
-        };
-
-
-        this.init();
-    }
-
-
-
-    /* =========================================================
-       INITIALISATION
-    ========================================================= */
-
-    init() {
-
-        this.loadSettings();
-
-        this.bindEvents();
-
-        this.applySettings();
-
-        this.prepareIntro();
-
-        this.prepareCredits();
-
-        this.prepareCodeWindow();
-
-        this.prepareInitialState();
-
-
-        window.setTimeout(
-            () => {
-
-                window.dispatchEvent(
-                    new CustomEvent(
-                        "pyt:app-ready"
-                    )
-                );
-
-            },
-            0
-        );
-    }
-
-
-
-    /* =========================================================
-       ÉTAT INITIAL
-    ========================================================= */
-
-    prepareInitialState() {
-
-        /*
-         * L'intro est le seul écran visible au départ.
-         */
-
-        this.hideElement(
-            "main-menu"
-        );
-
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.hideElement(
-            "game-interface"
-        );
-
-
-        this.hideElement(
-            "code-window"
-        );
-
-
-        this.hideElement(
-            "pyt-guide"
-        );
-
-
-        this.hideElement(
-            "modal-background"
-        );
-
-
-        this.hideElement(
-            "robot-thought-bubble"
-        );
-
-
-        this.showElement(
-            "intro-screen"
-        );
-    }
-
-
-
-    /* =========================================================
-       EVENTS GÉNÉRAUX
-    ========================================================= */
-
-    bindEvents() {
-
-        /* =====================================================
-           ANCIEN BOUTON JOUER
-
-           Il reste compatible si le bouton existe encore,
-           mais n'est plus utilisé dans le parcours normal.
-        ===================================================== */
-
-        document
-            .getElementById(
-                "play-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.enterGame();
-                }
-            );
-
-
-        /* =====================================================
-           PARAMÈTRES
-        ===================================================== */
-
-        document
-            .getElementById(
-                "settings-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.showSettings();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "game-settings-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.showSettings();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "settings-back-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.closeSettings();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "music-enabled"
-            )
-            ?.addEventListener(
-                "change",
-                event => {
-
-                    this.settings.music =
-                        Boolean(
-                            event.target.checked
-                        );
-
-
-                    /*
-                     * Musique désactivée =
-                     * volume automatiquement à zéro.
-                     */
-
-                    if (
-                        !this.settings.music
-                    ) {
-
-                        this.settings.volume =
-                            0;
-
-
-                        const slider =
-                            document.getElementById(
-                                "volume-slider"
-                            );
-
-
-                        if (
-                            slider
-                        ) {
-
-                            slider.value =
-                                "0";
-                        }
-                    }
-
-
-                    this.applySettings();
-
-                    this.saveSettings();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "volume-slider"
-            )
-            ?.addEventListener(
-                "input",
-                event => {
-
-                    const volume =
-                        this.clamp(
-                            Number(
-                                event.target.value
-                            ),
-                            0,
-                            100
-                        );
-
-
-                    this.settings.volume =
-                        volume;
-
-
-                    /*
-                     * Remonter le volume réactive
-                     * automatiquement la musique.
-                     */
-
-                    if (
-                        volume >
-                        0
-                    ) {
-
-                        this.settings.music =
-                            true;
-                    }
-
-
-                    this.applySettings();
-
-                    this.saveSettings();
-                }
-            );
-
-
-        /* =====================================================
-           CRÉDITS
-        ===================================================== */
-
-        document
-            .getElementById(
-                "credits-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.showCredits();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "close-credits-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.closeCredits();
-                }
-            );
-
-
-        /* =====================================================
-           BARRE DU JEU
-        ===================================================== */
-
-        document
-            .getElementById(
-                "course-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    /*
-                     * Le bouton Cours depuis un exercice
-                     * sert à revoir le chapitre.
-                     */
-
-                    if (
-                        window.pytUI
-                    ) {
-
-                        window.pytUI
-                            .selectedChapter =
-                            Number(
-                                this.currentChapter
-                            );
-
-
-                        window.pytUI
-                            .theoryEntryPending =
-                            false;
-
-
-                        window.pytUI
-                            .reviewMode =
-                            false;
-                    }
-
-
-                    this.showCourse();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "map-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    /*
-                     * Depuis un exercice on retourne
-                     * à la carte de la pièce.
-                     */
-
-                    if (
-                        window.pytUI
-                    ) {
-
-                        window.pytUI
-                            .openChapterRoom(
-                                this.currentChapter
-                            );
-
-                    } else {
-
-                        this.showMap();
-                    }
-                }
-            );
-
-
-        document
-            .getElementById(
-                "menu-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    /*
-                     * Il n'y a plus de menu principal.
-                     *
-                     * Ce bouton ramène à la maison.
-                     */
-
-                    if (
-                        window.pytUI
-                    ) {
-
-                        window.pytUI
-                            .openHouseMap();
-
-                    } else {
-
-                        this.showMap();
-                    }
-                }
-            );
-
-
-        /* =====================================================
-           ÉDITEUR
-        ===================================================== */
-
-        document
-            .getElementById(
-                "open-code-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.openCodeWindow();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "close-code-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.closeCodeWindow();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "clear-code-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    const editor =
-                        document.getElementById(
-                            "code-editor"
-                        );
-
-
-                    if (
-                        editor
-                    ) {
-
-                        editor.value =
-                            "";
-
-
-                        editor.focus();
-                    }
-
-
-                    this.clearCodeError();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "run-code-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.runCode();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "restart-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.restartLevel();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "code-restart-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.restartLevel();
-                }
-            );
-
-
-        /* =====================================================
-           GUIDE
-        ===================================================== */
-
-        document
-            .getElementById(
-                "close-pyt-guide-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    this.hideGuide();
-                }
-            );
-
-
-        /* =====================================================
-           MODALE
-        ===================================================== */
-
-        document
-            .getElementById(
-                "modal-primary-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    const action =
-                        this.modalPrimaryAction;
-
-
-                    this.hideModal();
-
-
-                    if (
-                        typeof action ===
-                        "function"
-                    ) {
-
-                        action();
-                    }
-                }
-            );
-
-
-        document
-            .getElementById(
-                "modal-secondary-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    const action =
-                        this.modalSecondaryAction;
-
-
-                    this.hideModal();
-
-
-                    if (
-                        typeof action ===
-                        "function"
-                    ) {
-
-                        action();
-                    }
-                }
-            );
-
-
-        /* =====================================================
-           CLAVIER
-        ===================================================== */
-
-        window.addEventListener(
-            "keydown",
-            event => {
-
-                this.handleGlobalKeyDown(
-                    event
-                );
+                return;
             }
-        );
 
 
-        /* =====================================================
-           REDIMENSIONNEMENT
-        ===================================================== */
+            this.introReady =
+                false;
 
-        window.addEventListener(
-            "resize",
-            () => {
 
-                this.keepCodeWindowInsideViewport();
+            if (
+                this.introContinueMessage
+            ) {
+
+                this.introContinueMessage
+                    .classList
+                    .remove(
+                        "visible"
+                    );
             }
-        );
-    }
 
 
+            /*
+             * Après l'animation d'intro,
+             * l'utilisateur peut continuer.
+             */
 
-    /* =========================================================
-       INTRO
-    ========================================================= */
-
-    prepareIntro() {
-
-        const message =
-            document.getElementById(
-                "intro-continue-message"
-            );
-
-
-        if (
-            message
-        ) {
-
-            const touch =
-                window.matchMedia(
-                    "(pointer: coarse)"
-                ).matches;
-
-
-            message.textContent =
-                touch
-                    ? "Touchez l’écran pour continuer"
-                    : "Appuyez sur une touche pour continuer";
-
-
-            message.classList.add(
-                "hidden"
-            );
-        }
-
-
-        /*
-         * On attend la fin de l'arrivée de Pyt.
-         *
-         * Aucune continuation automatique.
-         */
-
-        this.introTimer =
-            window.setTimeout(
+            setTimeout(
                 () => {
+
+                    if (
+                        this.introFinished
+                    ) {
+
+                        return;
+                    }
+
 
                     this.introReady =
                         true;
 
 
-                    message
-                        ?.classList
-                        .remove(
-                            "hidden"
-                        );
+                    if (
+                        this.introContinueMessage
+                    ) {
+
+                        this.introContinueMessage
+                            .classList
+                            .add(
+                                "visible"
+                            );
+                    }
 
                 },
                 3500
             );
 
 
-        const intro =
-            document.getElementById(
-                "intro-screen"
-            );
-
-
-        intro
-            ?.addEventListener(
-                "pointerdown",
-                event => {
-
-                    /*
-                     * On évite de déclencher sur un bouton
-                     * séparé si un jour on en remet un.
-                     */
-
-                    if (
-                        event.target.closest(
-                            "button"
-                        )
-                    ) {
-
-                        return;
-                    }
-
-
-                    this.tryFinishIntro();
-                }
-            );
-
-
-        document
-            .getElementById(
-                "skip-intro-button"
-            )
-            ?.addEventListener(
-                "click",
-                () => {
-
-                    /*
-                     * Le bouton reste caché actuellement,
-                     * mais son comportement est propre.
-                     */
-
-                    this.introReady =
-                        true;
-
-
-                    this.finishIntro();
-                }
-            );
-    }
-
-
-
-    tryFinishIntro() {
-
-        if (
-            !this.introReady ||
-            this.introFinished
-        ) {
-
-            return;
-        }
-
-
-        this.finishIntro();
-    }
-
-
-
-    finishIntro() {
-
-        if (
-            this.introFinished
-        ) {
-
-            return;
-        }
-
-
-        this.introFinished =
-            true;
-
-
-        if (
-            this.introTimer
-        ) {
-
-            clearTimeout(
-                this.introTimer
-            );
-
-
-            this.introTimer =
-                null;
-        }
-
-
-        const intro =
-            document.getElementById(
-                "intro-screen"
-            );
-
-
-        if (
-            intro
-        ) {
-
-            intro.style.opacity =
-                "0";
-
-
-            intro.style.transition =
-                "opacity 350ms ease";
-        }
-
-
-        window.setTimeout(
-            () => {
-
-                this.hideElement(
-                    "intro-screen"
-                );
-
-
-                this.enterGame();
-
-            },
-            360
-        );
-    }
-
-
-
-    handleGlobalKeyDown(
-        event
-    ) {
-
-        /*
-         * INTRO
-         */
-
-        if (
-            !this.introFinished
-        ) {
-
             if (
-                this.introReady
+                this.skipIntroButton
             ) {
 
-                event.preventDefault();
-
-                this.finishIntro();
-            }
-
-
-            return;
-        }
-
-
-        /*
-         * ÉCHAP
-         */
-
-        if (
-            event.key ===
-            "Escape"
-        ) {
-
-            const modal =
-                document.getElementById(
-                    "modal-background"
-                );
-
-
-            if (
-                modal &&
-                !modal.classList.contains(
-                    "hidden"
-                )
-            ) {
-
-                this.hideModal();
-
-                return;
-            }
-
-
-            const credits =
-                document.getElementById(
-                    "credits-screen"
-                );
-
-
-            if (
-                credits &&
-                !credits.classList.contains(
-                    "hidden"
-                )
-            ) {
-
-                this.closeCredits();
-
-                return;
-            }
-
-
-            const code =
-                document.getElementById(
-                    "code-window"
-                );
-
-
-            if (
-                code &&
-                !code.classList.contains(
-                    "hidden"
-                )
-            ) {
-
-                this.closeCodeWindow();
-
-                return;
-            }
-
-
-            const guide =
-                document.getElementById(
-                    "pyt-guide"
-                );
-
-
-            if (
-                guide &&
-                !guide.classList.contains(
-                    "hidden"
-                )
-            ) {
-
-                this.hideGuide();
-            }
-        }
-
-
-        /*
-         * Ctrl + Entrée
-         * exécute le programme.
-         */
-
-        if (
-            event.key ===
-                "Enter" &&
-            (
-                event.ctrlKey ||
-                event.metaKey
-            )
-        ) {
-
-            const code =
-                document.getElementById(
-                    "code-window"
-                );
-
-
-            if (
-                code &&
-                !code.classList.contains(
-                    "hidden"
-                )
-            ) {
-
-                event.preventDefault();
-
-                this.runCode();
-            }
-        }
-    }
-
-
-
-    /* =========================================================
-       ENTRÉE DANS LE JEU
-    ========================================================= */
-
-    enterGame() {
-
-        /*
-         * Plus de menu principal.
-         */
-
-        this.hideElement(
-            "main-menu"
-        );
-
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.showElement(
-            "game-interface"
-        );
-
-
-        /*
-         * PREMIER ÉCRAN :
-         * LA MAISON.
-         */
-
-        if (
-            window.pytUI
-        ) {
-
-            window.pytUI
-                .openHouseMap(
-                    true
-                );
-
-        } else {
-
-            this.showMap();
-        }
-    }
-
-
-
-    /* =========================================================
-       ÉCRANS DU JEU
-    ========================================================= */
-
-    hideAllGameSubscreens() {
-
-        this.hideElement(
-            "chapter-screen"
-        );
-
-
-        this.hideElement(
-            "map-screen"
-        );
-
-
-        this.hideElement(
-            "game-screen"
-        );
-    }
-
-
-
-    showMap() {
-
-        this.showElement(
-            "game-interface"
-        );
-
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.hideAllGameSubscreens();
-
-
-        this.showElement(
-            "map-screen"
-        );
-
-
-        this.activeGameScreen =
-            "map";
-
-
-        this.closeCodeWindow();
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:map-open"
-            )
-        );
-    }
-
-
-
-    showCourse() {
-
-        this.showElement(
-            "game-interface"
-        );
-
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.hideAllGameSubscreens();
-
-
-        this.showElement(
-            "chapter-screen"
-        );
-
-
-        this.activeGameScreen =
-            "course";
-
-
-        this.closeCodeWindow();
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:course-open"
-            )
-        );
-    }
-
-
-
-    showGame() {
-
-        this.showElement(
-            "game-interface"
-        );
-
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.hideAllGameSubscreens();
-
-
-        this.showElement(
-            "game-screen"
-        );
-
-
-        this.activeGameScreen =
-            "game";
-
-
-        this.updateTopbar();
-    }
-
-
-
-    /*
-     * Ancien nom conservé pour éviter qu'un ancien
-     * appel casse le projet.
-     */
-
-    showMainMenu() {
-
-        this.enterGame();
-    }
-
-
-
-    /* =========================================================
-       PARAMÈTRES
-    ========================================================= */
-
-    showSettings() {
-
-        this.settingsReturnScreen =
-            this.activeGameScreen;
-
-
-        this.hideElement(
-            "game-interface"
-        );
-
-
-        this.hideElement(
-            "main-menu"
-        );
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.showElement(
-            "settings-screen"
-        );
-
-
-        this.closeCodeWindow();
-
-        this.hideGuide();
-
-        this.syncSettingsControls();
-    }
-
-
-
-    closeSettings() {
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.showElement(
-            "game-interface"
-        );
-
-
-        switch (
-            this.settingsReturnScreen
-        ) {
-
-            case "course":
-
-                this.showCourse();
-
-                break;
-
-
-            case "game":
-
-                this.showGame();
-
-                break;
-
-
-            default:
-
-                this.showMap();
-        }
-    }
-
-
-
-    syncSettingsControls() {
-
-        const music =
-            document.getElementById(
-                "music-enabled"
-            );
-
-
-        const slider =
-            document.getElementById(
-                "volume-slider"
-            );
-
-
-        const value =
-            document.getElementById(
-                "volume-value"
-            );
-
-
-        if (
-            music
-        ) {
-
-            music.checked =
-                Boolean(
-                    this.settings.music
-                );
-        }
-
-
-        if (
-            slider
-        ) {
-
-            slider.value =
-                String(
-                    this.settings.volume
-                );
-        }
-
-
-        if (
-            value
-        ) {
-
-            value.textContent =
-                `${this.settings.volume}%`;
-        }
-    }
-
-
-
-    applySettings() {
-
-        const music =
-            document.getElementById(
-                "music-audio"
-            );
-
-
-        const theory =
-            document.getElementById(
-                "theory-audio"
-            );
-
-
-        const volume =
-            this.clamp(
-                Number(
-                    this.settings.volume
-                ) /
-                100,
-                0,
-                1
-            );
-
-
-        [
-            music,
-            theory
-        ].forEach(
-            audio => {
-
-                if (
-                    !audio
-                ) {
-
-                    return;
-                }
-
-
-                audio.volume =
-                    volume;
-
-
-                if (
-                    !this.settings.music ||
-                    volume ===
-                        0
-                ) {
-
-                    audio.pause();
-                }
-            }
-        );
-
-
-        this.syncSettingsControls();
-    }
-
-
-
-    loadSettings() {
-
-        try {
-
-            const saved =
-                localStorage.getItem(
-                    "pyt-settings"
-                );
-
-
-            if (
-                !saved
-            ) {
-
-                return;
-            }
-
-
-            const parsed =
-                JSON.parse(
-                    saved
-                );
-
-
-            if (
-                parsed &&
-                typeof parsed ===
-                    "object"
-            ) {
-
-                this.settings = {
-
-                    ...this.settings,
-
-                    ...parsed
-                };
-            }
-
-        } catch (
-            error
-        ) {
-
-            console.warn(
-                "PYT : paramètres impossibles à charger.",
-                error
-            );
-        }
-    }
-
-
-
-    saveSettings() {
-
-        try {
-
-            localStorage.setItem(
-                "pyt-settings",
-                JSON.stringify(
-                    this.settings
-                )
-            );
-
-        } catch (
-            error
-        ) {
-
-            console.warn(
-                "PYT : paramètres impossibles à enregistrer.",
-                error
-            );
-        }
-    }
-
-
-
-    /* =========================================================
-       FUTUR SYSTÈME DE BRUITAGES
-    ========================================================= */
-
-    playSfx(
-        name
-    ) {
-
-        /*
-         * Pour l'instant :
-         * aucune dépendance audio.
-         *
-         * Plus tard, le plugin audio pourra remplacer
-         * cette méthode sans modifier game.js ou robot.js.
-         */
-
-        if (
-            !this.settings.sfx
-        ) {
-
-            return;
-        }
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:sfx-request",
-                {
-                    detail: {
-
-                        name,
-
-                        volume:
-                            this.settings
-                                .sfxVolume /
-                            100
-                    }
-                }
-            )
-        );
-    }
-
-
-
-    /* =========================================================
-       CRÉDITS
-    ========================================================= */
-
-    prepareCredits() {
-
-        /*
-         * Le HTML actuel contient encore un PYT au début.
-         * On le cache immédiatement.
-         *
-         * On modifiera ensuite index.html pour le retirer
-         * définitivement.
-         */
-
-        const openingTitle =
-            document.querySelector(
-                "#credits-scroll > h1"
-            );
-
-
-        if (
-            openingTitle
-        ) {
-
-            openingTitle.style.display =
-                "none";
-        }
-    }
-
-
-
-    showCredits() {
-
-        this.hideElement(
-            "settings-screen"
-        );
-
-
-        this.showElement(
-            "credits-screen"
-        );
-
-
-        this.startCreditsAnimation();
-    }
-
-
-
-    closeCredits() {
-
-        this.stopCreditsAnimation();
-
-
-        this.hideElement(
-            "credits-screen"
-        );
-
-
-        this.showElement(
-            "settings-screen"
-        );
-    }
-
-
-
-    startCreditsAnimation() {
-
-        this.stopCreditsAnimation();
-
-
-        const screen =
-            document.getElementById(
-                "credits-screen"
-            );
-
-
-        const scroll =
-            document.getElementById(
-                "credits-scroll"
-            );
-
-
-        const finalTitle =
-            scroll
-                ?.querySelector(
-                    ".credits-final-title"
-                );
-
-
-        if (
-            !screen ||
-            !scroll ||
-            !finalTitle
-        ) {
-
-            return;
-        }
-
-
-        /*
-         * Désactivation de l'ancienne animation CSS.
-         */
-
-        scroll.style.animation =
-            "none";
-
-
-        scroll.style.transform =
-            "rotateX(18deg)";
-
-
-        scroll.style.top =
-            `${screen.clientHeight}px`;
-
-
-        /*
-         * On laisse au navigateur le temps
-         * de recalculer les dimensions.
-         */
-
-        requestAnimationFrame(
-            () => {
-
-                const startTop =
-                    screen.clientHeight;
-
-
-                /*
-                 * Position finale :
-                 * PYT exactement au centre de l'écran.
-                 */
-
-                const targetTop =
-                    (
-                        screen.clientHeight /
-                        2
-                    ) -
-                    finalTitle.offsetTop -
-                    (
-                        finalTitle.offsetHeight /
-                        2
+                this.skipIntroButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.finishIntro()
                     );
+            }
 
 
-                this.creditsStartTime =
-                    performance.now();
-
-
-                const animate =
-                    now => {
-
-                        const elapsed =
-                            now -
-                            this.creditsStartTime;
-
-
-                        const progress =
-                            this.clamp(
-                                elapsed /
-                                this.creditsDuration,
-                                0,
-                                1
-                            );
-
-
-                        /*
-                         * Mouvement quasi constant avec
-                         * léger ralentissement final.
-                         */
-
-                        const eased =
-                            progress <
-                            0.90
-                                ? progress
-                                : (
-                                    0.90 +
-                                    (
-                                        1 -
-                                        Math.pow(
-                                            1 -
-                                            (
-                                                (
-                                                    progress -
-                                                    0.90
-                                                ) /
-                                                0.10
-                                            ),
-                                            2
-                                        )
-                                    ) *
-                                    0.10
-                                );
-
-
-                        const top =
-                            startTop +
-                            (
-                                targetTop -
-                                startTop
-                            ) *
-                            eased;
-
-
-                        scroll.style.top =
-                            `${top}px`;
-
+            this.introScreen
+                .addEventListener(
+                    "click",
+                    event => {
 
                         if (
-                            progress >=
-                            1
+                            event.target ===
+                            this.skipIntroButton
                         ) {
-
-                            /*
-                             * ARRÊT TOTAL.
-                             *
-                             * Le titre PYT reste exactement
-                             * au centre jusqu'à fermeture.
-                             */
-
-                            scroll.style.top =
-                                `${targetTop}px`;
-
-
-                            this.creditsAnimationFrame =
-                                null;
-
 
                             return;
                         }
 
 
-                        this.creditsAnimationFrame =
-                            requestAnimationFrame(
-                                animate
-                            );
-                    };
-
-
-                this.creditsAnimationFrame =
-                    requestAnimationFrame(
-                        animate
-                    );
-            }
-        );
-    }
-
-
-
-    stopCreditsAnimation() {
-
-        if (
-            this.creditsAnimationFrame
-        ) {
-
-            cancelAnimationFrame(
-                this.creditsAnimationFrame
-            );
-
-
-            this.creditsAnimationFrame =
-                null;
-        }
-
-
-        this.creditsStartTime =
-            null;
-    }
-
-
-
-    /* =========================================================
-       NIVEAU ACTUEL
-    ========================================================= */
-
-    setCurrentLevelData(
-        data
-    ) {
-
-        this.currentLevelData =
-            data ||
-            null;
-
-
-        if (
-            data?.chapter
-        ) {
-
-            this.currentChapter =
-                Number(
-                    data.chapter
-                );
-        }
-
-
-        if (
-            data?.level
-        ) {
-
-            this.currentLevel =
-                Number(
-                    data.level
-                );
-        }
-
-
-        this.updateTopbar();
-
-        this.updateMission();
-    }
-
-
-
-    updateTopbar() {
-
-        const chapter =
-            document.getElementById(
-                "chapter-badge"
-            );
-
-
-        const difficulty =
-            document.getElementById(
-                "difficulty-badge"
-            );
-
-
-        const room =
-            document.getElementById(
-                "room-name"
-            );
-
-
-        if (
-            chapter
-        ) {
-
-            chapter.textContent =
-                `Chapitre ${this.currentChapter}`;
-        }
-
-
-        if (
-            difficulty
-        ) {
-
-            difficulty.textContent =
-                this.currentLevelData
-                    ?.difficulty ||
-                `Exercice ${this.currentLevel}`;
-        }
-
-
-        if (
-            room
-        ) {
-
-            const chapterData =
-                window.pytUI
-                    ?.getChapterData(
-                        this.currentChapter
-                    );
-
-
-            room.textContent =
-                this.currentLevelData
-                    ?.room ||
-                chapterData
-                    ?.room ||
-                "";
-        }
-    }
-
-
-
-    updateMission() {
-
-        const title =
-            document.getElementById(
-                "mission-title"
-            );
-
-
-        const instruction =
-            document.getElementById(
-                "mission-instruction"
-            );
-
-
-        if (
-            title
-        ) {
-
-            title.textContent =
-                this.currentLevelData
-                    ?.title ||
-                `Exercice ${this.currentLevel}`;
-        }
-
-
-        if (
-            instruction
-        ) {
-
-            instruction.textContent =
-                this.currentLevelData
-                    ?.instruction ||
-                "Aide Pyt à terminer sa mission.";
-        }
-    }
-
-
-
-    /* =========================================================
-       CODE WINDOW
-    ========================================================= */
-
-    prepareCodeWindow() {
-
-        const header =
-            document.getElementById(
-                "code-window-header"
-            );
-
-
-        const windowElement =
-            document.getElementById(
-                "code-window"
-            );
-
-
-        if (
-            !header ||
-            !windowElement
-        ) {
-
-            return;
-        }
-
-
-        header.addEventListener(
-            "pointerdown",
-            event => {
-
-                /*
-                 * Sur mobile la fenêtre est intégrée
-                 * normalement dans la page.
-                 */
-
-                if (
-                    window.innerWidth <=
-                    720
-                ) {
-
-                    return;
-                }
-
-
-                if (
-                    event.target.closest(
-                        "button"
-                    )
-                ) {
-
-                    return;
-                }
-
-
-                const rect =
-                    windowElement
-                        .getBoundingClientRect();
-
-
-                this.codeDragging =
-                    true;
-
-
-                this.codeDragOffsetX =
-                    event.clientX -
-                    rect.left;
-
-
-                this.codeDragOffsetY =
-                    event.clientY -
-                    rect.top;
-
-
-                try {
-
-                    header.setPointerCapture(
-                        event.pointerId
-                    );
-
-                } catch (
-                error
-                ) {
-
-                    /*
-                     * Certains navigateurs peuvent
-                     * refuser le capture.
-                     */
-                }
-
-
-                event.preventDefault();
-            }
-        );
-
-
-        header.addEventListener(
-            "pointermove",
-            event => {
-
-                if (
-                    !this.codeDragging
-                ) {
-
-                    return;
-                }
-
-
-                const width =
-                    windowElement
-                        .offsetWidth;
-
-
-                const height =
-                    windowElement
-                        .offsetHeight;
-
-
-                const maxLeft =
-                    Math.max(
-                        0,
-                        window.innerWidth -
-                        width
-                    );
-
-
-                const maxTop =
-                    Math.max(
-                        0,
-                        window.innerHeight -
-                        height
-                    );
-
-
-                const left =
-                    this.clamp(
-                        event.clientX -
-                        this.codeDragOffsetX,
-                        0,
-                        maxLeft
-                    );
-
-
-                const top =
-                    this.clamp(
-                        event.clientY -
-                        this.codeDragOffsetY,
-                        0,
-                        maxTop
-                    );
-
-
-                windowElement.style.left =
-                    `${left}px`;
-
-
-                windowElement.style.top =
-                    `${top}px`;
-            }
-        );
-
-
-        const stopDrag =
-            event => {
-
-                if (
-                    !this.codeDragging
-                ) {
-
-                    return;
-                }
-
-
-                this.codeDragging =
-                    false;
-
-
-                try {
-
-                    header.releasePointerCapture(
-                        event.pointerId
-                    );
-
-                } catch (
-                error
-                ) {
-
-                    /*
-                     * Rien à faire.
-                     */
-                }
-            };
-
-
-        header.addEventListener(
-            "pointerup",
-            stopDrag
-        );
-
-
-        header.addEventListener(
-            "pointercancel",
-            stopDrag
-        );
-    }
-
-
-
-    openCodeWindow() {
-
-        const code =
-            document.getElementById(
-                "code-window"
-            );
-
-
-        if (
-            !code
-        ) {
-
-            return;
-        }
-
-
-        code.classList.remove(
-            "hidden"
-        );
-
-
-        this.keepCodeWindowInsideViewport();
-
-
-        window.setTimeout(
-            () => {
-
-                document
-                    .getElementById(
-                        "code-editor"
-                    )
-                    ?.focus();
-
-            },
-            20
-        );
-
-
-        this.playSfx(
-            "ui-open"
-        );
-    }
-
-
-
-    closeCodeWindow() {
-
-        const code =
-            document.getElementById(
-                "code-window"
-            );
-
-
-        if (
-            !code ||
-            code.classList.contains(
-                "hidden"
-            )
-        ) {
-
-            return;
-        }
-
-
-        code.classList.add(
-            "hidden"
-        );
-
-
-        this.codeDragging =
-            false;
-
-
-        this.playSfx(
-            "ui-close"
-        );
-    }
-
-
-
-    keepCodeWindowInsideViewport() {
-
-        const code =
-            document.getElementById(
-                "code-window"
-            );
-
-
-        if (
-            !code ||
-            code.classList.contains(
-                "hidden"
-            ) ||
-            window.innerWidth <=
-                720
-        ) {
-
-            return;
-        }
-
-
-        const rect =
-            code.getBoundingClientRect();
-
-
-        const left =
-            this.clamp(
-                rect.left,
-                0,
-                Math.max(
-                    0,
-                    window.innerWidth -
-                    rect.width
-                )
-            );
-
-
-        const top =
-            this.clamp(
-                rect.top,
-                0,
-                Math.max(
-                    0,
-                    window.innerHeight -
-                    rect.height
-                )
-            );
-
-
-        code.style.left =
-            `${left}px`;
-
-
-        code.style.top =
-            `${top}px`;
-    }
-
-
-
-    runCode() {
-
-        const editor =
-            document.getElementById(
-                "code-editor"
-            );
-
-
-        if (
-            !editor
-        ) {
-
-            return;
-        }
-
-
-        const code =
-            editor.value;
-
-
-        this.hideThought();
-
-
-        this.setConsole(
-            ""
-        );
-
-
-        const runButton =
-            document.getElementById(
-                "run-code-button"
-            );
-
-
-        if (
-            runButton
-        ) {
-
-            runButton.disabled =
-                true;
-
-
-            runButton.textContent =
-                "Exécution...";
-        }
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:run-code",
-                {
-                    detail: {
-
-                        code,
-
-                        chapter:
-                            this.currentChapter,
-
-                        level:
-                            this.currentLevel,
-
-                        data:
-                            this.currentLevelData
+                        if (
+                            this.introReady
+                        ) {
+
+                            this.finishIntro();
+                        }
                     }
-                }
-            )
-        );
-    }
-
-
-
-    restartLevel() {
-
-        this.hideThought();
-
-        this.clearCodeError();
-
-        this.setConsole(
-            ""
-        );
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:restart-level",
-                {
-                    detail: {
-
-                        chapter:
-                            this.currentChapter,
-
-                        level:
-                            this.currentLevel
-                    }
-                }
-            )
-        );
-    }
-
-
-
-    /* =========================================================
-       CONSOLE
-    ========================================================= */
-
-    setConsole(
-        text
-    ) {
-
-        const output =
-            document.getElementById(
-                "console-output"
-            );
-
-
-        if (
-            output
-        ) {
-
-            output.textContent =
-                String(
-                    text ??
-                    ""
                 );
-        }
-    }
 
 
-
-    clearConsole() {
-
-        this.setConsole(
-            ""
-        );
-    }
-
-
-
-    writeConsole(
-        text
-    ) {
-
-        const output =
-            document.getElementById(
-                "console-output"
-            );
-
-
-        if (
-            !output
-        ) {
-
-            return;
-        }
-
-
-        const value =
-            String(
-                text ??
-                ""
-            );
-
-
-        if (
-            !output.textContent
-        ) {
-
-            output.textContent =
-                value;
-
-        } else {
-
-            output.textContent +=
-                `\n${value}`;
-        }
-
-
-        output.scrollTop =
-            output.scrollHeight;
-    }
-
-
-
-    /* =========================================================
-       GUIDE DE PYT
-    ========================================================= */
-
-    showGuide(
-        message,
-        actions = []
-    ) {
-
-        const guide =
-            document.getElementById(
-                "pyt-guide"
-            );
-
-
-        const text =
-            document.getElementById(
-                "pyt-guide-message"
-            );
-
-
-        const container =
-            document.getElementById(
-                "pyt-guide-actions"
-            );
-
-
-        if (
-            !guide ||
-            !text ||
-            !container
-        ) {
-
-            return;
-        }
-
-
-        this.guideClosing =
-            false;
-
-
-        guide.classList.remove(
-            "closing"
-        );
-
-
-        text.textContent =
-            String(
-                message ??
-                ""
-            );
-
-
-        container.innerHTML =
-            "";
-
-
-        if (
-            Array.isArray(
-                actions
-            )
-        ) {
-
-            actions.forEach(
-                (
-                    action,
-                    index
-                ) => {
+            window.addEventListener(
+                "keydown",
+                event => {
 
                     if (
-                        !action ||
-                        !action.label
+                        this.introFinished
                     ) {
 
                         return;
                     }
 
 
-                    const button =
-                        document.createElement(
-                            "button"
-                        );
-
-
-                    button.type =
-                        "button";
-
-
-                    button.textContent =
-                        action.label;
-
-
                     if (
-                        index >
-                        0
+                        !this.introReady
                     ) {
 
-                        button.classList.add(
-                            "guide-secondary-action"
-                        );
+                        return;
                     }
 
 
-                    button.addEventListener(
+                    if (
+                        [
+                            "Enter",
+                            " ",
+                            "Spacebar"
+                        ].includes(
+                            event.key
+                        )
+                    ) {
+
+                        event.preventDefault();
+
+                        this.finishIntro();
+                    }
+                }
+            );
+        }
+
+
+
+        finishIntro() {
+
+            if (
+                this.introFinished
+            ) {
+
+                return;
+            }
+
+
+            this.introFinished =
+                true;
+
+
+            if (
+                this.introScreen
+            ) {
+
+                this.introScreen
+                    .classList
+                    .add(
+                        "intro-leaving"
+                    );
+            }
+
+
+            setTimeout(
+                () => {
+
+                    this.hide(
+                        this.introScreen
+                    );
+
+
+                    this.enterGame();
+
+                },
+                500
+            );
+        }
+
+
+
+        /* =====================================================
+           ENTRÉE DANS LE JEU
+        ===================================================== */
+
+        enterGame() {
+
+            /*
+             * IMPORTANT :
+             *
+             * pas de menu intermédiaire.
+             *
+             * Après l'intro :
+             * directement le plan de la maison.
+             */
+
+            this.hide(
+                this.mainMenu
+            );
+
+            this.hide(
+                this.settingsScreen
+            );
+
+            this.hide(
+                this.creditsScreen
+            );
+
+            this.show(
+                this.gameInterface
+            );
+
+
+            this.activeGameScreen =
+                "map";
+
+
+            this.showMap();
+
+
+            requestAnimationFrame(
+                () => {
+
+                    if (
+                        window.pytUI &&
+                        typeof
+                        window.pytUI
+                            .openHouseMap ===
+                        "function"
+                    ) {
+
+                        window.pytUI
+                            .openHouseMap(
+                                true
+                            );
+                    }
+                }
+            );
+        }
+
+
+
+        /*
+         * Ancienne compatibilité.
+         *
+         * Si un ancien bouton appelle
+         * showMainMenu(), il retourne
+         * maintenant simplement à la carte.
+         */
+
+        showMainMenu() {
+
+            this.enterGame();
+        }
+
+
+
+        /* =====================================================
+           NAVIGATION
+        ===================================================== */
+
+        prepareNavigation() {
+
+            if (
+                this.playButton
+            ) {
+
+                this.playButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.enterGame()
+                    );
+            }
+
+
+            if (
+                this.settingsButton
+            ) {
+
+                this.settingsButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.showSettings()
+                    );
+            }
+
+
+            if (
+                this.gameSettingsButton
+            ) {
+
+                this.gameSettingsButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.showSettings()
+                    );
+            }
+
+
+            if (
+                this.menuButton
+            ) {
+
+                this.menuButton
+                    .addEventListener(
                         "click",
                         () => {
 
                             if (
-                                typeof action.onClick ===
+                                window.pytUI &&
+                                typeof
+                                window.pytUI
+                                    .openHouseMap ===
                                 "function"
                             ) {
 
-                                action.onClick();
+                                window.pytUI
+                                    .openHouseMap();
+
+                            } else {
+
+                                this.showMap();
                             }
                         }
                     );
-
-
-                    container.appendChild(
-                        button
-                    );
-                }
-            );
-        }
-
-
-        guide.classList.remove(
-            "hidden"
-        );
-    }
-
-
-
-    hideGuide() {
-
-        const guide =
-            document.getElementById(
-                "pyt-guide"
-            );
-
-
-        if (
-            !guide ||
-            guide.classList.contains(
-                "hidden"
-            ) ||
-            this.guideClosing
-        ) {
-
-            return;
-        }
-
-
-        this.guideClosing =
-            true;
-
-
-        guide.classList.add(
-            "closing"
-        );
-
-
-        window.setTimeout(
-            () => {
-
-                guide.classList.add(
-                    "hidden"
-                );
-
-
-                guide.classList.remove(
-                    "closing"
-                );
-
-
-                this.guideClosing =
-                    false;
-
-            },
-            220
-        );
-    }
-
-
-
-    /* =========================================================
-       BULLE DE PENSÉE
-    ========================================================= */
-
-    showThought(
-        message
-    ) {
-
-        const bubble =
-            document.getElementById(
-                "robot-thought-bubble"
-            );
-
-
-        if (
-            !bubble
-        ) {
-
-            return;
-        }
-
-
-        bubble.textContent =
-            String(
-                message ??
-                ""
-            );
-
-
-        bubble.classList.remove(
-            "hidden"
-        );
-    }
-
-
-
-    hideThought() {
-
-        this.hideElement(
-            "robot-thought-bubble"
-        );
-    }
-
-
-
-    /* =========================================================
-       ERREUR DE CODE
-    ========================================================= */
-
-    showCodeError(
-        line
-    ) {
-
-        const number =
-            Number(
-                line
-            );
-
-
-        if (
-            !Number.isInteger(
-                number
-            ) ||
-            number <=
-                0
-        ) {
-
-            return;
-        }
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:code-error-line",
-                {
-                    detail: {
-
-                        line:
-                            number
-                    }
-                }
-            )
-        );
-    }
-
-
-
-    clearCodeError() {
-
-        const editor =
-            document.getElementById(
-                "code-editor"
-            );
-
-
-        const overlay =
-            document.getElementById(
-                "code-error-highlights"
-            );
-
-
-        if (
-            editor
-        ) {
-
-            delete editor.dataset
-                .errorLine;
-        }
-
-
-        if (
-            overlay
-        ) {
-
-            overlay.innerHTML =
-                "";
-        }
-    }
-
-
-
-    /* =========================================================
-       MODALES
-    ========================================================= */
-
-    showModal(
-        options = {}
-    ) {
-
-        const background =
-            document.getElementById(
-                "modal-background"
-            );
-
-
-        const label =
-            document.getElementById(
-                "modal-label"
-            );
-
-
-        const title =
-            document.getElementById(
-                "modal-title"
-            );
-
-
-        const message =
-            document.getElementById(
-                "modal-message"
-            );
-
-
-        const primary =
-            document.getElementById(
-                "modal-primary-button"
-            );
-
-
-        const secondary =
-            document.getElementById(
-                "modal-secondary-button"
-            );
-
-
-        if (
-            !background
-        ) {
-
-            return;
-        }
-
-
-        if (
-            label
-        ) {
-
-            label.textContent =
-                options.label ||
-                "PYT";
-        }
-
-
-        if (
-            title
-        ) {
-
-            title.textContent =
-                options.title ||
-                "Information";
-        }
-
-
-        if (
-            message
-        ) {
-
-            message.textContent =
-                options.message ||
-                "";
-        }
-
-
-        if (
-            primary
-        ) {
-
-            primary.textContent =
-                options.primaryLabel ||
-                "Continuer";
-        }
-
-
-        if (
-            secondary
-        ) {
-
-            if (
-                options.secondaryLabel
-            ) {
-
-                secondary.textContent =
-                    options.secondaryLabel;
-
-
-                secondary.classList.remove(
-                    "hidden"
-                );
-
-            } else {
-
-                secondary.classList.add(
-                    "hidden"
-                );
             }
         }
 
 
-        this.modalPrimaryAction =
-            typeof options.onPrimary ===
+
+        hideGameScreens() {
+
+            this.hide(
+                this.chapterScreen
+            );
+
+            this.hide(
+                this.mapScreen
+            );
+
+            this.hide(
+                this.gameScreen
+            );
+        }
+
+
+
+        showMap() {
+
+            this.show(
+                this.gameInterface
+            );
+
+
+            this.hideGameScreens();
+
+
+            this.show(
+                this.mapScreen
+            );
+
+
+            this.activeGameScreen =
+                "map";
+
+
+            this.closeCodeWindow();
+
+
+            requestAnimationFrame(
+                () => {
+
+                    if (
+                        window.pytUI &&
+                        typeof
+                        window.pytUI
+                            .resizeHouseCanvas ===
+                        "function"
+                    ) {
+
+                        window.pytUI
+                            .resizeHouseCanvas();
+                    }
+
+
+                    if (
+                        window.pytUI &&
+                        typeof
+                        window.pytUI
+                            .refresh ===
+                        "function"
+                    ) {
+
+                        window.pytUI
+                            .refresh();
+                    }
+                }
+            );
+        }
+
+
+
+        showCourse() {
+
+            this.show(
+                this.gameInterface
+            );
+
+
+            this.hideGameScreens();
+
+
+            this.show(
+                this.chapterScreen
+            );
+
+
+            this.activeGameScreen =
+                "course";
+
+
+            this.closeCodeWindow();
+        }
+
+
+
+        showGame() {
+
+            this.show(
+                this.gameInterface
+            );
+
+
+            this.hideGameScreens();
+
+
+            this.show(
+                this.gameScreen
+            );
+
+
+            this.activeGameScreen =
+                "game";
+
+
+            /*
+             * Canvas visible avant rendu.
+             */
+
+            if (
+                this.gameCanvas
+            ) {
+
+                this.gameCanvas.hidden =
+                    false;
+
+
+                this.gameCanvas.style.display =
+                    "block";
+
+
+                this.gameCanvas.style.visibility =
+                    "visible";
+
+
+                this.gameCanvas.style.opacity =
+                    "1";
+            }
+
+
+            requestAnimationFrame(
+                () => {
+
+                    requestAnimationFrame(
+                        () => {
+
+                            if (
+                                window.pytGame &&
+                                typeof
+                                window.pytGame
+                                    .resizeCanvas ===
+                                "function"
+                            ) {
+
+                                window.pytGame
+                                    .resizeCanvas();
+                            }
+
+
+                            if (
+                                window.pytGame &&
+                                typeof
+                                window.pytGame
+                                    .render ===
+                                "function"
+                            ) {
+
+                                window.pytGame
+                                    .render();
+                            }
+                        }
+                    );
+                }
+            );
+        }
+
+
+
+        /* =====================================================
+           SETTINGS
+        ===================================================== */
+
+        prepareSettings() {
+
+            if (
+                this.musicEnabled
+            ) {
+
+                this.musicEnabled
+                    .addEventListener(
+                        "change",
+                        () => {
+
+                            this.settings.music =
+                                Boolean(
+                                    this.musicEnabled
+                                        .checked
+                                );
+
+
+                            /*
+                             * Music = Non
+                             * => volume réellement à zéro.
+                             */
+
+                            if (
+                                !this.settings.music
+                            ) {
+
+                                this.settings.volume =
+                                    0;
+
+
+                                if (
+                                    this.volumeSlider
+                                ) {
+
+                                    this.volumeSlider.value =
+                                        "0";
+                                }
+                            }
+
+
+                            this.applySettings();
+
+                            this.saveSettings();
+                        }
+                    );
+            }
+
+
+            if (
+                this.volumeSlider
+            ) {
+
+                this.volumeSlider
+                    .addEventListener(
+                        "input",
+                        () => {
+
+                            const value =
+                                this.clamp(
+                                    Number(
+                                        this.volumeSlider
+                                            .value
+                                    ) /
+                                    100,
+                                    0,
+                                    1
+                                );
+
+
+                            this.settings.volume =
+                                value;
+
+
+                            /*
+                             * Si l'utilisateur remonte
+                             * le volume, Musique repasse
+                             * automatiquement à Oui.
+                             */
+
+                            if (
+                                value >
+                                0
+                            ) {
+
+                                this.settings.music =
+                                    true;
+
+
+                                if (
+                                    this.musicEnabled
+                                ) {
+
+                                    this.musicEnabled.checked =
+                                        true;
+                                }
+                            }
+
+
+                            this.applySettings();
+
+                            this.saveSettings();
+                        }
+                    );
+            }
+
+
+            if (
+                this.settingsBackButton
+            ) {
+
+                this.settingsBackButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.closeSettings()
+                    );
+            }
+        }
+
+
+
+        applySettings() {
+
+            this.settings.volume =
+                this.clamp(
+                    Number(
+                        this.settings.volume ??
+                        0.55
+                    ),
+                    0,
+                    1
+                );
+
+
+            if (
+                !this.settings.music
+            ) {
+
+                this.settings.volume =
+                    0;
+            }
+
+
+            if (
+                this.musicEnabled
+            ) {
+
+                this.musicEnabled.checked =
+                    Boolean(
+                        this.settings.music
+                    );
+            }
+
+
+            if (
+                this.volumeSlider
+            ) {
+
+                this.volumeSlider.value =
+                    String(
+                        Math.round(
+                            this.settings.volume *
+                            100
+                        )
+                    );
+            }
+
+
+            if (
+                this.volumeValue
+            ) {
+
+                this.volumeValue.textContent =
+                    `${Math.round(
+                        this.settings.volume *
+                        100
+                    )}%`;
+            }
+
+
+            [
+                this.musicAudio,
+                this.theoryAudio
+            ]
+                .forEach(
+                    audio => {
+
+                        if (
+                            !audio
+                        ) {
+
+                            return;
+                        }
+
+
+                        audio.volume =
+                            this.settings.music
+                                ? this.settings.volume
+                                : 0;
+
+
+                        audio.muted =
+                            !this.settings.music ||
+                            this.settings.volume ===
+                                0;
+                    }
+                );
+        }
+
+
+
+        showSettings() {
+
+            this.settingsReturnState = {
+
+                screen:
+                    this.gameInterface &&
+                    !this.gameInterface
+                        .classList
+                        .contains(
+                            "hidden"
+                        )
+                        ? "game"
+                        : "menu",
+
+                gameScreen:
+                    this.activeGameScreen
+            };
+
+
+            this.hide(
+                this.mainMenu
+            );
+
+            this.hide(
+                this.gameInterface
+            );
+
+            this.hide(
+                this.creditsScreen
+            );
+
+            this.closeCodeWindow();
+
+
+            this.show(
+                this.settingsScreen
+            );
+
+
+            this.applySettings();
+        }
+
+
+
+        closeSettings() {
+
+            this.hide(
+                this.settingsScreen
+            );
+
+
+            if (
+                this.settingsReturnState
+                    .screen ===
+                "game"
+            ) {
+
+                this.show(
+                    this.gameInterface
+                );
+
+
+                switch (
+                    this.settingsReturnState
+                        .gameScreen
+                ) {
+
+                    case "course":
+
+                        this.showCourse();
+
+                        break;
+
+
+                    case "game":
+
+                        this.showGame();
+
+                        break;
+
+
+                    default:
+
+                        this.showMap();
+                }
+
+            } else {
+
+                /*
+                 * Le jeu n'utilise normalement
+                 * plus le menu.
+                 */
+
+                this.enterGame();
+            }
+        }
+
+
+
+        /* =====================================================
+           CREDITS
+        ===================================================== */
+
+        prepareCredits() {
+
+            if (
+                this.creditsButton
+            ) {
+
+                this.creditsButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.openCredits()
+                    );
+            }
+
+
+            if (
+                this.closeCreditsButton
+            ) {
+
+                this.closeCreditsButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.closeCredits()
+                    );
+            }
+
+
+            if (
+                !this.creditsScreen
+            ) {
+
+                return;
+            }
+
+
+            /*
+             * On retire un éventuel PYT
+             * présent au début des crédits.
+             */
+
+            if (
+                this.creditsScroll
+            ) {
+
+                const children =
+                    Array.from(
+                        this.creditsScroll
+                            .children
+                    );
+
+
+                children.forEach(
+                    (
+                        child,
+                        index
+                    ) => {
+
+                        if (
+                            index >
+                            1
+                        ) {
+
+                            return;
+                        }
+
+
+                        const text =
+                            child.textContent
+                                ?.trim()
+                                .toUpperCase();
+
+
+                        if (
+                            text ===
+                            "PYT"
+                        ) {
+
+                            child.classList.add(
+                                "credits-opening-title"
+                            );
+
+
+                            child.hidden =
+                                true;
+                        }
+                    }
+                );
+            }
+
+
+            /*
+             * Overlay final.
+             *
+             * Le PYT final ne dépend donc
+             * plus de la longueur des noms.
+             */
+
+            let overlay =
+                document.getElementById(
+                    "credits-final-overlay"
+                );
+
+
+            if (
+                !overlay
+            ) {
+
+                overlay =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                overlay.id =
+                    "credits-final-overlay";
+
+
+                overlay.className =
+                    "credits-final-overlay";
+
+
+                overlay.innerHTML = `
+                    <div class="credits-final-title">PYT</div>
+                    <div class="credits-final-subtitle">apprentissage Python</div>
+                `;
+
+
+                this.creditsScreen
+                    .appendChild(
+                        overlay
+                    );
+            }
+
+
+            this.creditsFinalOverlay =
+                overlay;
+
+
+            this.creditsFinalTitle =
+                overlay.querySelector(
+                    ".credits-final-title"
+                );
+
+
+            this.creditsFinalSubtitle =
+                overlay.querySelector(
+                    ".credits-final-subtitle"
+                );
+
+
+            this.resetCreditsAnimation();
+        }
+
+
+
+        clearCreditsTimers() {
+
+            this.creditsTimers
+                .forEach(
+                    timer =>
+                        clearTimeout(
+                            timer
+                        )
+                );
+
+
+            this.creditsTimers =
+                [];
+        }
+
+
+
+        resetCreditsAnimation() {
+
+            this.clearCreditsTimers();
+
+
+            if (
+                this.creditsScreen
+            ) {
+
+                this.creditsScreen
+                    .classList
+                    .remove(
+                        "credits-running",
+                        "credits-show-final",
+                        "credits-show-subtitle"
+                    );
+            }
+
+
+            if (
+                this.creditsScroll
+            ) {
+
+                this.creditsScroll
+                    .classList
+                    .remove(
+                        "credits-scroll-running"
+                    );
+
+
+                /*
+                 * Force le navigateur à remettre
+                 * l'animation CSS à zéro.
+                 */
+
+                void this.creditsScroll
+                    .offsetWidth;
+            }
+
+
+            if (
+                this.creditsFinalOverlay
+            ) {
+
+                this.creditsFinalOverlay
+                    .classList
+                    .remove(
+                        "visible",
+                        "subtitle-visible"
+                    );
+            }
+        }
+
+
+
+        openCredits() {
+
+            this.hide(
+                this.settingsScreen
+            );
+
+            this.show(
+                this.creditsScreen
+            );
+
+
+            this.resetCreditsAnimation();
+
+
+            requestAnimationFrame(
+                () => {
+
+                    if (
+                        this.creditsScreen
+                    ) {
+
+                        this.creditsScreen
+                            .classList
+                            .add(
+                                "credits-running"
+                            );
+                    }
+
+
+                    if (
+                        this.creditsScroll
+                    ) {
+
+                        this.creditsScroll
+                            .classList
+                            .add(
+                                "credits-scroll-running"
+                            );
+                    }
+                }
+            );
+
+
+            /*
+             * Temps du défilement.
+             *
+             * 30 secondes :
+             * PYT arrive et reste au centre.
+             */
+
+            const finalTimer =
+                setTimeout(
+                    () => {
+
+                        if (
+                            !this.creditsScreen ||
+                            this.creditsScreen
+                                .classList
+                                .contains(
+                                    "hidden"
+                                )
+                        ) {
+
+                            return;
+                        }
+
+
+                        this.creditsScreen
+                            .classList
+                            .add(
+                                "credits-show-final"
+                            );
+
+
+                        if (
+                            this.creditsFinalOverlay
+                        ) {
+
+                            this.creditsFinalOverlay
+                                .classList
+                                .add(
+                                    "visible"
+                                );
+                        }
+
+                    },
+                    30000
+                );
+
+
+            /*
+             * EXACTEMENT 3 secondes
+             * après l'arrivée de PYT :
+             *
+             * apprentissage Python
+             */
+
+            const subtitleTimer =
+                setTimeout(
+                    () => {
+
+                        if (
+                            !this.creditsScreen ||
+                            this.creditsScreen
+                                .classList
+                                .contains(
+                                    "hidden"
+                                )
+                        ) {
+
+                            return;
+                        }
+
+
+                        this.creditsScreen
+                            .classList
+                            .add(
+                                "credits-show-subtitle"
+                            );
+
+
+                        if (
+                            this.creditsFinalOverlay
+                        ) {
+
+                            this.creditsFinalOverlay
+                                .classList
+                                .add(
+                                    "subtitle-visible"
+                                );
+                        }
+
+                    },
+                    33000
+                );
+
+
+            this.creditsTimers.push(
+                finalTimer,
+                subtitleTimer
+            );
+        }
+
+
+
+        closeCredits() {
+
+            this.resetCreditsAnimation();
+
+
+            this.hide(
+                this.creditsScreen
+            );
+
+
+            this.show(
+                this.settingsScreen
+            );
+        }
+
+
+
+        /* =====================================================
+           CODE WINDOW
+        ===================================================== */
+
+        prepareCodeWindow() {
+
+            if (
+                this.openCodeButton
+            ) {
+
+                this.openCodeButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.openCodeWindow()
+                    );
+            }
+
+
+            if (
+                this.closeCodeButton
+            ) {
+
+                this.closeCodeButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.closeCodeWindow()
+                    );
+            }
+
+
+            if (
+                this.clearCodeButton
+            ) {
+
+                this.clearCodeButton
+                    .addEventListener(
+                        "click",
+                        () => {
+
+                            if (
+                                this.codeEditor
+                            ) {
+
+                                this.codeEditor.value =
+                                    "";
+
+
+                                this.codeEditor.focus();
+                            }
+
+
+                            this.clearConsole();
+                        }
+                    );
+            }
+
+
+            if (
+                this.runCodeButton
+            ) {
+
+                this.runCodeButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.runCode()
+                    );
+            }
+
+
+            if (
+                this.codeRestartButton
+            ) {
+
+                this.codeRestartButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.restartLevel()
+                    );
+            }
+
+
+            if (
+                this.restartButton
+            ) {
+
+                this.restartButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.restartLevel()
+                    );
+            }
+
+
+            /*
+             * CTRL + ENTER
+             */
+
+            if (
+                this.codeEditor
+            ) {
+
+                this.codeEditor
+                    .addEventListener(
+                        "keydown",
+                        event => {
+
+                            if (
+                                (
+                                    event.ctrlKey ||
+                                    event.metaKey
+                                ) &&
+                                event.key ===
+                                    "Enter"
+                            ) {
+
+                                event.preventDefault();
+
+                                this.runCode();
+                            }
+                        }
+                    );
+            }
+
+
+            this.prepareCodeDragging();
+        }
+
+
+
+        openCodeWindow() {
+
+            if (
+                !this.codeWindow
+            ) {
+
+                return;
+            }
+
+
+            this.codeWindowOpen =
+                true;
+
+
+            this.show(
+                this.codeWindow
+            );
+
+
+            if (
+                this.isMobileLayout()
+            ) {
+
+                this.resetCodeWindowPosition();
+
+            } else {
+
+                this.keepCodeWindowInsideViewport();
+            }
+
+
+            requestAnimationFrame(
+                () => {
+
+                    if (
+                        this.codeEditor
+                    ) {
+
+                        this.codeEditor.focus();
+                    }
+                }
+            );
+        }
+
+
+
+        closeCodeWindow() {
+
+            if (
+                !this.codeWindow
+            ) {
+
+                return;
+            }
+
+
+            this.codeWindowOpen =
+                false;
+
+
+            this.hide(
+                this.codeWindow
+            );
+        }
+
+
+
+        runCode() {
+
+            if (
+                !this.codeEditor
+            ) {
+
+                return;
+            }
+
+
+            const source =
+                this.codeEditor.value;
+
+
+            this.clearConsole();
+
+
+            /*
+             * Un seul événement.
+             *
+             * game.js peut l'écouter
+             * et ui.js l'utilise aussi
+             * pour compter la tentative.
+             */
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "pyt:run-code",
+                    {
+
+                        detail: {
+                            source
+                        }
+                    }
+                )
+            );
+        }
+
+
+
+        restartLevel() {
+
+            this.clearConsole();
+
+
+            if (
+                window.pytGame &&
+                typeof
+                window.pytGame
+                    .restartLevel ===
                 "function"
-                ? options.onPrimary
-                : null;
+            ) {
+
+                window.pytGame
+                    .restartLevel();
+
+                return;
+            }
 
 
-        this.modalSecondaryAction =
-            typeof options.onSecondary ===
+            if (
+                window.pytGame &&
+                typeof
+                window.pytGame
+                    .resetLevel ===
                 "function"
-                ? options.onSecondary
-                : null;
+            ) {
+
+                window.pytGame
+                    .resetLevel();
+
+                return;
+            }
 
 
-        background.classList.remove(
-            "hidden"
-        );
-    }
+            window.dispatchEvent(
+                new CustomEvent(
+                    "pyt:restart-level"
+                )
+            );
+        }
 
 
 
-    hideModal() {
+        clearConsole() {
 
-        this.hideElement(
-            "modal-background"
-        );
+            if (
+                this.consoleOutput
+            ) {
+
+                this.consoleOutput.textContent =
+                    "";
+            }
+        }
 
 
-        this.modalPrimaryAction =
-            null;
+
+        /* =====================================================
+           CODE WINDOW DRAG
+        ===================================================== */
+
+        isMobileLayout() {
+
+            return (
+                window.innerWidth <=
+                    820 ||
+                window.matchMedia(
+                    "(pointer: coarse)"
+                ).matches
+            );
+        }
 
 
-        this.modalSecondaryAction =
-            null;
+
+        prepareCodeDragging() {
+
+            if (
+                !this.codeWindow ||
+                !this.codeWindowHeader
+            ) {
+
+                return;
+            }
+
+
+            let startX =
+                0;
+
+            let startY =
+                0;
+
+            let startLeft =
+                0;
+
+            let startTop =
+                0;
+
+
+            const move =
+                event => {
+
+                    if (
+                        !this.draggingCodeWindow ||
+                        this.isMobileLayout()
+                    ) {
+
+                        return;
+                    }
+
+
+                    const dx =
+                        event.clientX -
+                        startX;
+
+
+                    const dy =
+                        event.clientY -
+                        startY;
+
+
+                    const maxLeft =
+                        Math.max(
+                            0,
+                            window.innerWidth -
+                                this.codeWindow
+                                    .offsetWidth
+                        );
+
+
+                    const maxTop =
+                        Math.max(
+                            0,
+                            window.innerHeight -
+                                this.codeWindow
+                                    .offsetHeight
+                        );
+
+
+                    this.codeWindow.style.left =
+                        `${this.clamp(
+                            startLeft +
+                                dx,
+                            0,
+                            maxLeft
+                        )}px`;
+
+
+                    this.codeWindow.style.top =
+                        `${this.clamp(
+                            startTop +
+                                dy,
+                            0,
+                            maxTop
+                        )}px`;
+
+
+                    this.codeWindow.style.right =
+                        "auto";
+
+
+                    this.codeWindow.style.bottom =
+                        "auto";
+                };
+
+
+            const stop =
+                () => {
+
+                    this.draggingCodeWindow =
+                        false;
+
+
+                    document.body
+                        .classList
+                        .remove(
+                            "dragging-code-window"
+                        );
+                };
+
+
+            this.codeWindowHeader
+                .addEventListener(
+                    "pointerdown",
+                    event => {
+
+                        if (
+                            this.isMobileLayout()
+                        ) {
+
+                            return;
+                        }
+
+
+                        if (
+                            event.target.closest(
+                                "button"
+                            )
+                        ) {
+
+                            return;
+                        }
+
+
+                        const rect =
+                            this.codeWindow
+                                .getBoundingClientRect();
+
+
+                        this.draggingCodeWindow =
+                            true;
+
+
+                        startX =
+                            event.clientX;
+
+
+                        startY =
+                            event.clientY;
+
+
+                        startLeft =
+                            rect.left;
+
+
+                        startTop =
+                            rect.top;
+
+
+                        document.body
+                            .classList
+                            .add(
+                                "dragging-code-window"
+                            );
+
+
+                        this.codeWindowHeader
+                            .setPointerCapture?.(
+                                event.pointerId
+                            );
+
+
+                        event.preventDefault();
+                    }
+                );
+
+
+            window.addEventListener(
+                "pointermove",
+                move
+            );
+
+
+            window.addEventListener(
+                "pointerup",
+                stop
+            );
+
+
+            window.addEventListener(
+                "pointercancel",
+                stop
+            );
+        }
+
+
+
+        resetCodeWindowPosition() {
+
+            if (
+                !this.codeWindow
+            ) {
+
+                return;
+            }
+
+
+            this.codeWindow.style.left =
+                "";
+
+            this.codeWindow.style.top =
+                "";
+
+            this.codeWindow.style.right =
+                "";
+
+            this.codeWindow.style.bottom =
+                "";
+        }
+
+
+
+        keepCodeWindowInsideViewport() {
+
+            if (
+                !this.codeWindow ||
+                this.isMobileLayout()
+            ) {
+
+                return;
+            }
+
+
+            const rect =
+                this.codeWindow
+                    .getBoundingClientRect();
+
+
+            const margin =
+                12;
+
+
+            let left =
+                rect.left;
+
+
+            let top =
+                rect.top;
+
+
+            if (
+                rect.right >
+                window.innerWidth -
+                    margin
+            ) {
+
+                left =
+                    window.innerWidth -
+                    rect.width -
+                    margin;
+            }
+
+
+            if (
+                rect.bottom >
+                window.innerHeight -
+                    margin
+            ) {
+
+                top =
+                    window.innerHeight -
+                    rect.height -
+                    margin;
+            }
+
+
+            left =
+                Math.max(
+                    margin,
+                    left
+                );
+
+
+            top =
+                Math.max(
+                    margin,
+                    top
+                );
+
+
+            this.codeWindow.style.left =
+                `${left}px`;
+
+
+            this.codeWindow.style.top =
+                `${top}px`;
+
+
+            this.codeWindow.style.right =
+                "auto";
+
+
+            this.codeWindow.style.bottom =
+                "auto";
+        }
+
+
+
+        /* =====================================================
+           GUIDE PYT
+        ===================================================== */
+
+        prepareGuide() {
+
+            if (
+                this.closePytGuideButton
+            ) {
+
+                this.closePytGuideButton
+                    .addEventListener(
+                        "click",
+                        () =>
+                            this.hideGuide()
+                    );
+            }
+        }
+
+
+
+        showGuide(
+            message,
+            actions = []
+        ) {
+
+            if (
+                !this.pytGuide ||
+                !this.pytGuideMessage
+            ) {
+
+                return;
+            }
+
+
+            this.pytGuideMessage.textContent =
+                String(
+                    message ?? ""
+                );
+
+
+            if (
+                this.pytGuideActions
+            ) {
+
+                this.pytGuideActions
+                    .replaceChildren();
+
+
+                actions
+                    .filter(
+                        action =>
+                            action &&
+                            action.label
+                    )
+                    .forEach(
+                        action => {
+
+                            const button =
+                                document.createElement(
+                                    "button"
+                                );
+
+
+                            button.type =
+                                "button";
+
+
+                            button.className =
+                                action.primary
+                                    ? "primary-button"
+                                    : "secondary-button";
+
+
+                            button.textContent =
+                                action.label;
+
+
+                            button.addEventListener(
+                                "click",
+                                () => {
+
+                                    if (
+                                        typeof
+                                        action.onClick ===
+                                        "function"
+                                    ) {
+
+                                        action.onClick();
+                                    }
+                                }
+                            );
+
+
+                            this.pytGuideActions
+                                .appendChild(
+                                    button
+                                );
+                        }
+                    );
+            }
+
+
+            this.guideVisible =
+                true;
+
+
+            this.show(
+                this.pytGuide
+            );
+
+
+            requestAnimationFrame(
+                () => {
+
+                    this.pytGuide
+                        .classList
+                        .add(
+                            "guide-visible"
+                        );
+                }
+            );
+        }
+
+
+
+        hideGuide() {
+
+            if (
+                !this.pytGuide
+            ) {
+
+                return;
+            }
+
+
+            this.guideVisible =
+                false;
+
+
+            this.pytGuide
+                .classList
+                .remove(
+                    "guide-visible"
+                );
+
+
+            setTimeout(
+                () => {
+
+                    if (
+                        !this.guideVisible
+                    ) {
+
+                        this.hide(
+                            this.pytGuide
+                        );
+                    }
+
+                },
+                220
+            );
+        }
+
+
+
+        /* =====================================================
+           BULLE ROBOT
+        ===================================================== */
+
+        showThought(
+            message,
+            duration = 2300
+        ) {
+
+            if (
+                !this.robotThoughtBubble
+            ) {
+
+                return;
+            }
+
+
+            this.robotThoughtBubble.textContent =
+                String(
+                    message ||
+                    "Ce n'est pas là que je voulais aller..."
+                );
+
+
+            this.show(
+                this.robotThoughtBubble
+            );
+
+
+            this.robotThoughtBubble
+                .classList
+                .add(
+                    "thought-visible"
+                );
+
+
+            clearTimeout(
+                this.thoughtTimer
+            );
+
+
+            this.thoughtTimer =
+                setTimeout(
+                    () => {
+
+                        this.robotThoughtBubble
+                            .classList
+                            .remove(
+                                "thought-visible"
+                            );
+
+
+                        setTimeout(
+                            () =>
+                                this.hide(
+                                    this.robotThoughtBubble
+                                ),
+                            180
+                        );
+
+                    },
+                    duration
+                );
+        }
+
+
+
+        /* =====================================================
+           MODAL
+        ===================================================== */
+
+        prepareModal() {
+
+            if (
+                this.modalBackground
+            ) {
+
+                this.modalBackground
+                    .addEventListener(
+                        "click",
+                        event => {
+
+                            if (
+                                event.target ===
+                                this.modalBackground
+                            ) {
+
+                                /*
+                                 * On ne ferme pas automatiquement
+                                 * les modales importantes.
+                                 */
+                            }
+                        }
+                    );
+            }
+        }
+
+
+
+        showModal({
+            label = "PYT",
+            title = "",
+            message = "",
+            primaryText = "Continuer",
+            primaryAction = null,
+            secondaryText = "",
+            secondaryAction = null
+        } = {}) {
+
+            if (
+                !this.modalBackground
+            ) {
+
+                if (
+                    typeof
+                    primaryAction ===
+                    "function"
+                ) {
+
+                    primaryAction();
+                }
+
+
+                return;
+            }
+
+
+            if (
+                this.modalLabel
+            ) {
+
+                this.modalLabel.textContent =
+                    label;
+            }
+
+
+            if (
+                this.modalTitle
+            ) {
+
+                this.modalTitle.textContent =
+                    title;
+            }
+
+
+            if (
+                this.modalMessage
+            ) {
+
+                this.modalMessage.textContent =
+                    message;
+            }
+
+
+            if (
+                this.modalPrimaryButton
+            ) {
+
+                this.modalPrimaryButton.textContent =
+                    primaryText;
+
+
+                this.modalPrimaryButton.onclick =
+                    () => {
+
+                        this.hideModal();
+
+
+                        if (
+                            typeof
+                            primaryAction ===
+                            "function"
+                        ) {
+
+                            primaryAction();
+                        }
+                    };
+            }
+
+
+            if (
+                this.modalSecondaryButton
+            ) {
+
+                if (
+                    secondaryText
+                ) {
+
+                    this.show(
+                        this.modalSecondaryButton
+                    );
+
+
+                    this.modalSecondaryButton.textContent =
+                        secondaryText;
+
+
+                    this.modalSecondaryButton.onclick =
+                        () => {
+
+                            this.hideModal();
+
+
+                            if (
+                                typeof
+                                secondaryAction ===
+                                "function"
+                            ) {
+
+                                secondaryAction();
+                            }
+                        };
+
+                } else {
+
+                    this.hide(
+                        this.modalSecondaryButton
+                    );
+
+
+                    this.modalSecondaryButton.onclick =
+                        null;
+                }
+            }
+
+
+            this.show(
+                this.modalBackground
+            );
+        }
+
+
+
+        hideModal() {
+
+            this.hide(
+                this.modalBackground
+            );
+        }
+
+
+
+        /* =====================================================
+           SFX
+           AUDIO PLUS TARD
+        ===================================================== */
+
+        playSfx(
+            name,
+            options = {}
+        ) {
+
+            /*
+             * Aucun fichier audio ajouté ici.
+             *
+             * Plus tard, le plugin audio pourra
+             * écouter cet événement.
+             */
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "pyt:sfx-request",
+                    {
+
+                        detail: {
+                            name,
+                            options
+                        }
+                    }
+                )
+            );
+        }
+
+
+
+        /* =====================================================
+           RESPONSIVE
+        ===================================================== */
+
+        prepareResponsive() {
+
+            const update =
+                () => {
+
+                    document.documentElement
+                        .classList
+                        .toggle(
+                            "pyt-mobile",
+                            this.isMobileLayout()
+                        );
+
+
+                    if (
+                        this.isMobileLayout()
+                    ) {
+
+                        this.resetCodeWindowPosition();
+
+                    } else if (
+                        this.codeWindowOpen
+                    ) {
+
+                        this.keepCodeWindowInsideViewport();
+                    }
+
+
+                    /*
+                     * Carte.
+                     */
+
+                    if (
+                        window.pytUI &&
+                        typeof
+                        window.pytUI
+                            .resizeHouseCanvas ===
+                        "function"
+                    ) {
+
+                        window.pytUI
+                            .resizeHouseCanvas();
+                    }
+
+
+                    /*
+                     * Exercice.
+                     */
+
+                    requestAnimationFrame(
+                        () => {
+
+                            if (
+                                window.pytGame &&
+                                typeof
+                                window.pytGame
+                                    .resizeCanvas ===
+                                "function"
+                            ) {
+
+                                window.pytGame
+                                    .resizeCanvas();
+                            }
+
+
+                            if (
+                                window.pytGame &&
+                                typeof
+                                window.pytGame
+                                    .render ===
+                                "function" &&
+                                this.activeGameScreen ===
+                                    "game"
+                            ) {
+
+                                window.pytGame
+                                    .render();
+                            }
+                        }
+                    );
+                };
+
+
+            window.addEventListener(
+                "resize",
+                update,
+                {
+                    passive: true
+                }
+            );
+
+
+            window.addEventListener(
+                "orientationchange",
+                () => {
+
+                    setTimeout(
+                        update,
+                        120
+                    );
+                }
+            );
+
+
+            update();
+        }
+
+
+
+        /* =====================================================
+           READY
+        ===================================================== */
+
+        dispatchReady() {
+
+            setTimeout(
+                () => {
+
+                    window.dispatchEvent(
+                        new CustomEvent(
+                            "pyt:app-ready"
+                        )
+                    );
+
+                },
+                0
+            );
+        }
     }
 
 
 
     /* =========================================================
-       OUTILS DOM
+       EXPORT
     ========================================================= */
-
-    showElement(
-        id
-    ) {
-
-        document
-            .getElementById(
-                id
-            )
-            ?.classList
-            .remove(
-                "hidden"
-            );
-    }
-
-
-
-    hideElement(
-        id
-    ) {
-
-        document
-            .getElementById(
-                id
-            )
-            ?.classList
-            .add(
-                "hidden"
-            );
-    }
-
-
-
-    clamp(
-        value,
-        min,
-        max
-    ) {
-
-        return Math.max(
-            min,
-            Math.min(
-                max,
-                value
-            )
-        );
-    }
-
-}
-
-
-
-/* =========================================================
-   DÉMARRAGE
-========================================================= */
-
-function startPytApplication() {
-
-    if (
-        window.pytApp
-    ) {
-
-        return;
-    }
-
 
     window.PytApplication =
         PytApplication;
 
 
-    window.pytApp =
-        new PytApplication();
-}
+
+    const start =
+        () => {
+
+            if (
+                window.pytApp
+            ) {
+
+                return;
+            }
 
 
+            window.pytApp =
+                new PytApplication();
+        };
 
-if (
-    document.readyState ===
-    "loading"
-) {
 
-    document.addEventListener(
-        "DOMContentLoaded",
-        startPytApplication,
-        {
-            once: true
-        }
-    );
+    if (
+        document.readyState ===
+        "loading"
+    ) {
 
-} else {
+        document.addEventListener(
+            "DOMContentLoaded",
+            start,
+            {
+                once: true
+            }
+        );
 
-    startPytApplication();
-}
+    } else {
+
+        start();
+    }
+
+})();

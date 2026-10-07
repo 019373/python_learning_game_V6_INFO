@@ -2,7 +2,6 @@
 <html lang="fr">
 
 <head>
-
     <meta charset="UTF-8">
 
     <meta
@@ -11,8 +10,8 @@
     >
 
     <meta
-        name="description"
-        content="PYT, un jeu pour apprendre Python en guidant un petit robot."
+        name="theme-color"
+        content="#11111d"
     >
 
     <title>PYT</title>
@@ -21,25 +20,24 @@
         rel="stylesheet"
         href="style.css"
     >
-
 </head>
 
 
 <body>
 
-    <!-- ===================================================
+
+    <!-- ======================================================
          INTRO
-    ==================================================== -->
+    ======================================================= -->
 
     <section
         id="intro-screen"
         class="screen intro-screen"
-        aria-label="Introduction"
     >
 
         <button
             id="skip-intro-button"
-            class="skip-intro-button hidden"
+            class="intro-skip hidden"
             type="button"
         >
             Passer
@@ -49,40 +47,48 @@
         <div
             id="intro-scene"
             class="intro-scene"
+            aria-label="PYT"
         >
 
-            <div class="intro-title">
+            <div
+                class="intro-letter intro-letter-p"
+            >
+                P
+            </div>
 
-                <span
-                    class="intro-letter intro-letter-p"
-                    aria-hidden="true"
-                >
-                    P
-                </span>
 
+            <div
+                class="intro-robot-wrapper"
+            >
 
                 <div
-                    class="intro-pyt"
-                    aria-label="Pyt"
+                    class="pyt-robot intro-pyt"
+                    aria-hidden="true"
                 >
 
-                    <div class="intro-pyt-antenna">
-
-                        <div class="intro-pyt-antenna-light"></div>
-
+                    <div
+                        class="pyt-antenna"
+                    >
+                        <div
+                            class="pyt-antenna-light"
+                        ></div>
                     </div>
 
 
-                    <div class="intro-pyt-head">
+                    <div
+                        class="pyt-head"
+                    >
 
-                        <div class="intro-pyt-face">
+                        <div
+                            class="pyt-face"
+                        >
 
                             <div
-                                class="intro-pyt-eye intro-pyt-eye-left"
+                                class="pyt-eye pyt-eye-left"
                             ></div>
 
                             <div
-                                class="intro-pyt-eye intro-pyt-eye-right"
+                                class="pyt-eye pyt-eye-right"
                             ></div>
 
                         </div>
@@ -90,122 +96,124 @@
                     </div>
 
 
-                    <div class="intro-pyt-body">
+                    <div
+                        class="pyt-neck"
+                    ></div>
+
+
+                    <div
+                        class="pyt-body"
+                    >
 
                         <div
-                            class="intro-pyt-arm intro-pyt-arm-left"
+                            class="pyt-core"
                         ></div>
-
-                        <div
-                            class="intro-pyt-arm intro-pyt-arm-right"
-                        ></div>
-
-                        <div class="intro-pyt-chest"></div>
 
                     </div>
 
 
-                    <div class="intro-pyt-legs">
+                    <div
+                        class="pyt-arm pyt-arm-left"
+                    ></div>
 
-                        <div class="intro-pyt-leg"></div>
 
-                        <div class="intro-pyt-leg"></div>
+                    <div
+                        class="pyt-arm pyt-arm-right"
+                    ></div>
 
-                    </div>
+
+                    <div
+                        class="pyt-leg pyt-leg-left"
+                    ></div>
+
+
+                    <div
+                        class="pyt-leg pyt-leg-right"
+                    ></div>
 
                 </div>
-
-
-                <span
-                    class="intro-letter intro-letter-t"
-                    aria-hidden="true"
-                >
-                    T
-                </span>
 
             </div>
 
 
-            <p
-                id="intro-continue-message"
-                class="intro-continue-message hidden"
+            <div
+                class="intro-letter intro-letter-t"
             >
-                Appuyez sur une touche pour continuer
-            </p>
+                T
+            </div>
 
+        </div>
+
+
+        <div
+            id="intro-continue-message"
+            class="intro-continue-message hidden"
+        >
+            Appuyez sur une touche pour continuer
         </div>
 
     </section>
 
 
 
-    <!-- ===================================================
-         MENU PRINCIPAL
-    ==================================================== -->
+    <!-- ======================================================
+         ANCIEN MENU
+         Conservé uniquement pour compatibilité JS.
+         Il n'est plus affiché dans le parcours normal.
+    ======================================================= -->
 
-    <main
+    <section
         id="main-menu"
-        class="screen main-menu hidden"
+        class="screen hidden"
     >
 
-        <div class="main-menu-card">
+        <button
+            id="play-button"
+            type="button"
+        >
+            Jouer
+        </button>
 
-            <div class="main-menu-logo">
+        <button
+            id="settings-button"
+            type="button"
+        >
+            Paramètres
+        </button>
 
-                <h1>PYT</h1>
-
-                <p>
-                    Apprends Python en guidant Pyt dans sa maison.
-                </p>
-
-            </div>
-
-
-            <div class="main-menu-actions">
-
-                <button
-                    id="play-button"
-                    class="primary-button main-menu-button"
-                    type="button"
-                >
-                    Jouer
-                </button>
-
-
-                <button
-                    id="settings-button"
-                    class="secondary-button main-menu-button"
-                    type="button"
-                >
-                    Paramètres
-                </button>
-
-            </div>
-
-        </div>
-
-    </main>
+    </section>
 
 
 
-    <!-- ===================================================
+    <!-- ======================================================
          PARAMÈTRES
-    ==================================================== -->
+    ======================================================= -->
 
     <section
         id="settings-screen"
         class="screen settings-screen hidden"
     >
 
-        <div class="settings-card">
+        <div
+            class="settings-background-decoration"
+        ></div>
 
-            <header class="settings-header">
+
+        <div
+            class="settings-card pixel-panel"
+        >
+
+            <header
+                class="settings-header"
+            >
 
                 <div>
 
-                    <span class="screen-label">
-                        PYT
-                    </span>
+                    <p
+                        class="screen-kicker"
+                    >
+                        CONFIGURATION
+                    </p>
 
                     <h1>
                         Paramètres
@@ -213,27 +221,43 @@
 
                 </div>
 
+
+                <button
+                    id="settings-back-button"
+                    class="pixel-icon-button"
+                    type="button"
+                    aria-label="Retour"
+                >
+                    ×
+                </button>
+
             </header>
 
 
-            <div class="settings-content">
+            <div
+                class="settings-section"
+            >
 
-                <div class="setting-row">
+                <div
+                    class="settings-row"
+                >
 
-                    <div class="setting-description">
+                    <div>
 
-                        <strong>
+                        <h2>
                             Musique
-                        </strong>
+                        </h2>
 
-                        <span>
-                            Activer ou désactiver la musique du jeu.
-                        </span>
+                        <p>
+                            Musique d'ambiance du jeu.
+                        </p>
 
                     </div>
 
 
-                    <label class="switch">
+                    <label
+                        class="pixel-switch"
+                    >
 
                         <input
                             id="music-enabled"
@@ -241,69 +265,90 @@
                             checked
                         >
 
-                        <span class="switch-slider"></span>
+                        <span
+                            class="pixel-switch-track"
+                        >
+
+                            <span
+                                class="pixel-switch-handle"
+                            ></span>
+
+                        </span>
 
                     </label>
 
                 </div>
 
 
-                <div class="setting-row setting-volume">
+                <div
+                    class="settings-volume"
+                >
 
-                    <div class="setting-description">
-
-                        <strong>
-                            Volume
-                        </strong>
+                    <div
+                        class="settings-volume-header"
+                    >
 
                         <span>
-                            Volume général de la musique.
+                            Volume
                         </span>
 
-                    </div>
-
-
-                    <div class="volume-control">
-
-                        <input
-                            id="volume-slider"
-                            type="range"
-                            min="0"
-                            max="100"
-                            value="50"
+                        <strong
+                            id="volume-value"
                         >
-
-                        <span id="volume-value">
                             50%
-                        </span>
+                        </strong>
 
                     </div>
 
-                </div>
 
-
-                <div class="settings-actions">
-
-                    <button
-                        id="credits-button"
-                        class="secondary-button"
-                        type="button"
+                    <input
+                        id="volume-slider"
+                        class="pixel-range"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="50"
                     >
-                        Crédits
-                    </button>
-
-
-                    <button
-                        id="settings-back-button"
-                        class="primary-button"
-                        type="button"
-                    >
-                        Retour
-                    </button>
 
                 </div>
 
             </div>
+
+
+            <div
+                class="settings-section settings-coming"
+            >
+
+                <div>
+
+                    <h2>
+                        Bruitages
+                    </h2>
+
+                    <p>
+                        Les bruitages de Pyt seront ajoutés plus tard.
+                    </p>
+
+                </div>
+
+
+                <span
+                    class="coming-badge"
+                >
+                    BIENTÔT
+                </span>
+
+            </div>
+
+
+            <button
+                id="credits-button"
+                class="pixel-button pixel-button-secondary settings-credits-button"
+                type="button"
+            >
+                Voir les crédits
+            </button>
 
         </div>
 
@@ -311,18 +356,23 @@
 
 
 
-    <!-- ===================================================
+    <!-- ======================================================
          CRÉDITS
-    ==================================================== -->
+    ======================================================= -->
 
     <section
         id="credits-screen"
         class="screen credits-screen hidden"
     >
 
+        <div
+            class="credits-stars"
+        ></div>
+
+
         <button
             id="close-credits-button"
-            class="close-button credits-close-button"
+            class="credits-close-button"
             type="button"
             aria-label="Fermer les crédits"
         >
@@ -330,104 +380,147 @@
         </button>
 
 
-        <div class="credits-space">
+        <div
+            class="credits-perspective"
+        >
 
             <div
                 id="credits-scroll"
                 class="credits-scroll"
             >
 
-                <h1>
-                    PYT
-                </h1>
+                <!--
+                    PAS DE PYT AU DÉBUT.
+                -->
 
 
-                <section class="credits-section">
+                <div
+                    class="credits-block"
+                >
 
-                    <h2>
-                        Son
-                    </h2>
+                    <div
+                        class="credits-role"
+                    >
+                        SON
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Jean Noah
-                    </p>
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Tom Kahle
-                    </p>
+                    </div>
 
-                </section>
+                </div>
 
 
-                <section class="credits-section">
+                <div
+                    class="credits-block"
+                >
 
-                    <h2>
-                        Graphisme
-                    </h2>
+                    <div
+                        class="credits-role"
+                    >
+                        GRAPHISME
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Noah Jean
-                    </p>
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Tom Kahle
-                    </p>
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Zéphyr Thomas
-                    </p>
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Adrian Thiébaud
-                    </p>
+                    </div>
 
-                </section>
+                </div>
 
 
-                <section class="credits-section">
+                <div
+                    class="credits-block"
+                >
 
-                    <h2>
-                        Moteur du jeu
-                    </h2>
+                    <div
+                        class="credits-role"
+                    >
+                        MOTEUR DU JEU
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Adrian Thiébaud
-                    </p>
+                    </div>
 
-                    <p>
+                    <div
+                        class="credits-name"
+                    >
                         Zéphyr Thomas
-                    </p>
+                    </div>
 
-                </section>
+                </div>
 
 
-                <section class="credits-section credits-thanks">
+                <div
+                    class="credits-block credits-thanks"
+                >
 
-                    <h2>
-                        Remerciements
-                    </h2>
+                    <div
+                        class="credits-role"
+                    >
+                        REMERCIEMENTS
+                    </div>
 
                     <p>
-                        Nos plus solennels remerciements à toutes les
-                        personnes ayant participé à la création de PYT.
-                    </p>
-
-                    <p>
-                        Merci aux enseignants qui ont accompagné le projet,
-                        donné leurs conseils et rendu son développement
-                        possible.
+                        Merci aux élèves ayant testé le jeu.
                     </p>
 
                     <p>
-                        Merci également à toutes les personnes qui ont testé,
-                        corrigé, conseillé ou simplement permis au projet
-                        d’avancer.
+                        Merci aux enseignants et aux personnes
+                        qui ont rendu le projet possible.
                     </p>
 
-                </section>
+                    <p>
+                        Merci au Collège Voltaire.
+                    </p>
+
+                </div>
 
 
-                <div class="credits-final-title">
+                <div
+                    class="credits-spacer"
+                ></div>
+
+
+                <!--
+                    IMPORTANT :
+                    div et non h1, car l'ancien app.js
+                    cache volontairement le premier h1.
+                -->
+
+                <div
+                    class="credits-final-title"
+                >
                     PYT
                 </div>
 
@@ -439,67 +532,81 @@
 
 
 
-    <!-- ===================================================
-         INTERFACE DU JEU
-    ==================================================== -->
+    <!-- ======================================================
+         INTERFACE PRINCIPALE
+    ======================================================= -->
 
-    <section
+    <main
         id="game-interface"
         class="game-interface hidden"
     >
 
-        <!-- ===============================================
-             BARRE SUPÉRIEURE
-        ================================================ -->
 
-        <header class="game-topbar">
+        <!-- ==================================================
+             TOPBAR
+        =================================================== -->
 
-            <div class="game-topbar-left">
+        <header
+            class="game-topbar"
+        >
+
+            <div
+                class="topbar-left"
+            >
 
                 <button
                     id="menu-button"
-                    class="topbar-button"
+                    class="topbar-logo-button"
                     type="button"
+                    aria-label="Retour à la maison"
                 >
-                    Menu
+                    PYT
                 </button>
 
 
                 <div
-                    id="chapter-badge"
-                    class="chapter-badge"
+                    class="topbar-status-group"
                 >
-                    Chapitre 1
-                </div>
+
+                    <span
+                        id="chapter-badge"
+                        class="topbar-badge topbar-badge-chapter"
+                    >
+                        Chapitre 1
+                    </span>
 
 
-                <div
-                    id="difficulty-badge"
-                    class="difficulty-badge"
-                >
-                    Facile
+                    <span
+                        id="difficulty-badge"
+                        class="topbar-badge"
+                    >
+                        Exercice 1
+                    </span>
+
+
+                    <span
+                        id="room-name"
+                        class="topbar-room"
+                    >
+                        Entrée
+                    </span>
+
                 </div>
 
             </div>
 
 
-            <div class="game-topbar-center">
-
-                <strong id="room-name">
-                    Entrée
-                </strong>
-
-            </div>
-
-
-            <div class="game-topbar-right">
+            <nav
+                class="topbar-actions"
+                aria-label="Navigation du jeu"
+            >
 
                 <button
                     id="course-button"
                     class="topbar-button"
                     type="button"
                 >
-                    Cours
+                    Théorie
                 </button>
 
 
@@ -508,72 +615,127 @@
                     class="topbar-button"
                     type="button"
                 >
-                    Carte
+                    Pièce
                 </button>
 
 
                 <button
                     id="game-settings-button"
-                    class="topbar-button"
+                    class="topbar-button topbar-button-icon"
                     type="button"
+                    aria-label="Paramètres"
                 >
-                    Paramètres
+                    ⚙
                 </button>
 
-            </div>
+            </nav>
 
         </header>
 
 
 
-        <!-- ===============================================
-             COURS
-        ================================================ -->
+        <!-- ==================================================
+             THÉORIE
+        =================================================== -->
 
         <section
             id="chapter-screen"
-            class="game-subscreen chapter-screen hidden"
+            class="game-subscreen theory-screen hidden"
         >
 
-            <article class="course-card">
+            <div
+                class="theory-scene-background"
+            >
 
-                <header class="course-header">
+                <div
+                    class="theory-window-glow"
+                ></div>
 
-                    <span
+                <div
+                    class="theory-plant theory-plant-left"
+                ></div>
+
+                <div
+                    class="theory-plant theory-plant-right"
+                ></div>
+
+            </div>
+
+
+            <article
+                class="theory-book pixel-panel"
+            >
+
+                <header
+                    class="theory-header"
+                >
+
+                    <p
                         id="course-chapter-number"
-                        class="screen-label"
+                        class="theory-chapter-number"
                     >
                         Chapitre 1
-                    </span>
+                    </p>
 
 
-                    <h1 id="course-title">
-                        Premiers déplacements
+                    <h1
+                        id="course-title"
+                    >
+                        Premiers pas
                     </h1>
 
 
-                    <p id="course-subtitle"></p>
+                    <p
+                        id="course-subtitle"
+                        class="theory-subtitle"
+                    >
+                        Déplacer Pyt dans la maison
+                    </p>
 
                 </header>
 
 
                 <div
-                    id="course-content"
-                    class="course-content"
+                    class="theory-divider"
                 ></div>
 
 
-                <div class="course-footer">
+                <div
+                    id="course-content"
+                    class="theory-content"
+                ></div>
+
+
+                <footer
+                    class="theory-footer"
+                >
+
+                    <div
+                        class="theory-tip"
+                    >
+
+                        <span
+                            class="theory-tip-icon"
+                        >
+                            !
+                        </span>
+
+                        <span>
+                            Lis la théorie avant de commencer l'exercice.
+                        </span>
+
+                    </div>
+
 
                     <button
                         id="course-map-button"
-                        class="primary-button"
+                        class="pixel-button pixel-button-primary"
                         type="button"
                     >
-                        Voir la carte
+                        Continuer vers les exercices
                     </button>
 
-                </div>
+                </footer>
 
             </article>
 
@@ -581,13 +743,13 @@
 
 
 
-        <!-- ===============================================
+        <!-- ==================================================
              CARTE
-        ================================================ -->
+        =================================================== -->
 
         <section
             id="map-screen"
-            class="game-subscreen map-screen hidden"
+            class="game-subscreen map-screen"
         >
 
             <div
@@ -595,142 +757,211 @@
                 class="map-background"
             >
 
-                <!--
-                    ui.js insère ici le canvas de la maison.
-
-                    Aucun PNG.
-                -->
                 <div
                     id="map-decoration"
                     class="map-decoration"
-                    aria-hidden="true"
                 ></div>
 
 
-                <div class="map-overlay">
+                <header
+                    class="map-header"
+                >
 
-                    <header class="map-header">
+                    <div
+                        class="map-title-container"
+                    >
 
-                        <div>
-
-                            <span class="screen-label">
-                                Maison de Pyt
-                            </span>
-
-                            <h1 id="map-title">
-                                Chapitre 1
-                            </h1>
-
-                            <p id="map-subtitle">
-                                Clique sur un exercice pour le lancer.
-                            </p>
-
-                        </div>
-
-
-                        <button
-                            id="map-course-button"
-                            class="secondary-button"
-                            type="button"
+                        <p
+                            class="map-kicker"
                         >
-                            Voir le cours
-                        </button>
-
-                    </header>
+                            CARTE
+                        </p>
 
 
-                    <div class="map-levels">
-
-                        <div class="map-path map-path-1"></div>
-
-                        <div class="map-path map-path-2"></div>
-
-
-                        <button
-                            id="level-node-1"
-                            class="level-node"
-                            type="button"
+                        <h1
+                            id="map-title"
                         >
-
-                            <span class="level-node-number">
-                                1
-                            </span>
-
-                            <span class="level-node-state">
-                                Exercice
-                            </span>
-
-                        </button>
+                            Maison de Pyt
+                        </h1>
 
 
-                        <button
-                            id="level-node-2"
-                            class="level-node locked"
-                            type="button"
-                            disabled
+                        <p
+                            id="map-subtitle"
                         >
-
-                            <span class="level-node-number">
-                                2
-                            </span>
-
-                            <span class="level-node-state">
-                                Verrouillé
-                            </span>
-
-                        </button>
-
-
-                        <button
-                            id="level-node-3"
-                            class="level-node locked"
-                            type="button"
-                            disabled
-                        >
-
-                            <span class="level-node-number">
-                                3
-                            </span>
-
-                            <span class="level-node-state">
-                                Verrouillé
-                            </span>
-
-                        </button>
+                            Choisis un chapitre dans la maison.
+                        </p>
 
                     </div>
 
 
-                    <footer class="map-navigation">
+                    <button
+                        id="map-course-button"
+                        class="pixel-button map-course-button hidden"
+                        type="button"
+                    >
+                        Revoir la théorie
+                    </button>
 
-                        <button
-                            id="previous-chapter-button"
-                            class="secondary-button"
-                            type="button"
-                            disabled
-                        >
-                            ← Chapitre précédent
-                        </button>
+                </header>
+
+
+
+                <!-- ==========================================
+                     EXERCICES
+                =========================================== -->
+
+                <div
+                    class="map-levels hidden"
+                    aria-label="Exercices du chapitre"
+                >
+
+                    <button
+                        id="level-node-1"
+                        class="level-node"
+                        type="button"
+                    >
+
+                        <span
+                            class="level-node-glow"
+                        ></span>
 
 
                         <span
-                            id="map-chapter-indicator"
-                            class="map-chapter-indicator"
+                            class="level-node-top"
                         >
-                            1 / 9
+                            EXERCICE
                         </span>
 
 
-                        <button
-                            id="next-chapter-button"
-                            class="secondary-button"
-                            type="button"
-                            disabled
+                        <span
+                            class="level-node-number"
                         >
-                            Chapitre suivant →
-                        </button>
+                            1
+                        </span>
 
-                    </footer>
+
+                        <span
+                            class="level-node-state"
+                        >
+                            Exercice 1
+                        </span>
+
+                    </button>
+
+
+                    <div
+                        class="level-path level-path-1"
+                    ></div>
+
+
+                    <button
+                        id="level-node-2"
+                        class="level-node locked"
+                        type="button"
+                    >
+
+                        <span
+                            class="level-node-glow"
+                        ></span>
+
+
+                        <span
+                            class="level-node-top"
+                        >
+                            EXERCICE
+                        </span>
+
+
+                        <span
+                            class="level-node-number"
+                        >
+                            2
+                        </span>
+
+
+                        <span
+                            class="level-node-state"
+                        >
+                            Verrouillé
+                        </span>
+
+                    </button>
+
+
+                    <div
+                        class="level-path level-path-2"
+                    ></div>
+
+
+                    <button
+                        id="level-node-3"
+                        class="level-node locked"
+                        type="button"
+                    >
+
+                        <span
+                            class="level-node-glow"
+                        ></span>
+
+
+                        <span
+                            class="level-node-top"
+                        >
+                            EXERCICE
+                        </span>
+
+
+                        <span
+                            class="level-node-number"
+                        >
+                            3
+                        </span>
+
+
+                        <span
+                            class="level-node-state"
+                        >
+                            Verrouillé
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+
+                <!-- ==========================================
+                     NAVIGATION CHAPITRE
+                =========================================== -->
+
+                <div
+                    class="map-navigation hidden"
+                >
+
+                    <button
+                        id="previous-chapter-button"
+                        class="map-navigation-button"
+                        type="button"
+                    >
+                        ← Maison
+                    </button>
+
+
+                    <span
+                        id="map-chapter-indicator"
+                        class="map-navigation-indicator"
+                    >
+                        1 / 9
+                    </span>
+
+
+                    <button
+                        id="next-chapter-button"
+                        class="map-navigation-button"
+                        type="button"
+                    >
+                        Chapitre suivant →
+                    </button>
 
                 </div>
 
@@ -740,33 +971,49 @@
 
 
 
-        <!-- ===============================================
-             EXERCICE
-        ================================================ -->
+        <!-- ==================================================
+             JEU
+        =================================================== -->
 
         <section
             id="game-screen"
-            class="game-subscreen game-screen"
+            class="game-subscreen game-screen hidden"
         >
 
-            <div class="game-world-panel">
+            <div
+                class="game-room-shell"
+            >
 
-                <div class="game-world-header">
+                <div
+                    class="game-room-header"
+                >
 
-                    <span id="game-status">
+                    <span
+                        class="game-room-label"
+                    >
+                        MISSION
+                    </span>
+
+
+                    <span
+                        id="game-status"
+                        class="game-status"
+                    >
                         Prêt
                     </span>
 
                 </div>
 
 
-                <div class="game-canvas-container">
+                <div
+                    class="game-canvas-wrapper"
+                >
 
                     <canvas
                         id="game-canvas"
                         width="960"
                         height="640"
-                        aria-label="Zone de jeu"
+                        aria-label="Zone de jeu de Pyt"
                     ></canvas>
 
 
@@ -782,41 +1029,82 @@
             </div>
 
 
-            <aside class="mission-panel">
+            <aside
+                class="mission-panel pixel-panel"
+            >
 
-                <div>
+                <div
+                    class="mission-panel-top"
+                >
 
-                    <span class="screen-label">
-                        Mission
-                    </span>
+                    <p
+                        class="mission-kicker"
+                    >
+                        OBJECTIF
+                    </p>
 
 
-                    <h1 id="mission-title">
+                    <h1
+                        id="mission-title"
+                    >
                         Exercice
                     </h1>
 
 
-                    <p id="mission-instruction">
+                    <p
+                        id="mission-instruction"
+                        class="mission-instruction"
+                    >
                         Aide Pyt à terminer sa mission.
                     </p>
 
                 </div>
 
 
-                <div class="mission-actions">
+                <div
+                    class="mission-divider"
+                ></div>
+
+
+                <div
+                    class="mission-grid-help"
+                >
+
+                    <span
+                        class="mission-grid-icon"
+                    >
+
+                        <i></i>
+                        <i></i>
+                        <i></i>
+                        <i></i>
+
+                    </span>
+
+
+                    <span>
+                        Une case = un déplacement.
+                    </span>
+
+                </div>
+
+
+                <div
+                    class="mission-actions"
+                >
 
                     <button
                         id="open-code-button"
-                        class="primary-button"
+                        class="pixel-button pixel-button-primary"
                         type="button"
                     >
-                        Programmer
+                        Ouvrir le code
                     </button>
 
 
                     <button
                         id="restart-button"
-                        class="secondary-button"
+                        class="pixel-button pixel-button-secondary"
                         type="button"
                     >
                         Recommencer
@@ -828,13 +1116,13 @@
 
         </section>
 
-    </section>
+    </main>
 
 
 
-    <!-- ===================================================
-         FENÊTRE DE CODE
-    ==================================================== -->
+    <!-- ======================================================
+         FENÊTRE CODE
+    ======================================================= -->
 
     <section
         id="code-window"
@@ -847,24 +1135,37 @@
             class="code-window-header"
         >
 
-            <div>
+            <div
+                class="code-window-title"
+            >
 
-                <span class="code-window-dot"></span>
+                <span
+                    class="code-window-dots"
+                >
 
-                <strong>
-                    Python
-                </strong>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+
+                </span>
+
+
+                <span>
+                    programme.py
+                </span>
 
             </div>
 
 
-            <div class="code-window-header-actions">
+            <div
+                class="code-window-header-actions"
+            >
 
                 <button
                     id="code-restart-button"
                     class="code-header-button"
                     type="button"
-                    title="Recommencer le niveau"
+                    title="Recommencer l'exercice"
                 >
                     ↻
                 </button>
@@ -884,54 +1185,83 @@
         </header>
 
 
-        <div class="code-editor-wrapper">
+        <div
+            class="code-editor-shell"
+        >
 
-            <pre
-                id="code-error-highlights"
-                class="code-error-highlights"
+            <div
+                class="code-gutter"
                 aria-hidden="true"
-            ></pre>
+            >
+                PY
+            </div>
 
 
-            <textarea
-                id="code-editor"
-                class="code-editor"
-                spellcheck="false"
-                autocomplete="off"
-                autocorrect="off"
-                autocapitalize="off"
-                aria-label="Code Python"
-            ></textarea>
+            <div
+                class="code-editor-stack"
+            >
+
+                <pre
+                    id="code-error-highlights"
+                    class="code-error-highlights"
+                    aria-hidden="true"
+                ></pre>
+
+
+                <textarea
+                    id="code-editor"
+                    class="code-editor"
+                    spellcheck="false"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    aria-label="Code Python"
+                    placeholder="# Écris ton programme ici..."
+                ></textarea>
+
+            </div>
 
         </div>
 
 
-        <div class="code-actions">
+        <div
+            class="code-toolbar"
+        >
 
             <button
                 id="clear-code-button"
-                class="secondary-button"
+                class="code-toolbar-button"
                 type="button"
             >
                 Effacer
             </button>
 
 
+            <span
+                class="code-shortcut"
+            >
+                Ctrl + Entrée
+            </span>
+
+
             <button
                 id="run-code-button"
-                class="primary-button"
+                class="code-run-button"
                 type="button"
             >
-                Exécuter
+                ▶ Exécuter
             </button>
 
         </div>
 
 
-        <div class="console-panel">
+        <div
+            class="console-panel"
+        >
 
-            <div class="console-title">
-                Console
+            <div
+                class="console-header"
+            >
+                CONSOLE
             </div>
 
 
@@ -946,74 +1276,139 @@
 
 
 
-    <!-- ===================================================
-         GUIDE PYT
-    ==================================================== -->
+    <!-- ======================================================
+         GUIDE DE PYT
+    ======================================================= -->
 
-    <section
+    <aside
         id="pyt-guide"
         class="pyt-guide hidden"
-        aria-live="polite"
     >
 
-        <div class="pyt-guide-robot">
+        <div
+            class="guide-robot-zone"
+        >
 
-            <div class="guide-pyt-antenna">
+            <div
+                class="pyt-robot guide-pyt"
+                aria-hidden="true"
+            >
 
-                <div class="guide-pyt-antenna-light"></div>
+                <div
+                    class="pyt-antenna"
+                >
 
-            </div>
-
-
-            <div class="guide-pyt-head">
-
-                <div class="guide-pyt-face">
-
-                    <div class="guide-pyt-eye"></div>
-
-                    <div class="guide-pyt-eye"></div>
+                    <div
+                        class="pyt-antenna-light"
+                    ></div>
 
                 </div>
 
+
+                <div
+                    class="pyt-head"
+                >
+
+                    <div
+                        class="pyt-face"
+                    >
+
+                        <div
+                            class="pyt-eye pyt-eye-left"
+                        ></div>
+
+                        <div
+                            class="pyt-eye pyt-eye-right"
+                        ></div>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    class="pyt-neck"
+                ></div>
+
+
+                <div
+                    class="pyt-body"
+                >
+
+                    <div
+                        class="pyt-core"
+                    ></div>
+
+                </div>
+
+
+                <div
+                    class="pyt-arm pyt-arm-left"
+                ></div>
+
+
+                <div
+                    class="pyt-arm pyt-arm-right"
+                ></div>
+
+
+                <div
+                    class="pyt-leg pyt-leg-left"
+                ></div>
+
+
+                <div
+                    class="pyt-leg pyt-leg-right"
+                ></div>
+
             </div>
-
-
-            <div class="guide-pyt-body"></div>
 
         </div>
 
 
-        <div class="pyt-guide-bubble">
+        <div
+            class="guide-dialogue"
+        >
 
             <button
                 id="close-pyt-guide-button"
-                class="pyt-guide-close"
+                class="guide-close-button"
                 type="button"
-                aria-label="Fermer le message de Pyt"
+                aria-label="Fermer"
             >
                 ×
             </button>
 
 
-            <p id="pyt-guide-message">
+            <div
+                class="guide-name"
+            >
+                PYT
+            </div>
+
+
+            <p
+                id="pyt-guide-message"
+                class="guide-message"
+            >
                 Bonjour !
             </p>
 
 
             <div
                 id="pyt-guide-actions"
-                class="pyt-guide-actions"
+                class="guide-actions"
             ></div>
 
         </div>
 
-    </section>
+    </aside>
 
 
 
-    <!-- ===================================================
+    <!-- ======================================================
          MODALE
-    ==================================================== -->
+    ======================================================= -->
 
     <div
         id="modal-background"
@@ -1022,41 +1417,45 @@
 
         <section
             id="message-modal"
-            class="message-modal"
-            role="dialog"
-            aria-modal="true"
+            class="message-modal pixel-panel"
         >
 
-            <span
+            <div
                 id="modal-label"
-                class="screen-label"
+                class="modal-label"
             >
                 PYT
-            </span>
+            </div>
 
 
-            <h2 id="modal-title">
+            <h1
+                id="modal-title"
+            >
                 Information
-            </h2>
+            </h1>
 
 
-            <p id="modal-message"></p>
+            <p
+                id="modal-message"
+            ></p>
 
 
-            <div class="modal-actions">
+            <div
+                class="modal-actions"
+            >
 
                 <button
                     id="modal-secondary-button"
-                    class="secondary-button hidden"
+                    class="pixel-button pixel-button-secondary hidden"
                     type="button"
                 >
-                    Annuler
+                    Retour
                 </button>
 
 
                 <button
                     id="modal-primary-button"
-                    class="primary-button"
+                    class="pixel-button pixel-button-primary"
                     type="button"
                 >
                     Continuer
@@ -1070,12 +1469,10 @@
 
 
 
-    <!-- ===================================================
+    <!-- ======================================================
          AUDIO
-
-         Les fichiers audio seront ajoutés après.
-         Le jeu ne doit pas planter s'ils sont absents.
-    ==================================================== -->
+         Aucun fichier obligatoire pour l'instant.
+    ======================================================= -->
 
     <audio
         id="music-audio"
@@ -1092,11 +1489,9 @@
 
 
 
-    <!-- ===================================================
-         JAVASCRIPT
-
-         ORDRE IMPORTANT
-    ==================================================== -->
+    <!-- ======================================================
+         SCRIPTS
+    ======================================================= -->
 
     <script src="levels.js"></script>
 
