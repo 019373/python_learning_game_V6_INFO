@@ -1,2182 +1,729 @@
 "use strict";
 
 /* =========================================================
-   PYT - ui.js
-   Interface, carte, cours, guide Pyt et rendu du jeu.
+   PYT
+   ui.js
+
+   Interface générale :
+   - carte de la maison dessinée en code
+   - progression
+   - chapitres
+   - niveaux
+   - cours
+   - aide de Pyt
+   - gestion des erreurs
+   - retour au cours sans perdre le code
 ========================================================= */
+
 
 class PytUI {
 
     constructor() {
-        this.game = null;
-        this.level = null;
 
-        this.currentChapter = 1;
-        this.currentExercise = 1;
+        this.progress = {
+            completed: {}
+        };
 
-        this.completedLevels =
-            new Set();
+        this.currentLevelData = null;
 
-        this.unlockedLevels =
-            new Set([
-                "1-1"
-            ]);
+        this.loadedLevelKey = null;
 
-        this.seenCourses =
-            new Set();
+        this.failureCounts = {};
 
-        this.attempts = {};
+        this.reviewMode = false;
 
-        this.actionDelay = 500;
+        this.reviewContext = null;
 
-        this.onRunCode = null;
-        this.onRestart = null;
-        this.onSelectLevel = null;
+        this.firstMapHintShown = false;
 
-        this.savedCodeBeforeTheory = "";
-        this.returnToExerciseAfterTheory = false;
+        this.mapCanvas = null;
 
-        this.mapFirstVisit = true;
+        this.mapCtx = null;
 
-        this.guideAnimationTimer = null;
+        this.mapAnimationFrame = null;
 
-        this.cacheElements();
-        this.connectEvents();
-        this.setupCanvas();
-        this.setupCodeWindowDrag();
+        this.init();
     }
 
 
+
     /* =====================================================
-       ÉLÉMENTS
+       INITIALISATION
     ===================================================== */
 
-    cacheElements() {
-        this.gameInterface =
-            document.getElementById(
-                "game-interface"
-            );
+    init() {
 
-        this.gameScreen =
-            document.getElementById(
-                "game-screen"
-            );
+        this.loadProgress();
 
-        this.courseScreen =
-            document.getElementById(
-                "course-screen"
-            );
+        this.bindEvents();
 
-        this.mapScreen =
-            document.getElementById(
-                "map-screen"
-            );
+        this.prepareEditor();
 
+        this.prepareHouseMap();
 
-        this.chapterDisplay =
-            document.getElementById(
-                "chapter-display"
-            );
+        window.setTimeout(
+            () => {
 
-        this.difficultyDisplay =
-            document.getElementById(
-                "difficulty-display"
-            );
+                this.refresh();
 
-        this.roomName =
-            document.getElementById(
-                "room-name"
-            );
-
-        this.gameStatus =
-            document.getElementById(
-                "game-status"
-            );
-
-
-        this.courseButton =
-            document.getElementById(
-                "course-button"
-            );
-
-        this.mapButton =
-            document.getElementById(
-                "map-button"
-            );
-
-        this.openCodeButton =
-            document.getElementById(
-                "open-code-button"
-            );
-
-        this.restartButton =
-            document.getElementById(
-                "restart-button"
-            );
-
-
-        this.canvas =
-            document.getElementById(
-                "game-canvas"
-            );
-
-        this.context =
-            this.canvas
-                ?.getContext(
-                    "2d"
-                ) || null;
-
-
-        this.missionTitle =
-            document.getElementById(
-                "mission-title"
-            );
-
-        this.missionInstruction =
-            document.getElementById(
-                "mission-instruction"
-            );
-
-        this.missionCodeButton =
-            document.getElementById(
-                "mission-code-button"
-            );
-
-
-        this.thoughtBubble =
-            document.getElementById(
-                "thought-bubble"
-            );
-
-        this.thoughtText =
-            document.getElementById(
-                "thought-text"
-            );
-
-
-        /*
-        Cours
-        */
-
-        this.courseTitle =
-            document.getElementById(
-                "course-title"
-            );
-
-        this.courseContent =
-            document.getElementById(
-                "course-content"
-            );
-
-        this.courseMapButton =
-            document.getElementById(
-                "course-map-button"
-            );
-
-
-        /*
-        Carte
-        */
-
-        this.mapTitle =
-            document.getElementById(
-                "map-title"
-            );
-
-        this.mapSubtitle =
-            document.getElementById(
-                "map-subtitle"
-            );
-
-        this.mapRoom =
-            document.getElementById(
-                "map-room"
-            );
-
-        this.mapCourseButton =
-            document.getElementById(
-                "map-course-button"
-            );
-
-        this.previousChapterButton =
-            document.getElementById(
-                "previous-chapter-button"
-            );
-
-        this.nextChapterButton =
-            document.getElementById(
-                "next-chapter-button"
-            );
-
-        this.levelNodes =
-            Array.from(
-                document.querySelectorAll(
-                    "[data-level-exercise]"
-                )
-            );
-
-
-        /*
-        Éditeur
-        */
-
-        this.codeWindow =
-            document.getElementById(
-                "code-window"
-            );
-
-        this.codeWindowHeader =
-            document.getElementById(
-                "code-window-header"
-            );
-
-        this.closeCodeButton =
-            document.getElementById(
-                "close-code-button"
-            );
-
-        this.codeEditor =
-            document.getElementById(
-                "code-editor"
-            );
-
-        this.runCodeButton =
-            document.getElementById(
-                "run-code-button"
-            );
-
-        this.clearCodeButton =
-            document.getElementById(
-                "clear-code-button"
-            );
-
-        this.consoleOutput =
-            document.getElementById(
-                "console-output"
-            );
-
-        this.codeErrorHighlight =
-            document.getElementById(
-                "code-error-highlight"
-            );
-
-
-        /*
-        Guide Pyt
-        */
-
-        this.pytGuide =
-            document.getElementById(
-                "pyt-guide"
-            );
-
-        this.pytGuideText =
-            document.getElementById(
-                "pyt-guide-text"
-            );
-
-        this.closePytGuideButton =
-            document.getElementById(
-                "close-pyt-guide-button"
-            );
-
-
-        /*
-        Modal
-        */
-
-        this.modal =
-            document.getElementById(
-                "general-modal"
-            );
-
-        this.modalTitle =
-            document.getElementById(
-                "modal-title"
-            );
-
-        this.modalText =
-            document.getElementById(
-                "modal-text"
-            );
-
-        this.modalPrimaryButton =
-            document.getElementById(
-                "modal-primary-button"
-            );
-
-        this.modalSecondaryButton =
-            document.getElementById(
-                "modal-secondary-button"
-            );
+            },
+            0
+        );
     }
 
 
+
     /* =====================================================
-       ÉVÉNEMENTS
+       EVENTS
     ===================================================== */
 
-    connectEvents() {
+    bindEvents() {
 
-        this.courseButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.reviewTheory()
-            );
+        window.addEventListener(
+            "pyt:app-ready",
+            () => {
 
-
-        this.mapButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.showMap()
-            );
+                this.refresh();
+            }
+        );
 
 
-        this.openCodeButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.openCodeWindow()
-            );
+        window.addEventListener(
+            "pyt:map-open",
+            () => {
+
+                this.renderMap();
+
+                this.showFirstMapHint();
+            }
+        );
 
 
-        this.missionCodeButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.openCodeWindow()
-            );
+        window.addEventListener(
+            "pyt:course-open",
+            () => {
+
+                this.renderCourse();
+            }
+        );
 
 
-        this.closeCodeButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.closeCodeWindow()
-            );
+        window.addEventListener(
+            "pyt:chapter-change",
+            () => {
+
+                this.renderMap();
+
+                this.renderCourse();
+            }
+        );
 
 
-        this.restartButton
-            ?.addEventListener(
-                "click",
-                () => {
-                    if (
-                        typeof this.onRestart ===
-                        "function"
-                    ) {
-                        this.onRestart();
-                    }
-                }
-            );
+        window.addEventListener(
+            "pyt:chapter-request",
+            event => {
+
+                this.handleChapterRequest(
+                    event
+                );
+            }
+        );
 
 
-        this.clearCodeButton
-            ?.addEventListener(
-                "click",
-                () => {
-                    if (
-                        this.codeEditor
-                    ) {
-                        this.codeEditor.value =
-                            "";
-                    }
+        window.addEventListener(
+            "pyt:level-select",
+            event => {
 
-                    this.clearErrorHighlight();
-
-                    if (
-                        this.consoleOutput
-                    ) {
-                        this.consoleOutput.textContent =
-                            "";
-                    }
-
-                    this.codeEditor?.focus();
-                }
-            );
+                const detail =
+                    event.detail || {};
 
 
-        this.runCodeButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.requestRun()
-            );
+                this.loadLevel(
+                    detail.chapter,
+                    detail.level
+                );
+            }
+        );
 
 
-        this.courseMapButton
-            ?.addEventListener(
-                "click",
-                () => {
-                    if (
-                        this.returnToExerciseAfterTheory
-                    ) {
-                        this.returnToExerciseAfterTheory =
-                            false;
+        window.addEventListener(
+            "pyt:run-code",
+            () => {
 
-                        this.showGame();
-
-                        if (
-                            this.codeEditor
-                        ) {
-                            this.codeEditor.value =
-                                this.savedCodeBeforeTheory;
-                        }
-
-                        return;
-                    }
-
-                    this.showMap();
-                }
-            );
+                this.setExecuting(
+                    true
+                );
+            }
+        );
 
 
-        this.mapCourseButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.showCourse()
-            );
+        window.addEventListener(
+            "pyt:execution-result",
+            event => {
+
+                this.handleExecutionResult(
+                    event.detail || {}
+                );
+            }
+        );
 
 
-        this.previousChapterButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.changeMapChapter(
-                        -1
+        window.addEventListener(
+            "pyt:robot-thought",
+            event => {
+
+                window.pytApp?.showThought(
+                    event.detail?.message
+                );
+            }
+        );
+
+
+        window.addEventListener(
+            "pyt:code-error-line",
+            event => {
+
+                this.renderCodeError(
+                    Number(
+                        event.detail?.line
                     )
-            );
+                );
+            }
+        );
 
 
-        this.nextChapterButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.changeMapChapter(
-                        1
-                    )
-            );
+        window.addEventListener(
+            "pyt:restart-level",
+            () => {
 
-
-        for (
-            const node
-            of this.levelNodes
-        ) {
-            node.addEventListener(
-                "click",
-                () => {
-                    const exercise =
-                        Number(
-                            node.dataset
-                                .levelExercise
-                        );
-
-                    this.selectLevelFromMap(
-                        exercise
-                    );
-                }
-            );
-        }
-
-
-        this.codeEditor
-            ?.addEventListener(
-                "keydown",
-                event =>
-                    this.handleEditorKeydown(
-                        event
-                    )
-            );
-
-
-        /*
-        Nouveau :
-        la bulle de Pyt peut être fermée.
-        */
-
-        this.closePytGuideButton
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.hideGuide()
-            );
+                this.handleRestart();
+            }
+        );
 
 
         window.addEventListener(
             "resize",
             () => {
-                this.resizeCanvas();
-                this.render();
+
+                this.resizeHouseMap();
             }
         );
-    }
 
 
-    handleEditorKeydown(event) {
-        if (
-            event.key === "Tab"
-        ) {
-            event.preventDefault();
-
-            const editor =
-                this.codeEditor;
-
-            if (!editor) {
-                return;
-            }
-
-            const start =
-                editor.selectionStart;
-
-            const end =
-                editor.selectionEnd;
-
-            const value =
-                editor.value;
-
-            editor.value =
-                value.slice(
-                    0,
-                    start
-                ) +
-                "    " +
-                value.slice(
-                    end
-                );
-
-            editor.selectionStart =
-                start + 4;
-
-            editor.selectionEnd =
-                start + 4;
-
-            return;
-        }
-
-
-        if (
-            event.key === "Enter" &&
-            (
-                event.ctrlKey ||
-                event.metaKey
-            )
-        ) {
-            event.preventDefault();
-
-            this.requestRun();
-        }
-    }
-
-
-    requestRun() {
-        if (
-            typeof this.onRunCode !==
-            "function"
-        ) {
-            return;
-        }
-
-        this.clearErrorHighlight();
-
-        this.onRunCode(
-            this.codeEditor?.value ||
-            ""
-        );
-    }
-
-
-    /* =====================================================
-       GAME / LEVEL
-    ===================================================== */
-
-    setGame(game) {
-        this.game =
-            game;
-
-        this.render();
-    }
-
-
-    setLevel(level) {
-        this.level =
-            level;
-
-        this.currentChapter =
-            Number(
-                level?.chapter ||
-                1
-            );
-
-        this.currentExercise =
-            Number(
-                level?.exercise ||
-                1
+        const courseButton =
+            document.getElementById(
+                "course-map-button"
             );
 
 
-        this.refreshLevelInformation();
-
-
-        /*
-        setLevel() n'est appelé que lors d'un vrai
-        changement de niveau.
-
-        Le code de départ peut donc être chargé ici.
-        Un simple Run/Restart ne doit PAS rappeler
-        setLevel(), ce qui permet de conserver le
-        programme écrit par l'élève.
-        */
-
-        if (
-            this.codeEditor
-        ) {
-            this.codeEditor.value =
-                level?.starterCode ||
-                "";
-        }
-
-
-        if (
-            this.consoleOutput
-        ) {
-            this.consoleOutput.textContent =
-                "";
-        }
-
-
-        this.clearErrorHighlight();
-        this.hideThoughtBubble();
-
-        this.render();
-    }
-
-
-    refreshLevelInformation() {
-        if (!this.level) {
-            return;
-        }
-
-
-        if (
-            this.chapterDisplay
-        ) {
-            this.chapterDisplay.textContent =
-                `Chapitre ${this.currentChapter} · Exercice ${this.currentExercise}`;
-        }
-
-
-        if (
-            this.difficultyDisplay
-        ) {
-            this.difficultyDisplay.textContent =
-                this.translateDifficulty(
-                    this.level.difficulty
-                );
-        }
-
-
-        if (
-            this.roomName
-        ) {
-            this.roomName.textContent =
-                this.level.room ||
-                this.getRoomName(
-                    this.currentChapter
-                );
-        }
-
-
-        if (
-            this.missionTitle
-        ) {
-            this.missionTitle.textContent =
-                this.level.title ||
-                "Mission";
-        }
-
-
-        if (
-            this.missionInstruction
-        ) {
-            this.missionInstruction.textContent =
-                this.level.instruction ||
-                "";
-        }
-    }
-
-
-    translateDifficulty(
-        difficulty
-    ) {
-        const value =
-            String(
-                difficulty ||
-                ""
-            )
-                .trim()
-                .toLowerCase();
-
-        const names = {
-            easy: "Facile",
-            facile: "Facile",
-
-            medium: "Moyen",
-            moyen: "Moyen",
-
-            hard: "Difficile",
-            difficile: "Difficile"
-        };
-
-        return (
-            names[value] ||
-            difficulty ||
-            ""
-        );
-    }
-
-
-    getRoomName(chapter) {
-        const rooms = {
-            1: "Entrée",
-            2: "Cuisine",
-            3: "Salon",
-            4: "Bibliothèque",
-            5: "Salle de bain",
-            6: "Chambre",
-            7: "Atelier",
-            8: "Grenier",
-            9: "Laboratoire"
-        };
-
-        return (
-            rooms[chapter] ||
-            "Maison"
-        );
-    }
-
-
-    /* =====================================================
-       NAVIGATION
-    ===================================================== */
-
-    hideInternalScreens() {
-        this.gameScreen?.classList.add(
-            "hidden"
-        );
-
-        this.courseScreen?.classList.add(
-            "hidden"
-        );
-
-        this.mapScreen?.classList.add(
-            "hidden"
-        );
-    }
-
-
-    showGame() {
-        this.gameInterface?.classList.remove(
-            "hidden"
-        );
-
-        this.hideInternalScreens();
-
-        this.gameScreen?.classList.remove(
-            "hidden"
-        );
-
-        this.resizeCanvas();
-        this.render();
-    }
-
-
-    showMap() {
-        this.gameInterface?.classList.remove(
-            "hidden"
-        );
-
-        this.hideInternalScreens();
-
-        this.mapScreen?.classList.remove(
-            "hidden"
-        );
-
-        this.returnToExerciseAfterTheory =
-            false;
-
-        this.refreshMap();
-
-        this.mapFirstVisit =
-            false;
-    }
-
-
-    showCourse() {
-        this.gameInterface?.classList.remove(
-            "hidden"
-        );
-
-        this.hideInternalScreens();
-
-        this.courseScreen?.classList.remove(
-            "hidden"
-        );
-
-        this.refreshCourse();
-    }
-
-
-    showCourseAtChapterStart() {
-        const key =
-            String(
-                this.currentChapter
-            );
-
-        if (
-            this.seenCourses.has(key)
-        ) {
-            this.showGame();
-            return;
-        }
-
-        this.seenCourses.add(
-            key
-        );
-
-        this.returnToExerciseAfterTheory =
-            false;
-
-        this.showCourse();
-    }
-
-
-    reviewTheory() {
-        this.savedCodeBeforeTheory =
-            this.codeEditor?.value ||
-            "";
-
-        this.returnToExerciseAfterTheory =
-            true;
-
-        this.showCourse();
-    }
-
-
-    /* =====================================================
-       COURS
-    ===================================================== */
-
-    getCourseData(chapter) {
-        const courses = {
-
-            1: {
-                title:
-                    "Chapitre 1 — Déplacements",
-
-                text:
-                    "Pyt se déplace case par case. forward() le fait avancer, backward() le fait reculer. right(90) et left(90) permettent de changer sa direction.",
-
-                example:
-`forward(2)
-right(90)
-forward(1)`
-            },
-
-
-            2: {
-                title:
-                    "Chapitre 2 — Variables et calculs",
-
-                text:
-                    "Une variable permet de garder une valeur pour la réutiliser. Python peut aussi effectuer des calculs et convertir des valeurs avec int(), float() et str().",
-
-                example:
-`distance = 2
-bonus = 1
-total = distance + bonus
-
-forward(total)`
-            },
-
-
-            3: {
-                title:
-                    "Chapitre 3 — Conditions",
-
-                text:
-                    "Une condition permet de choisir quoi faire. if teste une situation. elif ajoute un autre cas et else traite le reste. On peut combiner des conditions avec and, or et not.",
-
-                example:
-`distance = 2
-
-if distance == 2:
-    forward(2)
-else:
-    forward(1)`
-            },
-
-
-            4: {
-                title:
-                    "Chapitre 4 — Boucles for",
-
-                text:
-                    "Une boucle for répète des instructions un nombre déterminé de fois. range() permet de créer une suite de nombres.",
-
-                example:
-`for i in range(3):
-    forward(1)`
-            },
-
-
-            5: {
-                title:
-                    "Chapitre 5 — Boucles while",
-
-                text:
-                    "Une boucle while continue tant que sa condition est vraie. break permet de quitter la boucle immédiatement.",
-
-                example:
-`distance = 0
-
-while distance < 3:
-    forward(1)
-    distance += 1`
-            },
-
-
-            6: {
-                title:
-                    "Chapitre 6 — Listes",
-
-                text:
-                    "Une liste permet de ranger plusieurs valeurs dans une même variable. On peut lire un élément avec son index et ajouter une valeur avec append().",
-
-                example:
-`actions = [1, 1, 1]
-
-for distance in actions:
-    forward(distance)`
-            },
-
-
-            7: {
-                title:
-                    "Chapitre 7 — Fonctions",
-
-                text:
-                    "Une fonction regroupe plusieurs instructions sous un nom. Elle permet de réutiliser facilement le même comportement.",
-
-                example:
-`def avancer_deux():
-    forward(2)
-
-avancer_deux()`
-            },
-
-
-            8: {
-                title:
-                    "Chapitre 8 — Combiner les notions",
-
-                text:
-                    "Les programmes deviennent plus intéressants quand plusieurs notions sont combinées : variables, conditions, boucles, listes et fonctions.",
-
-                example:
-`def avancer(distance):
-    for i in range(distance):
-        forward(1)
-
-distance = 3
-
-if distance > 0:
-    avancer(distance)`
-            },
-
-
-            9: {
-                title:
-                    "Chapitre 9 — Examen final",
-
-                text:
-                    "Aucune nouvelle notion. Utilise tout ce que tu as appris pour résoudre les trois dernières missions de Pyt.",
-
-                example:
-`def trajet(actions):
-    for action in actions:
-        if action == 1:
-            forward(1)
-
-trajet([1, 1, 1])`
-            }
-        };
-
-
-        return (
-            courses[chapter] ||
-            courses[1]
-        );
-    }
-
-
-    refreshCourse() {
-        const course =
-            this.getCourseData(
-                this.currentChapter
-            );
-
-
-        if (
-            this.courseTitle
-        ) {
-            this.courseTitle.textContent =
-                course.title;
-        }
-
-
-        if (
-            this.courseContent
-        ) {
-            this.courseContent.innerHTML =
-                "";
-
-            const paragraph =
-                document.createElement(
-                    "p"
-                );
-
-            paragraph.textContent =
-                course.text;
-
-
-            const exampleTitle =
-                document.createElement(
-                    "h3"
-                );
-
-            exampleTitle.textContent =
-                "Exemple";
-
-
-            const pre =
-                document.createElement(
-                    "pre"
-                );
-
-            const code =
-                document.createElement(
-                    "code"
-                );
-
-            code.textContent =
-                course.example;
-
-            pre.appendChild(
-                code
-            );
-
-
-            this.courseContent.append(
-                paragraph,
-                exampleTitle,
-                pre
-            );
-        }
-    }
-
-
-    /* =====================================================
-       CARTE
-    ===================================================== */
-
-    changeMapChapter(direction) {
-        const next =
-            this.currentChapter +
-            direction;
-
-        if (
-            next < 1 ||
-            next > 9
-        ) {
-            return;
-        }
-
-
-        if (
-            direction > 0 &&
-            !this.isChapterUnlocked(
-                next
-            )
-        ) {
-            this.showGuide(
-                "Termine les exercices précédents avant d'aller dans cette pièce."
-            );
-
-            return;
-        }
-
-
-        this.currentChapter =
-            next;
-
-        this.refreshMap();
-    }
-
-
-    isChapterUnlocked(chapter) {
-        if (
-            chapter === 1
-        ) {
-            return true;
-        }
-
-        return this.unlockedLevels.has(
-            `${chapter}-1`
-        );
-    }
-
-
-    refreshMap() {
-        const chapter =
-            this.currentChapter;
-
-        const room =
-            this.getRoomName(
-                chapter
-            );
-
-
-        if (
-            this.mapTitle
-        ) {
-            this.mapTitle.textContent =
-                `Chapitre ${chapter} — ${room}`;
-        }
-
-
-        if (
-            this.mapSubtitle
-        ) {
-            if (
-                chapter === 9
-            ) {
-                this.mapSubtitle.textContent =
-                    "Le laboratoire · Examen final";
-
-            } else {
-                this.mapSubtitle.textContent =
-                    "Choisis un exercice";
-            }
-        }
-
-
-        if (
-            this.mapRoom
-        ) {
-            this.mapRoom.dataset.chapter =
-                String(chapter);
-
-            this.mapRoom.dataset.room =
-                room;
-        }
-
-
-        for (
-            const node
-            of this.levelNodes
-        ) {
-            const exercise =
-                Number(
-                    node.dataset
-                        .levelExercise
-                );
-
-            const key =
-                `${chapter}-${exercise}`;
-
-            const unlocked =
-                this.unlockedLevels.has(
-                    key
-                );
-
-            const completed =
-                this.completedLevels.has(
-                    key
-                );
-
-
-            node.classList.toggle(
-                "locked",
-                !unlocked
-            );
-
-            node.classList.toggle(
-                "unlocked",
-                unlocked &&
-                !completed
-            );
-
-            node.classList.toggle(
-                "completed",
-                completed
-            );
-
-            node.disabled =
-                !unlocked;
-
-
-            const label =
-                node.querySelector(
-                    ".level-node-label"
-                );
-
-            if (label) {
-                label.textContent =
-                    completed
-                        ? `Exercice ${exercise} ✓`
-                        : `Exercice ${exercise}`;
-            }
-        }
-
-
-        if (
-            this.previousChapterButton
-        ) {
-            this.previousChapterButton.disabled =
-                chapter <= 1;
-        }
-
-
-        if (
-            this.nextChapterButton
-        ) {
-            this.nextChapterButton.disabled =
-                chapter >= 9 ||
-                !this.isChapterUnlocked(
-                    chapter + 1
-                );
-        }
-
-
-        this.decorateMapRoom(
-            chapter
-        );
-    }
-
-
-    decorateMapRoom(chapter) {
-        if (!this.mapRoom) {
-            return;
-        }
-
-        const decoration =
-            this.mapRoom.querySelector(
-                ".map-room-decoration"
-            );
-
-        if (!decoration) {
-            return;
-        }
-
-
-        const decorations = {
-            1: "🚪",
-            2: "🍳",
-            3: "🛋️",
-            4: "📚",
-            5: "🫧",
-            6: "🛏️",
-            7: "🔧",
-            8: "📦",
-            9: "⚗️"
-        };
-
-
-        decoration.textContent =
-            decorations[chapter] ||
-            "✦";
-    }
-
-
-    selectLevelFromMap(exercise) {
-        const key =
-            `${this.currentChapter}-${exercise}`;
-
-        if (
-            !this.unlockedLevels.has(
-                key
-            )
-        ) {
-            this.showGuide(
-                "Cet exercice est encore verrouillé."
-            );
-
-            return;
-        }
-
-
-        this.currentExercise =
-            exercise;
-
-
-        if (
-            typeof this.onSelectLevel ===
-            "function"
-        ) {
-            this.onSelectLevel(
-                this.currentChapter,
-                exercise
-            );
-        }
-    }
-
-
-    /* =====================================================
-       PROGRESSION
-    ===================================================== */
-
-    completeCurrentLevel() {
-        if (!this.level) {
-            return;
-        }
-
-
-        const chapter =
-            Number(
-                this.level.chapter
-            );
-
-        const exercise =
-            Number(
-                this.level.exercise
-            );
-
-        const key =
-            `${chapter}-${exercise}`;
-
-
-        this.completedLevels.add(
-            key
-        );
-
-
-        if (
-            exercise < 3
-        ) {
-            this.unlockedLevels.add(
-                `${chapter}-${exercise + 1}`
-            );
-
-        } else if (
-            chapter < 9
-        ) {
-            this.unlockedLevels.add(
-                `${chapter + 1}-1`
-            );
-        }
-
-
-        if (
-            chapter === 9 &&
-            exercise === 3
-        ) {
-            this.showGuide(
-                "Tu as terminé l'aventure de Pyt ! Tous les chapitres sont maintenant accomplis."
-            );
-
-            return;
-        }
-
-
-        const successMessage =
-            this.level.successMessage ||
-            "Bravo ! Mission réussie.";
-
-        this.showSuccessModal(
-            successMessage
-        );
-    }
-
-
-    showSuccessModal(message) {
-        if (!this.modal) {
-            this.showGuide(
-                message
-            );
-
-            return;
-        }
-
-
-        if (
-            this.modalTitle
-        ) {
-            this.modalTitle.textContent =
-                "Mission réussie";
-        }
-
-
-        if (
-            this.modalText
-        ) {
-            this.modalText.textContent =
-                message;
-        }
-
-
-        this.modal.classList.remove(
-            "hidden"
-        );
-
-
-        if (
-            this.modalPrimaryButton
-        ) {
-            this.modalPrimaryButton.textContent =
-                "Continuer";
-
-            this.modalPrimaryButton.onclick =
-                () => {
-                    this.modal.classList.add(
-                        "hidden"
-                    );
-
-                    this.showMap();
-                };
-        }
-
-
-        if (
-            this.modalSecondaryButton
-        ) {
-            this.modalSecondaryButton.textContent =
-                "Rejouer";
-
-            this.modalSecondaryButton.onclick =
-                () => {
-                    this.modal.classList.add(
-                        "hidden"
-                    );
+        if (courseButton) {
+
+            courseButton.addEventListener(
+                "click",
+                event => {
 
                     if (
-                        typeof this.onRestart ===
-                        "function"
+                        !this.reviewMode
                     ) {
-                        this.onRestart();
-                    }
-                };
-        }
-    }
 
-
-    /* =====================================================
-       TENTATIVES / AIDE
-    ===================================================== */
-
-    registerAttempt(levelId) {
-        const key =
-            String(levelId);
-
-        if (
-            !this.attempts[key]
-        ) {
-            this.attempts[key] =
-                0;
-        }
-
-        this.attempts[key]++;
-
-        return this.attempts[
-            key
-        ];
-    }
-
-
-    showFailureGuide(
-        message,
-        options = {}
-    ) {
-        const attempt =
-            Number(
-                options.attempt ||
-                1
-            );
-
-
-        if (
-            attempt <= 1
-        ) {
-            this.showGuide(
-                `${message} Réessaie en observant bien le trajet de Pyt.`
-            );
-
-            return;
-        }
-
-
-        this.showGuide(
-            `${message} Si tu veux, retourne voir le cours avant de réessayer.`
-        );
-    }
-
-
-    /* =====================================================
-       GUIDE PYT
-    ===================================================== */
-
-    showGuide(message) {
-        if (
-            !this.pytGuide
-        ) {
-            return;
-        }
-
-
-        window.clearTimeout(
-            this.guideAnimationTimer
-        );
-
-
-        if (
-            this.pytGuideText
-        ) {
-            this.pytGuideText.textContent =
-                message;
-        }
-
-
-        /*
-        Si une animation de sortie était en cours,
-        on l'annule proprement.
-        */
-
-        this.pytGuide.classList.remove(
-            "guide-leaving"
-        );
-
-        this.pytGuide.classList.remove(
-            "hidden"
-        );
-
-
-        /*
-        Force le navigateur à prendre en compte
-        l'état initial avant l'animation d'entrée.
-        */
-
-        void this.pytGuide.offsetWidth;
-
-
-        this.pytGuide.classList.add(
-            "guide-entering"
-        );
-
-
-        this.guideAnimationTimer =
-            window.setTimeout(
-                () => {
-                    this.pytGuide
-                        ?.classList
-                        .remove(
-                            "guide-entering"
-                        );
-                },
-                450
-            );
-    }
-
-
-    hideGuide() {
-        if (
-            !this.pytGuide ||
-            this.pytGuide.classList.contains(
-                "hidden"
-            )
-        ) {
-            return;
-        }
-
-
-        window.clearTimeout(
-            this.guideAnimationTimer
-        );
-
-
-        this.pytGuide.classList.remove(
-            "guide-entering"
-        );
-
-        this.pytGuide.classList.add(
-            "guide-leaving"
-        );
-
-
-        this.guideAnimationTimer =
-            window.setTimeout(
-                () => {
-                    if (
-                        !this.pytGuide
-                    ) {
                         return;
                     }
 
-                    this.pytGuide.classList.add(
-                        "hidden"
-                    );
 
-                    this.pytGuide.classList.remove(
-                        "guide-leaving"
-                    );
+                    event.preventDefault();
+
+                    event.stopImmediatePropagation();
+
+                    this.returnFromTheory();
+
                 },
-                330
+                true
             );
+        }
     }
 
 
+
     /* =====================================================
-       BULLE DE PENSÉE
+       RAFRAÎCHISSEMENT
     ===================================================== */
 
-    showThoughtBubble(message) {
+    refresh() {
+
         if (
-            !this.thoughtBubble
+            !window.pytApp
         ) {
+
             return;
         }
 
 
-        if (
-            this.thoughtText
-        ) {
-            this.thoughtText.textContent =
-                message;
-        }
+        this.renderMap();
 
+        this.renderCourse();
 
-        this.thoughtBubble.classList.remove(
-            "hidden"
-        );
+        this.resizeHouseMap();
     }
 
-
-    hideThoughtBubble() {
-        this.thoughtBubble?.classList.add(
-            "hidden"
-        );
-    }
 
 
     /* =====================================================
-       ÉDITEUR
+       DONNÉES
     ===================================================== */
 
-    openCodeWindow() {
-        this.codeWindow?.classList.remove(
-            "hidden"
-        );
+    getDataSource() {
 
-        this.codeEditor?.focus();
+        const sources = [
+
+            window.PYT_LEVELS,
+
+            window.PYT_GAME_DATA,
+
+            window.GAME_LEVELS,
+
+            window.LEVELS,
+
+            window.levels
+        ];
+
+
+        for (
+            const source
+            of sources
+        ) {
+
+            if (source) {
+
+                return source;
+            }
+        }
+
+
+        return null;
+    }
+
+
+
+    getChapters() {
+
+        const source =
+            this.getDataSource();
+
+
+        if (
+            !source
+        ) {
+
+            return [];
+        }
+
+
+        if (
+            Array.isArray(
+                source.chapters
+            )
+        ) {
+
+            return source.chapters;
+        }
+
+
+        if (
+            Array.isArray(
+                source
+            )
+        ) {
+
+            return source;
+        }
+
+
+        return [];
+    }
+
+
+
+    getChapterData(
+        chapterNumber
+    ) {
+
+        const chapters =
+            this.getChapters();
+
+
+        const chapter =
+            chapters.find(
+                (
+                    item,
+                    index
+                ) => {
+
+                    const number =
+                        Number(
+                            item.chapter ??
+                            item.number ??
+                            item.id ??
+                            index + 1
+                        );
+
+
+                    return (
+                        number ===
+                        Number(
+                            chapterNumber
+                        )
+                    );
+                }
+            );
+
+
+        if (
+            chapter
+        ) {
+
+            return chapter;
+        }
+
+
+        return {
+
+            chapter:
+                chapterNumber,
+
+            title:
+                `Chapitre ${chapterNumber}`,
+
+            subtitle:
+                "",
+
+            room:
+                "",
+
+            theory:
+                [],
+
+            levels:
+                []
+        };
+    }
+
+
+
+    getLevelsForChapter(
+        chapterNumber
+    ) {
+
+        const chapter =
+            this.getChapterData(
+                chapterNumber
+            );
+
+
+        if (
+            Array.isArray(
+                chapter.levels
+            )
+        ) {
+
+            return chapter.levels;
+        }
+
+
+        return [];
+    }
+
+
+
+    getLevelData(
+        chapterNumber,
+        levelNumber
+    ) {
+
+        const levels =
+            this.getLevelsForChapter(
+                chapterNumber
+            );
+
+
+        const level =
+            levels.find(
+                (
+                    item,
+                    index
+                ) => {
+
+                    const number =
+                        Number(
+                            item.level ??
+                            item.number ??
+                            item.id ??
+                            index + 1
+                        );
+
+
+                    return (
+                        number ===
+                        Number(
+                            levelNumber
+                        )
+                    );
+                }
+            );
+
+
+        if (
+            level
+        ) {
+
+            return {
+
+                ...level,
+
+                chapter:
+                    Number(
+                        chapterNumber
+                    ),
+
+                level:
+                    Number(
+                        levelNumber
+                    )
+            };
+        }
+
+
+        return {
+
+            chapter:
+                Number(
+                    chapterNumber
+                ),
+
+            level:
+                Number(
+                    levelNumber
+                ),
+
+            title:
+                `Exercice ${levelNumber}`,
+
+            instruction:
+                "Termine la mission.",
+
+            difficulty:
+                "Facile",
+
+            room:
+                this.getChapterData(
+                    chapterNumber
+                ).room,
+
+            starterCode:
+                ""
+        };
+    }
+
+
+
+    /* =====================================================
+       CARTE GÉNÉRALE
+    ===================================================== */
+
+    prepareHouseMap() {
+
+        const decoration =
+            document.getElementById(
+                "map-decoration"
+            );
+
+
+        if (
+            !decoration
+        ) {
+
+            return;
+        }
 
 
         /*
-        Sur téléphone la fenêtre est intégrée
-        directement dans la page grâce au CSS.
-        On la rend visible sans essayer de la placer
-        comme une popup.
+        Plus aucune image de fond externe.
         */
 
-        if (
-            this.isMobileLayout() &&
-            this.codeWindow
-        ) {
-            window.setTimeout(
-                () => {
-                    this.codeWindow.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start"
-                    });
-                },
-                50
-            );
-        }
-    }
+        decoration.style.backgroundImage =
+            "none";
 
 
-    closeCodeWindow() {
-        this.codeWindow?.classList.add(
-            "hidden"
-        );
-    }
+        decoration.style.position =
+            "absolute";
+
+        decoration.style.inset =
+            "0";
+
+        decoration.style.pointerEvents =
+            "none";
+
+        decoration.style.overflow =
+            "hidden";
 
 
-    isMobileLayout() {
-        return window.matchMedia(
-            "(max-width: 760px)"
-        ).matches;
-    }
-
-
-    setupCodeWindowDrag() {
-        if (
-            !this.codeWindow ||
-            !this.codeWindowHeader
-        ) {
-            return;
-        }
-
-
-        let dragging =
-            false;
-
-        let offsetX =
-            0;
-
-        let offsetY =
-            0;
-
-
-        this.codeWindowHeader.addEventListener(
-            "pointerdown",
-            event => {
-                if (
-                    this.isMobileLayout()
-                ) {
-                    return;
-                }
-
-                if (
-                    event.target.closest(
-                        "button"
-                    )
-                ) {
-                    return;
-                }
-
-
-                dragging =
-                    true;
-
-                const rect =
-                    this.codeWindow
-                        .getBoundingClientRect();
-
-                offsetX =
-                    event.clientX -
-                    rect.left;
-
-                offsetY =
-                    event.clientY -
-                    rect.top;
-
-
-                this.codeWindowHeader
-                    .setPointerCapture?.(
-                        event.pointerId
-                    );
-            }
-        );
-
-
-        this.codeWindowHeader.addEventListener(
-            "pointermove",
-            event => {
-                if (
-                    !dragging ||
-                    this.isMobileLayout()
-                ) {
-                    return;
-                }
-
-
-                const width =
-                    this.codeWindow
-                        .offsetWidth;
-
-                const height =
-                    this.codeWindow
-                        .offsetHeight;
-
-
-                const maximumX =
-                    Math.max(
-                        0,
-                        window.innerWidth -
-                        width
-                    );
-
-                const maximumY =
-                    Math.max(
-                        0,
-                        window.innerHeight -
-                        height
-                    );
-
-
-                const left =
-                    Math.max(
-                        0,
-                        Math.min(
-                            maximumX,
-                            event.clientX -
-                            offsetX
-                        )
-                    );
-
-                const top =
-                    Math.max(
-                        0,
-                        Math.min(
-                            maximumY,
-                            event.clientY -
-                            offsetY
-                        )
-                    );
-
-
-                this.codeWindow.style.left =
-                    `${left}px`;
-
-                this.codeWindow.style.top =
-                    `${top}px`;
-
-                this.codeWindow.style.right =
-                    "auto";
-
-                this.codeWindow.style.bottom =
-                    "auto";
-            }
-        );
-
-
-        const stopDragging =
-            () => {
-                dragging =
-                    false;
-            };
-
-
-        this.codeWindowHeader.addEventListener(
-            "pointerup",
-            stopDragging
-        );
-
-        this.codeWindowHeader.addEventListener(
-            "pointercancel",
-            stopDragging
-        );
-    }
-
-
-    /* =====================================================
-       ERREURS DANS LE CODE
-    ===================================================== */
-
-    highlightErrorLine(lineNumber) {
-        if (
-            !this.codeEditor ||
-            !lineNumber
-        ) {
-            return;
-        }
-
-
-        this.codeEditor.dataset.errorLine =
-            String(
-                lineNumber
+        let canvas =
+            document.getElementById(
+                "house-map-canvas"
             );
 
-        this.codeEditor.classList.add(
-            "has-error-line"
-        );
 
-
-        const lines =
-            this.codeEditor.value
-                .split("\n");
-
-        let start =
-            0;
-
-        for (
-            let index = 0;
-            index <
-            lineNumber - 1;
-            index++
-        ) {
-            start +=
-                (
-                    lines[index] ||
-                    ""
-                ).length + 1;
-        }
-
-
-        const end =
-            start +
-            (
-                lines[
-                    lineNumber - 1
-                ] ||
-                ""
-            ).length;
-
-
-        this.openCodeWindow();
-
-        this.codeEditor.focus();
-
-        this.codeEditor.setSelectionRange(
-            start,
-            end
-        );
-    }
-
-
-    clearErrorHighlight() {
         if (
-            !this.codeEditor
+            !canvas
         ) {
-            return;
-        }
 
-        delete this.codeEditor.dataset
-            .errorLine;
-
-        this.codeEditor.classList.remove(
-            "has-error-line"
-        );
-    }
-
-
-    /* =====================================================
-       STATUT
-    ===================================================== */
-
-    setStatus(message) {
-        if (
-            this.gameStatus
-        ) {
-            this.gameStatus.textContent =
-                message || "";
-        }
-    }
-
-
-    /* =====================================================
-       ACTIONS / ANIMATIONS
-    ===================================================== */
-
-    playActions(
-        actions,
-        performAction,
-        onFinished
-    ) {
-        const queue =
-            Array.isArray(actions)
-                ? [...actions]
-                : [];
-
-
-        let index =
-            0;
-
-        let blockedAction =
-            null;
-
-
-        const next =
-            () => {
-                if (
-                    index >=
-                    queue.length
-                ) {
-                    if (
-                        typeof onFinished ===
-                        "function"
-                    ) {
-                        onFinished(
-                            blockedAction
-                        );
-                    }
-
-                    return;
-                }
-
-
-                const action =
-                    queue[index];
-
-                index++;
-
-
-                let success =
-                    true;
-
-
-                if (
-                    typeof performAction ===
-                    "function"
-                ) {
-                    success =
-                        performAction(
-                            action
-                        ) !== false;
-                }
-
-
-                this.render();
-
-
-                if (
-                    !success
-                ) {
-                    blockedAction =
-                        action;
-
-                    if (
-                        typeof onFinished ===
-                        "function"
-                    ) {
-                        window.setTimeout(
-                            () =>
-                                onFinished(
-                                    blockedAction
-                                ),
-                            this.actionDelay
-                        );
-                    }
-
-                    return;
-                }
-
-
-                window.setTimeout(
-                    next,
-                    this.actionDelay
+            canvas =
+                document.createElement(
+                    "canvas"
                 );
-            };
 
 
-        if (
-            queue.length === 0
-        ) {
-            if (
-                typeof onFinished ===
-                "function"
-            ) {
-                onFinished(null);
-            }
+            canvas.id =
+                "house-map-canvas";
 
-            return;
+
+            canvas.style.position =
+                "absolute";
+
+            canvas.style.inset =
+                "0";
+
+            canvas.style.width =
+                "100%";
+
+            canvas.style.height =
+                "100%";
+
+            canvas.style.pointerEvents =
+                "none";
+
+            canvas.style.imageRendering =
+                "pixelated";
+
+
+            decoration.appendChild(
+                canvas
+            );
         }
 
 
-        next();
-    }
+        this.mapCanvas =
+            canvas;
 
 
-    /* =====================================================
-       CANVAS
-    ===================================================== */
+        this.mapCtx =
+            canvas.getContext(
+                "2d"
+            );
 
-    setupCanvas() {
-        if (
-            !this.canvas ||
-            !this.context
-        ) {
-            return;
-        }
 
-        this.context.imageSmoothingEnabled =
+        this.mapCtx.imageSmoothingEnabled =
             false;
 
-        this.resizeCanvas();
+
+        this.resizeHouseMap();
     }
 
 
-    resizeCanvas() {
+
+    resizeHouseMap() {
+
         if (
-            !this.canvas
+            !this.mapCanvas
         ) {
+
+            return;
+        }
+
+
+        const parent =
+            this.mapCanvas.parentElement;
+
+
+        if (
+            !parent
+        ) {
+
             return;
         }
 
 
         const rect =
-            this.canvas
-                .getBoundingClientRect();
+            parent.getBoundingClientRect();
+
 
         const width =
             Math.max(
-                320,
-                Math.floor(
-                    rect.width ||
-                    this.canvas.clientWidth ||
-                    800
+                1,
+                Math.round(
+                    rect.width
                 )
             );
 
+
         const height =
             Math.max(
-                260,
-                Math.floor(
-                    rect.height ||
-                    this.canvas.clientHeight ||
-                    520
+                1,
+                Math.round(
+                    rect.height
                 )
             );
 
 
         if (
-            this.canvas.width !==
+            this.mapCanvas.width !==
             width
         ) {
-            this.canvas.width =
+
+            this.mapCanvas.width =
                 width;
         }
 
 
         if (
-            this.canvas.height !==
+            this.mapCanvas.height !==
             height
         ) {
-            this.canvas.height =
+
+            this.mapCanvas.height =
                 height;
         }
 
 
-        if (
-            this.context
-        ) {
-            this.context.imageSmoothingEnabled =
-                false;
-        }
+        this.drawHouseMap();
     }
 
 
-    render() {
+
+    drawHouseMap() {
+
+        const ctx =
+            this.mapCtx;
+
+
+        const canvas =
+            this.mapCanvas;
+
+
         if (
-            !this.canvas ||
-            !this.context ||
-            !this.game
+            !ctx ||
+            !canvas
         ) {
+
             return;
         }
 
 
-        this.resizeCanvas();
-
-
-        const ctx =
-            this.context;
-
         const width =
-            this.canvas.width;
+            canvas.width;
+
 
         const height =
-            this.canvas.height;
+            canvas.height;
 
 
         ctx.clearRect(
@@ -2187,182 +734,34 @@ trajet([1, 1, 1])`
         );
 
 
-        this.drawRoomBackground(
-            ctx,
-            width,
-            height
-        );
-
-
-        const grid =
-            this.game.grid;
-
-        if (
-            !Array.isArray(grid) ||
-            grid.length === 0
-        ) {
-            return;
-        }
-
-
-        const rows =
-            grid.length;
-
-        const cols =
-            Math.max(
-                ...grid.map(
-                    row =>
-                        Array.isArray(row)
-                            ? row.length
-                            : 0
-                )
-            );
-
-
-        if (
-            rows <= 0 ||
-            cols <= 0
-        ) {
-            return;
-        }
-
-
-        const margin =
-            Math.max(
-                16,
-                Math.min(
-                    48,
-                    width * 0.05
-                )
-            );
-
-
-        const availableWidth =
-            width -
-            margin * 2;
-
-        const availableHeight =
-            height -
-            margin * 2;
-
-
-        const tileSize =
-            Math.floor(
-                Math.min(
-                    availableWidth /
-                    cols,
-
-                    availableHeight /
-                    rows
-                )
-            );
-
-
-        const boardWidth =
-            tileSize *
-            cols;
-
-        const boardHeight =
-            tileSize *
-            rows;
-
-
-        const startX =
-            Math.floor(
-                (
-                    width -
-                    boardWidth
-                ) / 2
-            );
-
-        const startY =
-            Math.floor(
-                (
-                    height -
-                    boardHeight
-                ) / 2
-            );
-
-
-        for (
-            let row = 0;
-            row < rows;
-            row++
-        ) {
-            for (
-                let col = 0;
-                col < cols;
-                col++
-            ) {
-                const x =
-                    startX +
-                    col *
-                    tileSize;
-
-                const y =
-                    startY +
-                    row *
-                    tileSize;
-
-
-                this.drawTile(
-                    ctx,
-                    row,
-                    col,
-                    x,
-                    y,
-                    tileSize
-                );
-            }
-        }
-
-
-        this.drawRobot(
-            ctx,
-            startX,
-            startY,
-            tileSize
-        );
-    }
-
-
-    drawRoomBackground(
-        ctx,
-        width,
-        height
-    ) {
         /*
-        On conserve volontairement le style actuel :
-        fond violet / bleu nuit, sans refaire les
-        graphismes du jeu.
+        Fond général.
         */
 
         const gradient =
             ctx.createLinearGradient(
                 0,
                 0,
-                width,
+                0,
                 height
             );
 
-        gradient.addColorStop(
-            0,
-            "#160f33"
-        );
 
         gradient.addColorStop(
-            0.55,
-            "#24124b"
+            0,
+            "#8bb67c"
         );
+
 
         gradient.addColorStop(
             1,
-            "#0d1733"
+            "#577d52"
         );
 
 
         ctx.fillStyle =
             gradient;
+
 
         ctx.fillRect(
             0,
@@ -2372,295 +771,936 @@ trajet([1, 1, 1])`
         );
 
 
-        this.drawRoomDecoration(
+        /*
+        Petites variations d'herbe.
+        */
+
+        this.drawMapGrassNoise(
             ctx,
             width,
-            height,
-            this.currentChapter
+            height
+        );
+
+
+        const margin =
+            Math.max(
+                20,
+                width *
+                0.04
+            );
+
+
+        const gardenWidth =
+            width *
+            0.27;
+
+
+        const houseX =
+            margin;
+
+
+        const houseY =
+            margin;
+
+
+        const houseWidth =
+            width -
+            gardenWidth -
+            margin *
+            2;
+
+
+        const houseHeight =
+            height -
+            margin *
+            2;
+
+
+        this.drawHouseBuilding(
+            ctx,
+            houseX,
+            houseY,
+            houseWidth,
+            houseHeight
+        );
+
+
+        this.drawGarden(
+            ctx,
+            houseX +
+                houseWidth +
+                margin *
+                0.45,
+            houseY,
+            gardenWidth,
+            houseHeight
+        );
+
+
+        this.drawMapChapterMarker(
+            ctx,
+            houseX,
+            houseY,
+            houseWidth,
+            houseHeight
         );
     }
 
 
-    drawRoomDecoration(
+
+    drawMapGrassNoise(
         ctx,
         width,
+        height
+    ) {
+
+        ctx.save();
+
+
+        ctx.globalAlpha =
+            0.16;
+
+
+        ctx.fillStyle =
+            "#315d38";
+
+
+        const amount =
+            Math.floor(
+                width *
+                height /
+                10000
+            );
+
+
+        for (
+            let i = 0;
+            i < amount;
+            i += 1
+        ) {
+
+            const x =
+                (
+                    i *
+                    73
+                ) %
+                width;
+
+
+            const y =
+                (
+                    i *
+                    131
+                ) %
+                height;
+
+
+            ctx.fillRect(
+                x,
+                y,
+                2,
+                5
+            );
+        }
+
+
+        ctx.restore();
+    }
+
+
+
+    drawHouseBuilding(
+        ctx,
+        x,
+        y,
+        width,
+        height
+    ) {
+
+        /*
+        Ombre maison.
+        */
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.28)";
+
+
+        ctx.fillRect(
+            x + 12,
+            y + 12,
+            width,
+            height
+        );
+
+
+        /*
+        Coque extérieure.
+        */
+
+        ctx.fillStyle =
+            "#3c3b3b";
+
+
+        ctx.fillRect(
+            x,
+            y,
+            width,
+            height
+        );
+
+
+        const wall =
+            Math.max(
+                7,
+                width *
+                0.012
+            );
+
+
+        const innerX =
+            x + wall;
+
+
+        const innerY =
+            y + wall;
+
+
+        const innerWidth =
+            width -
+            wall * 2;
+
+
+        const innerHeight =
+            height -
+            wall * 2;
+
+
+        /*
+        Distribution de la maison.
+
+        3 colonnes × 3 rangées.
+        */
+
+        const col1 =
+            innerWidth *
+            0.31;
+
+
+        const col2 =
+            innerWidth *
+            0.36;
+
+
+        const col3 =
+            innerWidth -
+            col1 -
+            col2;
+
+
+        const row1 =
+            innerHeight *
+            0.33;
+
+
+        const row2 =
+            innerHeight *
+            0.34;
+
+
+        const row3 =
+            innerHeight -
+            row1 -
+            row2;
+
+
+        /*
+        RANGÉE HAUTE
+        */
+
+        this.drawMapRoom(
+            ctx,
+            innerX,
+            innerY,
+            col1,
+            row1,
+            "chambre",
+            4
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1,
+            innerY,
+            col2,
+            row1,
+            "salon",
+            3
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1 +
+                col2,
+            innerY,
+            col3,
+            row1,
+            "balcon",
+            7
+        );
+
+
+        /*
+        RANGÉE MILIEU
+        */
+
+        this.drawMapRoom(
+            ctx,
+            innerX,
+            innerY +
+                row1,
+            col1,
+            row2,
+            "garage",
+            5
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1,
+            innerY +
+                row1,
+            col2,
+            row2,
+            "entree",
+            1
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1 +
+                col2,
+            innerY +
+                row1,
+            col3,
+            row2,
+            "cuisine",
+            2
+        );
+
+
+        /*
+        RANGÉE BASSE
+        */
+
+        this.drawMapRoom(
+            ctx,
+            innerX,
+            innerY +
+                row1 +
+                row2,
+            col1,
+            row3,
+            "cave_a_vin",
+            6
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1,
+            innerY +
+                row1 +
+                row2,
+            col2,
+            row3,
+            "couloir",
+            null
+        );
+
+
+        this.drawMapRoom(
+            ctx,
+            innerX +
+                col1 +
+                col2,
+            innerY +
+                row1 +
+                row2,
+            col3,
+            row3,
+            "toilette",
+            8
+        );
+
+
+        this.drawMapDoors(
+            ctx,
+            innerX,
+            innerY,
+            innerWidth,
+            innerHeight,
+            col1,
+            col2,
+            row1,
+            row2
+        );
+    }
+
+
+
+    drawMapRoom(
+        ctx,
+        x,
+        y,
+        width,
         height,
+        room,
         chapter
     ) {
+
+        const normalized =
+            this.normalize(
+                room
+            );
+
+
+        const colors = {
+
+            entree:
+                "#c29568",
+
+            cuisine:
+                "#c9c7be",
+
+            salon:
+                "#b68a68",
+
+            chambre:
+                "#9b7b83",
+
+            garage:
+                "#73777c",
+
+            cave_a_vin:
+                "#75645e",
+
+            balcon:
+                "#aaa08d",
+
+            toilette:
+                "#b9cbcc",
+
+            couloir:
+                "#b28a62"
+        };
+
+
+        ctx.fillStyle =
+            colors[normalized] ||
+            "#a78c73";
+
+
+        ctx.fillRect(
+            x,
+            y,
+            width,
+            height
+        );
+
+
+        /*
+        Sol texturé.
+        */
+
+        this.drawRoomFloorPattern(
+            ctx,
+            normalized,
+            x,
+            y,
+            width,
+            height
+        );
+
+
+        ctx.strokeStyle =
+            "#45413e";
+
+
+        ctx.lineWidth =
+            Math.max(
+                3,
+                width *
+                0.014
+            );
+
+
+        ctx.strokeRect(
+            x,
+            y,
+            width,
+            height
+        );
+
+
+        this.drawMapRoomFurniture(
+            ctx,
+            normalized,
+            x,
+            y,
+            width,
+            height
+        );
+
+
+        if (
+            chapter
+        ) {
+
+            this.drawRoomLabel(
+                ctx,
+                normalized,
+                chapter,
+                x,
+                y,
+                width,
+                height
+            );
+        }
+    }
+
+
+
+    drawRoomFloorPattern(
+        ctx,
+        room,
+        x,
+        y,
+        width,
+        height
+    ) {
+
         ctx.save();
 
         ctx.globalAlpha =
             0.14;
 
-        ctx.fillStyle =
-            "#58f4ff";
 
-        const spacing =
-            Math.max(
-                36,
-                Math.floor(
-                    width / 15
-                )
-            );
-
-
-        for (
-            let x = 0;
-            x < width;
-            x += spacing
+        if (
+            room === "cuisine" ||
+            room === "toilette"
         ) {
-            ctx.fillRect(
-                x,
-                0,
-                1,
-                height
-            );
+
+            ctx.strokeStyle =
+                "#444";
+
+
+            ctx.lineWidth =
+                1;
+
+
+            const size =
+                Math.max(
+                    14,
+                    Math.min(
+                        width,
+                        height
+                    ) /
+                    4
+                );
+
+
+            for (
+                let px = x;
+                px < x + width;
+                px += size
+            ) {
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    px,
+                    y
+                );
+
+                ctx.lineTo(
+                    px,
+                    y + height
+                );
+
+                ctx.stroke();
+            }
+
+
+            for (
+                let py = y;
+                py < y + height;
+                py += size
+            ) {
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    x,
+                    py
+                );
+
+                ctx.lineTo(
+                    x + width,
+                    py
+                );
+
+                ctx.stroke();
+            }
+
+        } else {
+
+            ctx.strokeStyle =
+                "#553c2c";
+
+
+            const spacing =
+                Math.max(
+                    8,
+                    height /
+                    8
+                );
+
+
+            for (
+                let py =
+                    y +
+                    spacing;
+
+                py <
+                    y +
+                    height;
+
+                py +=
+                    spacing
+            ) {
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    x,
+                    py
+                );
+
+                ctx.lineTo(
+                    x + width,
+                    py
+                );
+
+                ctx.stroke();
+            }
         }
 
-
-        ctx.fillStyle =
-            "#ff4fc8";
-
-
-        for (
-            let y = 0;
-            y < height;
-            y += spacing
-        ) {
-            ctx.fillRect(
-                0,
-                y,
-                width,
-                1
-            );
-        }
-
-
-        ctx.globalAlpha =
-            0.12;
-
-        ctx.font =
-            `${Math.max(
-                42,
-                width * 0.07
-            )}px sans-serif`;
-
-        ctx.textAlign =
-            "right";
-
-        ctx.textBaseline =
-            "bottom";
-
-
-        const symbols = {
-            1: "⌂",
-            2: "✦",
-            3: "◆",
-            4: "▤",
-            5: "○",
-            6: "☾",
-            7: "⚙",
-            8: "▣",
-            9: "⌬"
-        };
-
-
-        ctx.fillText(
-            symbols[chapter] ||
-            "✦",
-            width - 24,
-            height - 18
-        );
 
         ctx.restore();
     }
 
 
-    drawTile(
+
+    drawMapRoomFurniture(
         ctx,
-        row,
-        col,
+        room,
         x,
         y,
-        size
+        width,
+        height
     ) {
-        const type =
-            this.game.getTileType(
-                row,
-                col
-            );
+
+        if (
+            !window.PYTArt
+        ) {
+
+            return;
+        }
 
 
-        /*
-        Sol
-        */
+        const size =
+            Math.min(
+                width,
+                height
+            ) *
+            0.34;
 
-        ctx.fillStyle =
+
+        const draw =
             (
-                row + col
-            ) % 2 === 0
-                ? "#30245d"
-                : "#392a6b";
+                type,
+                px,
+                py,
+                multiplier = 1
+            ) => {
 
-        ctx.fillRect(
-            x,
-            y,
-            size,
-            size
-        );
-
-
-        ctx.strokeStyle =
-            "#17102c";
-
-        ctx.lineWidth =
-            Math.max(
-                1,
-                size * 0.035
-            );
-
-        ctx.strokeRect(
-            x,
-            y,
-            size,
-            size
-        );
+                window.PYTArt.draw(
+                    ctx,
+                    type,
+                    px,
+                    py,
+                    size *
+                    multiplier
+                );
+            };
 
 
-        const padding =
-            size * 0.12;
+        switch (
+            room
+        ) {
 
+            case "entree":
 
-        switch (type) {
-
-            case "wall":
-                ctx.fillStyle =
-                    "#171226";
-
-                ctx.fillRect(
-                    x,
-                    y,
-                    size,
-                    size
+                draw(
+                    "tapis",
+                    x +
+                        width *
+                        0.37,
+                    y +
+                        height *
+                        0.53,
+                    0.9
                 );
 
-                ctx.fillStyle =
-                    "#4a3670";
 
-                ctx.fillRect(
-                    x + padding,
-                    y + padding,
-                    size -
-                    padding * 2,
-                    size -
-                    padding * 2
+                draw(
+                    "plante",
+                    x +
+                        width *
+                        0.04,
+                    y +
+                        height *
+                        0.08,
+                    0.7
                 );
 
                 break;
 
 
-            case "goal":
-                this.drawGoal(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "cuisine":
+
+                draw(
+                    "frigo",
+                    x +
+                        width *
+                        0.68,
+                    y +
+                        height *
+                        0.08,
+                    0.85
+                );
+
+
+                draw(
+                    "evier",
+                    x +
+                        width *
+                        0.05,
+                    y +
+                        height *
+                        0.08,
+                    0.9
+                );
+
+
+                draw(
+                    "table",
+                    x +
+                        width *
+                        0.35,
+                    y +
+                        height *
+                        0.49,
+                    1.0
                 );
 
                 break;
 
 
-            case "object":
-                this.drawObject(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "salon":
+
+                draw(
+                    "canape",
+                    x +
+                        width *
+                        0.07,
+                    y +
+                        height *
+                        0.16,
+                    1.15
+                );
+
+
+                draw(
+                    "table",
+                    x +
+                        width *
+                        0.4,
+                    y +
+                        height *
+                        0.52,
+                    0.75
+                );
+
+
+                draw(
+                    "bibliotheque",
+                    x +
+                        width *
+                        0.71,
+                    y +
+                        height *
+                        0.12,
+                    0.85
                 );
 
                 break;
 
 
-            case "dirt":
-                this.drawDirt(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "chambre":
+
+                draw(
+                    "lit",
+                    x +
+                        width *
+                        0.08,
+                    y +
+                        height *
+                        0.12,
+                    1.15
+                );
+
+
+                draw(
+                    "plante",
+                    x +
+                        width *
+                        0.7,
+                    y +
+                        height *
+                        0.52,
+                    0.7
                 );
 
                 break;
 
 
-            case "button":
-                this.drawButtonTile(
-                    ctx,
-                    x,
-                    y,
-                    size,
-                    this.game
-                        .activatedButtons
-                        .has(
-                            this.game.positionKey(
-                                row,
-                                col
-                            )
-                        )
+            case "garage":
+
+                draw(
+                    "voiture",
+                    x +
+                        width *
+                        0.22,
+                    y +
+                        height *
+                        0.08,
+                    1.2
+                );
+
+
+                draw(
+                    "boite_outils",
+                    x +
+                        width *
+                        0.66,
+                    y +
+                        height *
+                        0.58,
+                    0.65
                 );
 
                 break;
 
 
-            case "door":
-                this.drawDoor(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "cave_a_vin":
+
+                draw(
+                    "casier_vin",
+                    x +
+                        width *
+                        0.08,
+                    y +
+                        height *
+                        0.11,
+                    0.95
+                );
+
+
+                draw(
+                    "tonneau",
+                    x +
+                        width *
+                        0.62,
+                    y +
+                        height *
+                        0.49,
+                    0.68
                 );
 
                 break;
 
 
-            case "charger":
-                this.drawCharger(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "balcon":
+
+                draw(
+                    "table",
+                    x +
+                        width *
+                        0.28,
+                    y +
+                        height *
+                        0.35,
+                    0.8
+                );
+
+
+                draw(
+                    "plante",
+                    x +
+                        width *
+                        0.63,
+                    y +
+                        height *
+                        0.12,
+                    0.7
                 );
 
                 break;
 
 
-            case "deposit":
-                this.drawDeposit(
-                    ctx,
-                    x,
-                    y,
-                    size
+            case "toilette":
+
+                draw(
+                    "toilette",
+                    x +
+                        width *
+                        0.17,
+                    y +
+                        height *
+                        0.18,
+                    0.9
                 );
 
-                break;
 
-
-            case "box":
-                this.drawBox(
-                    ctx,
-                    x,
-                    y,
-                    size
-                );
-
-                break;
-
-
-            case "box_goal":
-                this.drawBoxGoal(
-                    ctx,
-                    x,
-                    y,
-                    size
+                draw(
+                    "lavabo",
+                    x +
+                        width *
+                        0.56,
+                    y +
+                        height *
+                        0.2,
+                    0.72
                 );
 
                 break;
@@ -2668,890 +1708,2562 @@ trajet([1, 1, 1])`
     }
 
 
-    drawGoal(
+
+    drawRoomLabel(
         ctx,
+        room,
+        chapter,
         x,
         y,
-        size
+        width,
+        height
     ) {
-        const centerX =
-            x +
-            size / 2;
 
-        const centerY =
-            y +
-            size / 2;
+        const names = {
+
+            entree:
+                "Entrée",
+
+            cuisine:
+                "Cuisine",
+
+            salon:
+                "Salon",
+
+            chambre:
+                "Chambre",
+
+            garage:
+                "Garage",
+
+            cave_a_vin:
+                "Cave",
+
+            balcon:
+                "Balcon",
+
+            toilette:
+                "Salle d’eau"
+        };
 
 
         ctx.save();
 
+
         ctx.fillStyle =
-            "#ffe55c";
+            "rgba(15,15,17,0.74)";
 
-        ctx.beginPath();
 
-        for (
-            let i = 0;
-            i < 8;
-            i++
-        ) {
-            const angle =
-                (
-                    Math.PI * 2 *
-                    i
-                ) / 8 -
-                Math.PI / 2;
-
-            const radius =
-                i % 2 === 0
-                    ? size * 0.3
-                    : size * 0.14;
-
-            const px =
-                centerX +
-                Math.cos(angle) *
-                radius;
-
-            const py =
-                centerY +
-                Math.sin(angle) *
-                radius;
-
-            if (
-                i === 0
-            ) {
-                ctx.moveTo(
-                    px,
-                    py
-                );
-
-            } else {
-                ctx.lineTo(
-                    px,
-                    py
-                );
-            }
-        }
-
-        ctx.closePath();
-        ctx.fill();
-
-        ctx.strokeStyle =
-            "#201536";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.05
+        const boxWidth =
+            Math.min(
+                width *
+                0.76,
+                130
             );
 
-        ctx.stroke();
+
+        const boxHeight =
+            Math.max(
+                23,
+                height *
+                0.15
+            );
+
+
+        const bx =
+            x +
+            width *
+            0.5 -
+            boxWidth *
+            0.5;
+
+
+        const by =
+            y +
+            height -
+            boxHeight -
+            6;
+
+
+        ctx.fillRect(
+            bx,
+            by,
+            boxWidth,
+            boxHeight
+        );
+
+
+        ctx.fillStyle =
+            "#f7f5ef";
+
+
+        ctx.textAlign =
+            "center";
+
+
+        ctx.textBaseline =
+            "middle";
+
+
+        ctx.font =
+            `600 ${Math.max(
+                9,
+                Math.min(
+                    13,
+                    width *
+                    0.055
+                )
+            )}px sans-serif`;
+
+
+        ctx.fillText(
+            `${chapter}. ${names[room] || room}`,
+            x +
+                width *
+                0.5,
+            by +
+                boxHeight *
+                0.52
+        );
+
 
         ctx.restore();
     }
 
 
-    drawObject(
+
+    drawMapDoors(
         ctx,
         x,
         y,
-        size
+        width,
+        height,
+        col1,
+        col2,
+        row1,
+        row2
     ) {
-        const w =
-            size * 0.48;
 
-        const h =
-            size * 0.56;
-
-        const px =
-            x +
-            (
-                size -
-                w
-            ) / 2;
-
-        const py =
-            y +
-            (
-                size -
-                h
-            ) / 2;
+        ctx.save();
 
 
         ctx.fillStyle =
-            "#ff9f43";
-
-        ctx.fillRect(
-            px,
-            py,
-            w,
-            h
-        );
+            "#d8c2a2";
 
 
-        ctx.fillStyle =
-            "#ffe7a3";
-
-        ctx.fillRect(
-            px +
-            w * 0.14,
-            py +
-            h * 0.12,
-            w * 0.72,
-            h * 0.12
-        );
-
-
-        ctx.strokeStyle =
-            "#21162f";
-
-        ctx.lineWidth =
+        const doorWidth =
             Math.max(
-                2,
-                size * 0.05
+                14,
+                width *
+                0.025
             );
 
-        ctx.strokeRect(
-            px,
-            py,
-            w,
-            h
-        );
-    }
 
-
-    drawDirt(
-        ctx,
-        x,
-        y,
-        size
-    ) {
-        ctx.fillStyle =
-            "#795548";
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x +
-            size * 0.38,
-            y +
-            size * 0.55,
-            size * 0.18,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.arc(
-            x +
-            size * 0.58,
-            y +
-            size * 0.5,
-            size * 0.2,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-    }
-
-
-    drawButtonTile(
-        ctx,
-        x,
-        y,
-        size,
-        active
-    ) {
-        ctx.fillStyle =
-            active
-                ? "#55f5a3"
-                : "#ff4f91";
-
-        ctx.fillRect(
-            x +
-            size * 0.24,
-            y +
-            size * 0.36,
-            size * 0.52,
-            size * 0.3
-        );
-
-
-        ctx.strokeStyle =
-            "#1c142b";
-
-        ctx.lineWidth =
+        const wall =
             Math.max(
-                2,
-                size * 0.05
+                5,
+                width *
+                0.01
             );
 
-        ctx.strokeRect(
-            x +
-            size * 0.24,
-            y +
-            size * 0.36,
-            size * 0.52,
-            size * 0.3
+
+        const verticals = [
+
+            x + col1,
+
+            x + col1 + col2
+        ];
+
+
+        const horizontals = [
+
+            y + row1,
+
+            y + row1 + row2
+        ];
+
+
+        verticals.forEach(
+            px => {
+
+                ctx.fillRect(
+                    px -
+                        wall,
+                    y +
+                        height *
+                        0.45 -
+                        doorWidth /
+                        2,
+                    wall *
+                        2,
+                    doorWidth
+                );
+            }
         );
+
+
+        horizontals.forEach(
+            py => {
+
+                ctx.fillRect(
+                    x +
+                        width *
+                        0.49 -
+                        doorWidth /
+                        2,
+                    py -
+                        wall,
+                    doorWidth,
+                    wall *
+                        2
+                );
+            }
+        );
+
+
+        ctx.restore();
     }
 
 
-    drawDoor(
+
+    drawGarden(
         ctx,
         x,
         y,
-        size
+        width,
+        height
     ) {
+
+        /*
+        Chemin.
+        */
+
         ctx.fillStyle =
-            "#e95ab9";
+            "#9e9486";
+
 
         ctx.fillRect(
             x +
-            size * 0.22,
+                width *
+                0.05,
             y +
-            size * 0.08,
-            size * 0.56,
-            size * 0.84
+                height *
+                0.45,
+            width *
+                0.42,
+            height *
+                0.13
         );
 
 
-        ctx.fillStyle =
-            "#ffe55c";
+        if (
+            window.PYTArt
+        ) {
 
-        ctx.fillRect(
-            x +
-            size * 0.63,
-            y +
-            size * 0.5,
-            size * 0.08,
-            size * 0.08
-        );
+            const tile =
+                Math.min(
+                    width,
+                    height
+                ) *
+                0.18;
 
 
-        ctx.strokeStyle =
-            "#1d132d";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.05
+            window.PYTArt.draw(
+                ctx,
+                "arbre",
+                x +
+                    width *
+                    0.03,
+                y +
+                    height *
+                    0.05,
+                tile *
+                    1.15
             );
 
-        ctx.strokeRect(
-            x +
-            size * 0.22,
-            y +
-            size * 0.08,
-            size * 0.56,
-            size * 0.84
-        );
-    }
 
-
-    drawCharger(
-        ctx,
-        x,
-        y,
-        size
-    ) {
-        ctx.fillStyle =
-            "#43f2ff";
-
-        ctx.fillRect(
-            x +
-            size * 0.22,
-            y +
-            size * 0.22,
-            size * 0.56,
-            size * 0.56
-        );
-
-
-        ctx.fillStyle =
-            "#15223e";
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x +
-            size * 0.54,
-            y +
-            size * 0.28
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.4,
-            y +
-            size * 0.53
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.51,
-            y +
-            size * 0.53
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.44,
-            y +
-            size * 0.72
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.65,
-            y +
-            size * 0.45
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.54,
-            y +
-            size * 0.45
-        );
-
-        ctx.closePath();
-        ctx.fill();
-    }
-
-
-    drawDeposit(
-        ctx,
-        x,
-        y,
-        size
-    ) {
-        ctx.strokeStyle =
-            "#59f6b5";
-
-        ctx.lineWidth =
-            Math.max(
-                3,
-                size * 0.07
+            window.PYTArt.draw(
+                ctx,
+                "arbre",
+                x +
+                    width *
+                    0.68,
+                y +
+                    height *
+                    0.08,
+                tile
             );
 
-        ctx.strokeRect(
+
+            window.PYTArt.draw(
+                ctx,
+                "fleurs",
+                x +
+                    width *
+                    0.05,
+                y +
+                    height *
+                    0.72,
+                tile *
+                    0.9
+            );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "buisson",
+                x +
+                    width *
+                    0.7,
+                y +
+                    height *
+                    0.72,
+                tile
+            );
+
+
+            /*
+            Piscine plus grande que les autres objets.
+            */
+
+            const poolSize =
+                Math.min(
+                    width *
+                    0.72,
+                    height *
+                    0.38
+                );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "piscine",
+                x +
+                    width *
+                    0.16,
+                y +
+                    height *
+                    0.2,
+                poolSize,
+                {
+                    animate:
+                        true
+                }
+            );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "transat",
+                x +
+                    width *
+                    0.02,
+                y +
+                    height *
+                    0.57,
+                tile *
+                    0.8
+            );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "transat",
+                x +
+                    width *
+                    0.34,
+                y +
+                    height *
+                    0.61,
+                tile *
+                    0.8
+            );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "bouee",
+                x +
+                    width *
+                    0.57,
+                y +
+                    height *
+                    0.31,
+                tile *
+                    0.55
+            );
+
+
+            window.PYTArt.draw(
+                ctx,
+                "fontaine",
+                x +
+                    width *
+                    0.67,
+                y +
+                    height *
+                    0.5,
+                tile *
+                    0.85
+            );
+        }
+
+
+        /*
+        Chapitre 9.
+        */
+
+        ctx.save();
+
+
+        ctx.fillStyle =
+            "rgba(15,15,17,0.78)";
+
+
+        ctx.fillRect(
             x +
-            size * 0.18,
+                width *
+                0.2,
             y +
-            size * 0.18,
-            size * 0.64,
-            size * 0.64
+                height *
+                0.85,
+            width *
+                0.62,
+            Math.max(
+                25,
+                height *
+                0.08
+            )
         );
 
 
         ctx.fillStyle =
-            "#59f6b5";
+            "#f7f5ef";
 
-        ctx.fillRect(
+
+        ctx.textAlign =
+            "center";
+
+
+        ctx.textBaseline =
+            "middle";
+
+
+        ctx.font =
+            `600 ${Math.max(
+                10,
+                Math.min(
+                    14,
+                    width *
+                    0.08
+                )
+            )}px sans-serif`;
+
+
+        ctx.fillText(
+            "9. Jardin",
             x +
-            size * 0.42,
+                width *
+                0.51,
             y +
-            size * 0.31,
-            size * 0.16,
-            size * 0.38
+                height *
+                0.89
         );
 
-        ctx.fillRect(
-            x +
-            size * 0.31,
-            y +
-            size * 0.51,
-            size * 0.38,
-            size * 0.16
-        );
+
+        ctx.restore();
     }
 
 
-    drawBox(
+
+    drawMapChapterMarker(
         ctx,
-        x,
-        y,
-        size
+        houseX,
+        houseY,
+        houseWidth,
+        houseHeight
     ) {
-        ctx.fillStyle =
-            "#d98032";
 
-        ctx.fillRect(
-            x +
-            size * 0.14,
-            y +
-            size * 0.14,
-            size * 0.72,
-            size * 0.72
-        );
-
-
-        ctx.strokeStyle =
-            "#4c2818";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.055
+        const current =
+            Number(
+                window.pytApp
+                    ?.currentChapter ||
+                1
             );
 
-        ctx.strokeRect(
-            x +
-            size * 0.14,
-            y +
-            size * 0.14,
-            size * 0.72,
-            size * 0.72
-        );
+
+        const positions = {
+
+            1: [
+                0.49,
+                0.49
+            ],
+
+            2: [
+                0.84,
+                0.49
+            ],
+
+            3: [
+                0.49,
+                0.16
+            ],
+
+            4: [
+                0.15,
+                0.16
+            ],
+
+            5: [
+                0.15,
+                0.49
+            ],
+
+            6: [
+                0.15,
+                0.84
+            ],
+
+            7: [
+                0.84,
+                0.16
+            ],
+
+            8: [
+                0.84,
+                0.84
+            ]
+        };
 
 
-        ctx.beginPath();
+        /*
+        Chapitre 9 est dans le jardin.
+        Pas de marqueur sur la maison.
+        */
 
-        ctx.moveTo(
-            x +
-            size * 0.22,
-            y +
-            size * 0.22
-        );
+        if (
+            current ===
+            9
+        ) {
 
-        ctx.lineTo(
-            x +
-            size * 0.78,
-            y +
-            size * 0.78
-        );
-
-        ctx.moveTo(
-            x +
-            size * 0.78,
-            y +
-            size * 0.22
-        );
-
-        ctx.lineTo(
-            x +
-            size * 0.22,
-            y +
-            size * 0.78
-        );
-
-        ctx.stroke();
-    }
-
-
-    drawBoxGoal(
-        ctx,
-        x,
-        y,
-        size
-    ) {
-        ctx.strokeStyle =
-            "#ffe55c";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.055
-            );
-
-        ctx.setLineDash([
-            size * 0.1,
-            size * 0.07
-        ]);
-
-        ctx.strokeRect(
-            x +
-            size * 0.16,
-            y +
-            size * 0.16,
-            size * 0.68,
-            size * 0.68
-        );
-
-        ctx.setLineDash([]);
-    }
-
-
-    /* =====================================================
-       ROBOT
-    ===================================================== */
-
-    drawRobot(
-        ctx,
-        startX,
-        startY,
-        tileSize
-    ) {
-        const robot =
-            this.game?.robot;
-
-        if (!robot) {
             return;
         }
 
 
         const position =
-            typeof robot.getPosition ===
-            "function"
-                ? robot.getPosition()
-                : {
-                    row:
-                        robot.row,
+            positions[current];
 
-                    col:
-                        robot.col
-                };
+
+        if (
+            !position
+        ) {
+
+            return;
+        }
 
 
         const x =
-            startX +
-            position.col *
-            tileSize;
+            houseX +
+            houseWidth *
+            position[0];
+
 
         const y =
-            startY +
-            position.row *
-            tileSize;
+            houseY +
+            houseHeight *
+            position[1];
 
 
-        const centerX =
-            x +
-            tileSize / 2;
-
-        const centerY =
-            y +
-            tileSize / 2;
-
-
-        const bodyWidth =
-            tileSize * 0.48;
-
-        const bodyHeight =
-            tileSize * 0.38;
-
-        const headWidth =
-            tileSize * 0.56;
-
-        const headHeight =
-            tileSize * 0.32;
+        const radius =
+            Math.max(
+                10,
+                Math.min(
+                    houseWidth,
+                    houseHeight
+                ) *
+                0.025
+            );
 
 
         ctx.save();
 
 
-        /*
-        Ombre.
-        */
-
-        ctx.globalAlpha =
-            0.25;
-
-        ctx.fillStyle =
-            "#000000";
-
-        ctx.beginPath();
-
-        ctx.ellipse(
-            centerX,
-            y +
-            tileSize * 0.78,
-            tileSize * 0.28,
-            tileSize * 0.09,
-            0,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
+        ctx.shadowColor =
+            "#fff4a8";
 
 
-        ctx.globalAlpha =
-            1;
-
-
-        /*
-        Corps blanc.
-        */
-
-        ctx.fillStyle =
-            "#f5f3ff";
-
-        ctx.fillRect(
-            centerX -
-            bodyWidth / 2,
-            centerY,
-            bodyWidth,
-            bodyHeight
-        );
+        ctx.shadowBlur =
+            radius *
+            1.2;
 
 
         ctx.strokeStyle =
-            "#181126";
+            "#fff4a8";
+
 
         ctx.lineWidth =
             Math.max(
-                2,
-                tileSize * 0.045
+                3,
+                radius *
+                0.25
             );
 
-        ctx.strokeRect(
-            centerX -
-            bodyWidth / 2,
-            centerY,
-            bodyWidth,
-            bodyHeight
+
+        ctx.beginPath();
+
+
+        ctx.arc(
+            x,
+            y,
+            radius,
+            0,
+            Math.PI *
+            2
         );
 
 
-        /*
-        Cœur cyan.
-        */
-
-        ctx.fillStyle =
-            "#4ff4ff";
-
-        ctx.fillRect(
-            centerX -
-            tileSize * 0.08,
-            centerY +
-            tileSize * 0.1,
-            tileSize * 0.16,
-            tileSize * 0.12
-        );
-
-
-        /*
-        Tête.
-        */
-
-        ctx.fillStyle =
-            "#f7f5ff";
-
-        ctx.fillRect(
-            centerX -
-            headWidth / 2,
-            y +
-            tileSize * 0.22,
-            headWidth,
-            headHeight
-        );
-
-
-        ctx.strokeStyle =
-            "#181126";
-
-        ctx.strokeRect(
-            centerX -
-            headWidth / 2,
-            y +
-            tileSize * 0.22,
-            headWidth,
-            headHeight
-        );
-
-
-        /*
-        Visage sombre.
-        */
-
-        ctx.fillStyle =
-            "#211937";
-
-        ctx.fillRect(
-            centerX -
-            headWidth * 0.34,
-            y +
-            tileSize * 0.29,
-            headWidth * 0.68,
-            headHeight * 0.48
-        );
-
-
-        /*
-        Yeux.
-        */
-
-        ctx.fillStyle =
-            "#55f5ff";
-
-        ctx.fillRect(
-            centerX -
-            tileSize * 0.15,
-            y +
-            tileSize * 0.34,
-            tileSize * 0.07,
-            tileSize * 0.07
-        );
-
-        ctx.fillRect(
-            centerX +
-            tileSize * 0.08,
-            y +
-            tileSize * 0.34,
-            tileSize * 0.07,
-            tileSize * 0.07
-        );
-
-
-        /*
-        Direction.
-        */
-
-        this.drawRobotDirection(
-            ctx,
-            centerX,
-            centerY,
-            tileSize,
-            robot.direction
-        );
+        ctx.stroke();
 
 
         ctx.restore();
     }
 
 
-    drawRobotDirection(
-        ctx,
-        centerX,
-        centerY,
-        size,
-        direction
-    ) {
-        const normalized =
-            String(
-                direction ||
-                "EAST"
-            ).toUpperCase();
 
+    /* =====================================================
+       CARTE / NIVEAUX
+    ===================================================== */
 
-        let dx = 1;
-        let dy = 0;
+    renderMap() {
+
+        const app =
+            window.pytApp;
 
 
         if (
-            normalized === "NORTH" ||
-            normalized === "N"
+            !app
         ) {
-            dx = 0;
-            dy = -1;
 
-        } else if (
-            normalized === "SOUTH" ||
-            normalized === "S"
-        ) {
-            dx = 0;
-            dy = 1;
-
-        } else if (
-            normalized === "WEST" ||
-            normalized === "W"
-        ) {
-            dx = -1;
-            dy = 0;
+            return;
         }
 
 
-        const startX =
-            centerX +
-            dx *
-            size * 0.24;
-
-        const startY =
-            centerY +
-            dy *
-            size * 0.24;
-
-
-        const endX =
-            centerX +
-            dx *
-            size * 0.42;
-
-        const endY =
-            centerY +
-            dy *
-            size * 0.42;
-
-
-        ctx.strokeStyle =
-            "#ffe55c";
-
-        ctx.fillStyle =
-            "#ffe55c";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.05
+        const chapterNumber =
+            Number(
+                app.currentChapter ||
+                1
             );
 
 
-        ctx.beginPath();
+        const chapter =
+            this.getChapterData(
+                chapterNumber
+            );
 
-        ctx.moveTo(
-            startX,
-            startY
+
+        this.setText(
+            "map-title",
+            `Chapitre ${chapterNumber} · ${chapter.title || ""}`
         );
 
-        ctx.lineTo(
-            endX,
-            endY
+
+        this.setText(
+            "map-subtitle",
+            `Clique sur un exercice pour le lancer · ${chapter.room || ""}`
         );
 
-        ctx.stroke();
 
-
-        const perpendicularX =
-            -dy;
-
-        const perpendicularY =
-            dx;
-
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            endX,
-            endY
+        this.renderLevelNodes(
+            chapterNumber
         );
 
-        ctx.lineTo(
-            endX -
-            dx *
-            size * 0.11 +
-            perpendicularX *
-            size * 0.07,
 
-            endY -
-            dy *
-            size * 0.11 +
-            perpendicularY *
-            size * 0.07
+        this.renderChapterButtons(
+            chapterNumber
         );
 
-        ctx.lineTo(
-            endX -
-            dx *
-            size * 0.11 -
-            perpendicularX *
-            size * 0.07,
 
-            endY -
-            dy *
-            size * 0.11 -
-            perpendicularY *
-            size * 0.07
-        );
-
-        ctx.closePath();
-        ctx.fill();
+        this.resizeHouseMap();
     }
+
+
+
+    renderLevelNodes(
+        chapterNumber
+    ) {
+
+        const levels =
+            this.getLevelsForChapter(
+                chapterNumber
+            );
+
+
+        for (
+            let levelNumber = 1;
+            levelNumber <= 3;
+            levelNumber += 1
+        ) {
+
+            const node =
+                document.getElementById(
+                    `level-node-${levelNumber}`
+                );
+
+
+            if (
+                !node
+            ) {
+
+                continue;
+            }
+
+
+            const completed =
+                this.isLevelCompleted(
+                    chapterNumber,
+                    levelNumber
+                );
+
+
+            const unlocked =
+                this.isLevelUnlocked(
+                    chapterNumber,
+                    levelNumber
+                );
+
+
+            node.disabled =
+                !unlocked;
+
+
+            node.classList.toggle(
+                "locked",
+                !unlocked
+            );
+
+
+            node.classList.toggle(
+                "completed",
+                completed
+            );
+
+
+            node.classList.toggle(
+                "current",
+                unlocked &&
+                !completed &&
+                Number(
+                    window.pytApp
+                        ?.currentLevel
+                ) ===
+                    levelNumber
+            );
+
+
+            const numberElement =
+                node.querySelector(
+                    ".level-node-number"
+                );
+
+
+            if (
+                numberElement
+            ) {
+
+                numberElement.textContent =
+                    String(
+                        levelNumber
+                    );
+            }
+
+
+            const stateElement =
+                node.querySelector(
+                    ".level-node-state"
+                );
+
+
+            if (
+                stateElement
+            ) {
+
+                if (
+                    completed
+                ) {
+
+                    stateElement.textContent =
+                        "Terminé";
+
+                } else if (
+                    !unlocked
+                ) {
+
+                    stateElement.textContent =
+                        "Verrouillé";
+
+                } else {
+
+                    const level =
+                        levels[
+                            levelNumber -
+                            1
+                        ];
+
+
+                    stateElement.textContent =
+                        level?.difficulty ||
+                        "Exercice";
+                }
+            }
+        }
+    }
+
+
+
+    renderChapterButtons(
+        chapterNumber
+    ) {
+
+        const previous =
+            document.getElementById(
+                "previous-chapter-button"
+            );
+
+
+        const next =
+            document.getElementById(
+                "next-chapter-button"
+            );
+
+
+        const indicator =
+            document.getElementById(
+                "map-chapter-indicator"
+            );
+
+
+        if (
+            previous
+        ) {
+
+            previous.disabled =
+                chapterNumber <=
+                1;
+        }
+
+
+        if (
+            next
+        ) {
+
+            const nextChapter =
+                chapterNumber +
+                1;
+
+
+            next.disabled =
+                nextChapter >
+                    Number(
+                        window.pytApp
+                            ?.totalChapters ||
+                        9
+                    ) ||
+                !this.isChapterUnlocked(
+                    nextChapter
+                );
+        }
+
+
+        if (
+            indicator
+        ) {
+
+            indicator.textContent =
+                `${chapterNumber} / ${window.pytApp?.totalChapters || 9}`;
+        }
+    }
+
+
+
+    handleChapterRequest(
+        event
+    ) {
+
+        const requested =
+            Number(
+                event.detail
+                    ?.requestedChapter
+            );
+
+
+        if (
+            this.isChapterUnlocked(
+                requested
+            )
+        ) {
+
+            return;
+        }
+
+
+        event.preventDefault();
+
+
+        window.pytApp?.showGuide(
+            "Ce chapitre est encore verrouillé. Termine d’abord le chapitre précédent."
+        );
+    }
+
+
+
+    /* =====================================================
+       COURS
+    ===================================================== */
+
+    renderCourse() {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        const chapterNumber =
+            Number(
+                app.currentChapter ||
+                1
+            );
+
+
+        const chapter =
+            this.getChapterData(
+                chapterNumber
+            );
+
+
+        this.setText(
+            "course-chapter-number",
+            `Chapitre ${chapterNumber}`
+        );
+
+
+        this.setText(
+            "course-title",
+            chapter.title ||
+            `Chapitre ${chapterNumber}`
+        );
+
+
+        this.setText(
+            "course-subtitle",
+            chapter.subtitle ||
+            ""
+        );
+
+
+        const container =
+            document.getElementById(
+                "course-content"
+            );
+
+
+        if (
+            container
+        ) {
+
+            container.innerHTML =
+                "";
+
+
+            this.renderTheoryContent(
+                container,
+                chapter.theory
+            );
+        }
+
+
+        const button =
+            document.getElementById(
+                "course-map-button"
+            );
+
+
+        if (
+            button
+        ) {
+
+            button.textContent =
+                this.reviewMode
+                    ? "Retour à l'exercice"
+                    : "Voir la carte";
+        }
+    }
+
+
+
+    renderTheoryContent(
+        container,
+        theory
+    ) {
+
+        if (
+            !Array.isArray(
+                theory
+            )
+        ) {
+
+            return;
+        }
+
+
+        theory.forEach(
+            section => {
+
+                if (
+                    typeof section ===
+                    "string"
+                ) {
+
+                    const paragraph =
+                        document.createElement(
+                            "p"
+                        );
+
+
+                    paragraph.textContent =
+                        section;
+
+
+                    container.appendChild(
+                        paragraph
+                    );
+
+
+                    return;
+                }
+
+
+                if (
+                    section.title
+                ) {
+
+                    const title =
+                        document.createElement(
+                            "h2"
+                        );
+
+
+                    title.textContent =
+                        section.title;
+
+
+                    container.appendChild(
+                        title
+                    );
+                }
+
+
+                if (
+                    section.body
+                ) {
+
+                    const texts =
+                        Array.isArray(
+                            section.body
+                        )
+                            ? section.body
+                            : [
+                                section.body
+                            ];
+
+
+                    texts.forEach(
+                        text => {
+
+                            const paragraph =
+                                document.createElement(
+                                    "p"
+                                );
+
+
+                            paragraph.textContent =
+                                text;
+
+
+                            container.appendChild(
+                                paragraph
+                            );
+                        }
+                    );
+                }
+
+
+                if (
+                    section.code
+                ) {
+
+                    const pre =
+                        document.createElement(
+                            "pre"
+                        );
+
+
+                    const code =
+                        document.createElement(
+                            "code"
+                        );
+
+
+                    code.textContent =
+                        section.code;
+
+
+                    pre.appendChild(
+                        code
+                    );
+
+
+                    container.appendChild(
+                        pre
+                    );
+                }
+            }
+        );
+    }
+
+
+
+    /* =====================================================
+       NIVEAU
+    ===================================================== */
+
+    loadLevel(
+        chapterNumber,
+        levelNumber
+    ) {
+
+        const chapter =
+            Number(
+                chapterNumber ||
+                1
+            );
+
+
+        const level =
+            Number(
+                levelNumber ||
+                1
+            );
+
+
+        const data =
+            this.getLevelData(
+                chapter,
+                level
+            );
+
+
+        this.currentLevelData =
+            data;
+
+
+        const key =
+            this.getLevelKey(
+                chapter,
+                level
+            );
+
+
+        if (
+            this.loadedLevelKey !==
+            key
+        ) {
+
+            const editor =
+                document.getElementById(
+                    "code-editor"
+                );
+
+
+            if (
+                editor
+            ) {
+
+                editor.value =
+                    data.starterCode ||
+                    "";
+            }
+
+
+            this.loadedLevelKey =
+                key;
+
+
+            this.clearCodeError();
+        }
+
+
+        window.pytApp
+            ?.setCurrentLevelData(
+                data
+            );
+
+
+        this.setText(
+            "game-status",
+            "Prêt"
+        );
+
+
+        window.dispatchEvent(
+            new CustomEvent(
+                "pyt:load-level",
+                {
+                    detail: {
+
+                        chapter,
+
+                        level,
+
+                        data
+                    }
+                }
+            )
+        );
+
+
+        window.setTimeout(
+            () => {
+
+                window.pytApp?.showGuide(
+                    data.guideMessage ||
+                    data.instruction ||
+                    "Lis la mission puis écris ton programme."
+                );
+
+            },
+            120
+        );
+    }
+
+
+
+    /* =====================================================
+       EXÉCUTION
+    ===================================================== */
+
+    setExecuting(
+        executing
+    ) {
+
+        const button =
+            document.getElementById(
+                "run-code-button"
+            );
+
+
+        if (
+            button
+        ) {
+
+            button.disabled =
+                Boolean(
+                    executing
+                );
+
+
+            button.textContent =
+                executing
+                    ? "Exécution..."
+                    : "Exécuter";
+        }
+
+
+        this.setText(
+            "game-status",
+            executing
+                ? "Programme en cours..."
+                : "Prêt"
+        );
+    }
+
+
+
+    handleExecutionResult(
+        result
+    ) {
+
+        this.setExecuting(
+            false
+        );
+
+
+        this.renderConsoleResult(
+            result
+        );
+
+
+        if (
+            result.success ===
+            true
+        ) {
+
+            this.handleSuccess(
+                result
+            );
+
+        } else {
+
+            this.handleFailure(
+                result
+            );
+        }
+    }
+
+
+
+    renderConsoleResult(
+        result
+    ) {
+
+        const output =
+            document.getElementById(
+                "console-output"
+            );
+
+
+        if (
+            !output
+        ) {
+
+            return;
+        }
+
+
+        const lines =
+            [];
+
+
+        if (
+            Array.isArray(
+                result.output
+            )
+        ) {
+
+            lines.push(
+                ...result.output
+            );
+
+        } else if (
+            typeof result.output ===
+                "string"
+        ) {
+
+            lines.push(
+                result.output
+            );
+        }
+
+
+        if (
+            result.error
+        ) {
+
+            lines.push(
+                result.error
+            );
+        }
+
+
+        output.textContent =
+            lines
+                .filter(
+                    Boolean
+                )
+                .join(
+                    "\n"
+                );
+    }
+
+
+
+    /* =====================================================
+       RÉUSSITE
+    ===================================================== */
+
+    handleSuccess(
+        result
+    ) {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        const chapter =
+            Number(
+                app.currentChapter
+            );
+
+
+        const level =
+            Number(
+                app.currentLevel
+            );
+
+
+        this.completeLevel(
+            chapter,
+            level
+        );
+
+
+        this.failureCounts[
+            this.getLevelKey(
+                chapter,
+                level
+            )
+        ] =
+            0;
+
+
+        this.clearCodeError();
+
+        app.hideThought();
+
+
+        this.setText(
+            "game-status",
+            "Mission réussie"
+        );
+
+
+        const actions =
+            [];
+
+
+        if (
+            level <
+            3
+        ) {
+
+            actions.push({
+
+                label:
+                    "Exercice suivant",
+
+                onClick:
+                    () => {
+
+                        app.hideGuide();
+
+                        this.openNextLevel();
+                    }
+            });
+
+        } else {
+
+            actions.push({
+
+                label:
+                    "Retour à la carte",
+
+                onClick:
+                    () => {
+
+                        app.hideGuide();
+
+                        app.showMap();
+                    }
+            });
+        }
+
+
+        app.showGuide(
+            result.message ||
+            "Bien joué ! La mission est réussie.",
+            actions
+        );
+
+
+        this.renderMap();
+    }
+
+
+
+    openNextLevel() {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        const next =
+            Number(
+                app.currentLevel
+            ) +
+            1;
+
+
+        if (
+            next <=
+                3 &&
+            this.isLevelUnlocked(
+                app.currentChapter,
+                next
+            )
+        ) {
+
+            app.currentLevel =
+                next;
+
+
+            this.loadLevel(
+                app.currentChapter,
+                next
+            );
+
+
+            app.showGame();
+
+            return;
+        }
+
+
+        app.showMap();
+    }
+
+
+
+    /* =====================================================
+       ÉCHECS
+    ===================================================== */
+
+    handleFailure(
+        result
+    ) {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        const key =
+            this.getLevelKey(
+                app.currentChapter,
+                app.currentLevel
+            );
+
+
+        this.failureCounts[key] =
+            (
+                this.failureCounts[key] ||
+                0
+            ) +
+            1;
+
+
+        const failures =
+            this.failureCounts[key];
+
+
+        this.setText(
+            "game-status",
+            "Mission non terminée"
+        );
+
+
+        const reason =
+            String(
+                result.reason ||
+                ""
+            )
+                .toLowerCase();
+
+
+        if (
+            reason ===
+                "wrong_destination" ||
+            reason ===
+                "wrong_position" ||
+            result.wrongDestination ===
+                true
+        ) {
+
+            app.showThought(
+                "Ce n’est pas là que je voulais aller..."
+            );
+
+        } else {
+
+            app.hideThought();
+        }
+
+
+        /*
+        Premier échec :
+        aucune ligne rouge.
+        */
+
+        if (
+            failures ===
+            1
+        ) {
+
+            this.clearCodeError();
+
+
+            app.showGuide(
+                result.firstAttemptMessage ||
+                "Ça ne fonctionne pas encore. Tu peux revoir le cours avant de réessayer. Si ça bloque encore, je pourrai t’indiquer plus précisément où chercher.",
+                [
+
+                    {
+
+                        label:
+                            "Revoir le cours",
+
+                        onClick:
+                            () => {
+
+                                this.openTheoryReview();
+                            }
+                    },
+
+                    {
+
+                        label:
+                            "Réessayer",
+
+                        onClick:
+                            () => {
+
+                                app.hideGuide();
+
+                                app.openCodeWindow();
+                            }
+                    }
+                ]
+            );
+
+
+            return;
+        }
+
+
+        /*
+        Deuxième erreur et suivantes.
+        */
+
+        const errorLine =
+            Number(
+                result.errorLine ||
+                result.line ||
+                0
+            );
+
+
+        if (
+            Number.isInteger(
+                errorLine
+            ) &&
+            errorLine >
+                0
+        ) {
+
+            app.showCodeError(
+                errorLine
+            );
+
+        } else {
+
+            this.clearCodeError();
+        }
+
+
+        app.showGuide(
+            result.hint ||
+            result.message ||
+            (
+                errorLine >
+                    0
+                    ? `Regarde plus attentivement la ligne ${errorLine}.`
+                    : "Ton programme s’exécute, mais la mission n’est pas encore complètement réussie."
+            ),
+            [
+
+                {
+
+                    label:
+                        "Modifier mon code",
+
+                    onClick:
+                        () => {
+
+                            app.hideGuide();
+
+                            app.openCodeWindow();
+                        }
+                },
+
+                {
+
+                    label:
+                        "Revoir le cours",
+
+                    onClick:
+                        () => {
+
+                            this.openTheoryReview();
+                        }
+                }
+            ]
+        );
+    }
+
+
+
+    /* =====================================================
+       RETOUR AU COURS
+    ===================================================== */
+
+    openTheoryReview() {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
+        this.reviewContext = {
+
+            chapter:
+                app.currentChapter,
+
+            level:
+                app.currentLevel,
+
+            code:
+                editor
+                    ? editor.value
+                    : ""
+        };
+
+
+        this.reviewMode =
+            true;
+
+
+        app.hideGuide();
+
+        app.showCourse();
+    }
+
+
+
+    returnFromTheory() {
+
+        const app =
+            window.pytApp;
+
+
+        if (
+            !app
+        ) {
+
+            return;
+        }
+
+
+        if (
+            this.reviewContext
+        ) {
+
+            app.currentChapter =
+                this.reviewContext
+                    .chapter;
+
+
+            app.currentLevel =
+                this.reviewContext
+                    .level;
+
+
+            const editor =
+                document.getElementById(
+                    "code-editor"
+                );
+
+
+            if (
+                editor
+            ) {
+
+                editor.value =
+                    this.reviewContext
+                        .code;
+            }
+        }
+
+
+        this.reviewMode =
+            false;
+
+
+        this.reviewContext =
+            null;
+
+
+        this.renderCourse();
+
+        app.showGame();
+
+
+        window.setTimeout(
+            () => {
+
+                app.showGuide(
+                    "Tu peux reprendre ton programme exactement là où tu l’avais laissé.",
+                    [
+
+                        {
+
+                            label:
+                                "Continuer",
+
+                            onClick:
+                                () => {
+
+                                    app.hideGuide();
+
+                                    app.openCodeWindow();
+                                }
+                        }
+                    ]
+                );
+
+            },
+            100
+        );
+    }
+
+
+
+    /* =====================================================
+       RESTART
+    ===================================================== */
+
+    handleRestart() {
+
+        window.pytApp
+            ?.hideThought();
+
+
+        this.clearCodeError();
+
+
+        this.setText(
+            "game-status",
+            "Niveau recommencé"
+        );
+
+
+        if (
+            this.currentLevelData
+        ) {
+
+            window.dispatchEvent(
+                new CustomEvent(
+                    "pyt:reload-world",
+                    {
+                        detail: {
+
+                            data:
+                                this.currentLevelData
+                        }
+                    }
+                )
+            );
+        }
+    }
+
+
+
+    /* =====================================================
+       ÉDITEUR / ERREURS
+    ===================================================== */
+
+    prepareEditor() {
+
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
+        const overlay =
+            document.getElementById(
+                "code-error-highlights"
+            );
+
+
+        if (
+            !editor ||
+            !overlay
+        ) {
+
+            return;
+        }
+
+
+        overlay.style.zIndex =
+            "3";
+
+        overlay.style.pointerEvents =
+            "none";
+
+        overlay.style.overflow =
+            "hidden";
+
+
+        editor.addEventListener(
+            "scroll",
+            () => {
+
+                overlay.scrollTop =
+                    editor.scrollTop;
+
+                overlay.scrollLeft =
+                    editor.scrollLeft;
+            }
+        );
+
+
+        editor.addEventListener(
+            "input",
+            () => {
+
+                const line =
+                    Number(
+                        editor.dataset
+                            .errorLine
+                    );
+
+
+                if (
+                    Number.isInteger(
+                        line
+                    ) &&
+                    line >
+                        0
+                ) {
+
+                    this.renderCodeError(
+                        line
+                    );
+                }
+            }
+        );
+    }
+
+
+
+    renderCodeError(
+        lineNumber
+    ) {
+
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
+        const overlay =
+            document.getElementById(
+                "code-error-highlights"
+            );
+
+
+        if (
+            !editor ||
+            !overlay ||
+            !Number.isInteger(
+                lineNumber
+            ) ||
+            lineNumber <=
+                0
+        ) {
+
+            this.clearCodeError();
+
+            return;
+        }
+
+
+        editor.dataset.errorLine =
+            String(
+                lineNumber
+            );
+
+
+        overlay.innerHTML =
+            "";
+
+
+        const lines =
+            editor.value
+                .replace(
+                    /\t/g,
+                    "    "
+                )
+                .split(
+                    "\n"
+                );
+
+
+        lines.forEach(
+            (
+                line,
+                index
+            ) => {
+
+                const span =
+                    document.createElement(
+                        "span"
+                    );
+
+
+                span.textContent =
+                    line.length
+                        ? line
+                        : " ";
+
+
+                if (
+                    index +
+                        1 ===
+                    lineNumber
+                ) {
+
+                    span.classList.add(
+                        "code-line-error"
+                    );
+                }
+
+
+                overlay.appendChild(
+                    span
+                );
+
+
+                if (
+                    index <
+                    lines.length -
+                    1
+                ) {
+
+                    overlay.appendChild(
+                        document.createTextNode(
+                            "\n"
+                        )
+                    );
+                }
+            }
+        );
+
+
+        overlay.scrollTop =
+            editor.scrollTop;
+
+        overlay.scrollLeft =
+            editor.scrollLeft;
+    }
+
+
+
+    clearCodeError() {
+
+        const editor =
+            document.getElementById(
+                "code-editor"
+            );
+
+
+        const overlay =
+            document.getElementById(
+                "code-error-highlights"
+            );
+
+
+        if (
+            editor
+        ) {
+
+            delete editor.dataset
+                .errorLine;
+        }
+
+
+        if (
+            overlay
+        ) {
+
+            overlay.innerHTML =
+                "";
+        }
+    }
+
+
+
+    /* =====================================================
+       PROGRESSION
+    ===================================================== */
+
+    loadProgress() {
+
+        try {
+
+            const saved =
+                localStorage.getItem(
+                    "pyt-progress"
+                );
+
+
+            if (
+                !saved
+            ) {
+
+                return;
+            }
+
+
+            const parsed =
+                JSON.parse(
+                    saved
+                );
+
+
+            if (
+                parsed &&
+                typeof parsed ===
+                    "object"
+            ) {
+
+                this.progress = {
+
+                    completed:
+                        parsed.completed &&
+                        typeof parsed.completed ===
+                            "object"
+                            ? parsed.completed
+                            : {}
+                };
+            }
+
+        } catch (
+            error
+        ) {
+
+            console.warn(
+                "Impossible de charger la progression PYT.",
+                error
+            );
+        }
+    }
+
+
+
+    saveProgress() {
+
+        try {
+
+            localStorage.setItem(
+                "pyt-progress",
+                JSON.stringify(
+                    this.progress
+                )
+            );
+
+        } catch (
+            error
+        ) {
+
+            console.warn(
+                "Impossible d'enregistrer la progression PYT.",
+                error
+            );
+        }
+    }
+
+
+
+    completeLevel(
+        chapter,
+        level
+    ) {
+
+        this.progress.completed[
+            this.getLevelKey(
+                chapter,
+                level
+            )
+        ] =
+            true;
+
+
+        this.saveProgress();
+    }
+
+
+
+    isLevelCompleted(
+        chapter,
+        level
+    ) {
+
+        return Boolean(
+            this.progress.completed[
+                this.getLevelKey(
+                    chapter,
+                    level
+                )
+            ]
+        );
+    }
+
+
+
+    isLevelUnlocked(
+        chapter,
+        level
+    ) {
+
+        const chapterNumber =
+            Number(
+                chapter
+            );
+
+
+        const levelNumber =
+            Number(
+                level
+            );
+
+
+        if (
+            !this.isChapterUnlocked(
+                chapterNumber
+            )
+        ) {
+
+            return false;
+        }
+
+
+        if (
+            levelNumber <=
+            1
+        ) {
+
+            return true;
+        }
+
+
+        return this.isLevelCompleted(
+            chapterNumber,
+            levelNumber -
+                1
+        );
+    }
+
+
+
+    isChapterUnlocked(
+        chapter
+    ) {
+
+        const chapterNumber =
+            Number(
+                chapter
+            );
+
+
+        if (
+            chapterNumber <=
+            1
+        ) {
+
+            return true;
+        }
+
+
+        const previous =
+            chapterNumber -
+            1;
+
+
+        const levels =
+            this.getLevelsForChapter(
+                previous
+            );
+
+
+        const count =
+            levels.length
+                ? Math.min(
+                    levels.length,
+                    3
+                )
+                : 3;
+
+
+        for (
+            let level = 1;
+            level <= count;
+            level += 1
+        ) {
+
+            if (
+                !this.isLevelCompleted(
+                    previous,
+                    level
+                )
+            ) {
+
+                return false;
+            }
+        }
+
+
+        return true;
+    }
+
+
+
+    getLevelKey(
+        chapter,
+        level
+    ) {
+
+        return (
+            `${Number(chapter)}-${Number(level)}`
+        );
+    }
+
+
+
+    /* =====================================================
+       AIDE PREMIÈRE CARTE
+    ===================================================== */
+
+    showFirstMapHint() {
+
+        if (
+            this.firstMapHintShown
+        ) {
+
+            return;
+        }
+
+
+        let seen =
+            false;
+
+
+        try {
+
+            seen =
+                localStorage.getItem(
+                    "pyt-map-help-seen"
+                ) ===
+                "1";
+
+        } catch (
+            error
+        ) {
+
+            seen =
+                false;
+        }
+
+
+        if (
+            seen
+        ) {
+
+            this.firstMapHintShown =
+                true;
+
+            return;
+        }
+
+
+        this.firstMapHintShown =
+            true;
+
+
+        window.setTimeout(
+            () => {
+
+                window.pytApp?.showGuide(
+                    "Voici la maison. Chaque chapitre correspond à une pièce. Clique sur l’exercice 1 pour commencer."
+                );
+
+
+                try {
+
+                    localStorage.setItem(
+                        "pyt-map-help-seen",
+                        "1"
+                    );
+
+                } catch (
+                    error
+                ) {
+
+                    /*
+                    localStorage indisponible.
+                    */
+                }
+
+            },
+            200
+        );
+    }
+
+
+
+    /* =====================================================
+       UTILITAIRES
+    ===================================================== */
+
+    setText(
+        id,
+        value
+    ) {
+
+        const element =
+            document.getElementById(
+                id
+            );
+
+
+        if (
+            element
+        ) {
+
+            element.textContent =
+                value ??
+                "";
+        }
+    }
+
+
+
+    normalize(
+        value
+    ) {
+
+        return String(
+            value ??
+            ""
+        )
+            .normalize(
+                "NFD"
+            )
+            .replace(
+                /[\u0300-\u036f]/g,
+                ""
+            )
+            .trim()
+            .toLowerCase()
+            .replace(
+                /[\s-]+/g,
+                "_"
+            );
+    }
+
 }
 
 
+
 /* =========================================================
-   EXPORT
+   DÉMARRAGE
 ========================================================= */
 
-window.PytUI = PytUI;
+function startPytUI() {
+
+    if (
+        window.pytUI
+    ) {
+
+        return;
+    }
+
+
+    window.PytUI =
+        PytUI;
+
+
+    window.pytUI =
+        new PytUI();
+}
+
+
+
+if (
+    document.readyState ===
+    "loading"
+) {
+
+    document.addEventListener(
+        "DOMContentLoaded",
+        startPytUI,
+        {
+            once: true
+        }
+    );
+
+} else {
+
+    startPytUI();
+}
