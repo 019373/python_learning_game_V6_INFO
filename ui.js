@@ -2,6 +2,7 @@
 
 /* =========================================================
    PYT - ui.js
+   Interface, carte, cours, guide Pyt et rendu du jeu.
 ========================================================= */
 
 class PytUI {
@@ -13,9 +14,16 @@ class PytUI {
         this.currentChapter = 1;
         this.currentExercise = 1;
 
-        this.completedLevels = new Set();
-        this.unlockedLevels = new Set(["1-1"]);
-        this.seenCourses = new Set();
+        this.completedLevels =
+            new Set();
+
+        this.unlockedLevels =
+            new Set([
+                "1-1"
+            ]);
+
+        this.seenCourses =
+            new Set();
 
         this.attempts = {};
 
@@ -28,21 +36,14 @@ class PytUI {
         this.savedCodeBeforeTheory = "";
         this.returnToExerciseAfterTheory = false;
 
-        this.guideHideTimer = null;
+        this.mapFirstVisit = true;
+
+        this.guideAnimationTimer = null;
 
         this.cacheElements();
         this.connectEvents();
-        this.prepareCanvas();
-        this.updateMobileState();
-
-        window.addEventListener(
-            "resize",
-            () => {
-                this.updateMobileState();
-                this.resizeCanvas();
-                this.render();
-            }
-        );
+        this.setupCanvas();
+        this.setupCodeWindowDrag();
     }
 
 
@@ -51,168 +52,263 @@ class PytUI {
     ===================================================== */
 
     cacheElements() {
-        const $ =
-            id =>
-                document.getElementById(id);
-
         this.gameInterface =
-            $("game-interface");
+            document.getElementById(
+                "game-interface"
+            );
 
         this.gameScreen =
-            $("game-screen");
+            document.getElementById(
+                "game-screen"
+            );
 
-        this.chapterScreen =
-            $("chapter-screen");
+        this.courseScreen =
+            document.getElementById(
+                "course-screen"
+            );
 
         this.mapScreen =
-            $("map-screen");
+            document.getElementById(
+                "map-screen"
+            );
 
-        this.canvas =
-            $("game-canvas");
 
-        this.ctx =
-            this.canvas?.getContext("2d") || null;
+        this.chapterDisplay =
+            document.getElementById(
+                "chapter-display"
+            );
+
+        this.difficultyDisplay =
+            document.getElementById(
+                "difficulty-display"
+            );
 
         this.roomName =
-            $("room-name");
+            document.getElementById(
+                "room-name"
+            );
 
         this.gameStatus =
-            $("game-status");
+            document.getElementById(
+                "game-status"
+            );
 
-        this.chapterBadge =
-            $("chapter-badge");
-
-        this.difficultyBadge =
-            $("difficulty-badge");
-
-        this.missionTitle =
-            $("mission-title");
-
-        this.missionInstruction =
-            $("mission-instruction");
 
         this.courseButton =
-            $("course-button");
+            document.getElementById(
+                "course-button"
+            );
 
         this.mapButton =
-            $("map-button");
+            document.getElementById(
+                "map-button"
+            );
 
         this.openCodeButton =
-            $("open-code-button");
+            document.getElementById(
+                "open-code-button"
+            );
 
         this.restartButton =
-            $("restart-button");
+            document.getElementById(
+                "restart-button"
+            );
 
-        this.codeRestartButton =
-            $("code-restart-button");
 
-        this.closeCodeButton =
-            $("close-code-button");
+        this.canvas =
+            document.getElementById(
+                "game-canvas"
+            );
 
-        this.clearCodeButton =
-            $("clear-code-button");
+        this.context =
+            this.canvas
+                ?.getContext(
+                    "2d"
+                ) || null;
 
-        this.runCodeButton =
-            $("run-code-button");
 
-        this.codeWindow =
-            $("code-window");
+        this.missionTitle =
+            document.getElementById(
+                "mission-title"
+            );
 
-        this.codeWindowHeader =
-            $("code-window-header");
+        this.missionInstruction =
+            document.getElementById(
+                "mission-instruction"
+            );
 
-        this.codeEditor =
-            $("code-editor");
+        this.missionCodeButton =
+            document.getElementById(
+                "mission-code-button"
+            );
 
-        this.codeEditorWrapper =
-            $("code-editor-wrapper");
 
-        this.codeErrorHighlights =
-            $("code-error-highlights");
+        this.thoughtBubble =
+            document.getElementById(
+                "thought-bubble"
+            );
 
-        this.consoleOutput =
-            $("console-output");
+        this.thoughtText =
+            document.getElementById(
+                "thought-text"
+            );
 
-        this.courseChapterNumber =
-            $("course-chapter-number");
+
+        /*
+        Cours
+        */
 
         this.courseTitle =
-            $("course-title");
-
-        this.courseSubtitle =
-            $("course-subtitle");
+            document.getElementById(
+                "course-title"
+            );
 
         this.courseContent =
-            $("course-content");
+            document.getElementById(
+                "course-content"
+            );
 
         this.courseMapButton =
-            $("course-map-button");
+            document.getElementById(
+                "course-map-button"
+            );
 
-        this.mapBackground =
-            $("map-background");
+
+        /*
+        Carte
+        */
 
         this.mapTitle =
-            $("map-title");
+            document.getElementById(
+                "map-title"
+            );
 
         this.mapSubtitle =
-            $("map-subtitle");
+            document.getElementById(
+                "map-subtitle"
+            );
+
+        this.mapRoom =
+            document.getElementById(
+                "map-room"
+            );
 
         this.mapCourseButton =
-            $("map-course-button");
-
-        this.mapDecoration =
-            $("map-decoration");
-
-        this.levelNodes = [
-            $("level-node-1"),
-            $("level-node-2"),
-            $("level-node-3")
-        ];
+            document.getElementById(
+                "map-course-button"
+            );
 
         this.previousChapterButton =
-            $("previous-chapter-button");
+            document.getElementById(
+                "previous-chapter-button"
+            );
 
         this.nextChapterButton =
-            $("next-chapter-button");
+            document.getElementById(
+                "next-chapter-button"
+            );
 
-        this.mapChapterIndicator =
-            $("map-chapter-indicator");
+        this.levelNodes =
+            Array.from(
+                document.querySelectorAll(
+                    "[data-level-exercise]"
+                )
+            );
+
+
+        /*
+        Éditeur
+        */
+
+        this.codeWindow =
+            document.getElementById(
+                "code-window"
+            );
+
+        this.codeWindowHeader =
+            document.getElementById(
+                "code-window-header"
+            );
+
+        this.closeCodeButton =
+            document.getElementById(
+                "close-code-button"
+            );
+
+        this.codeEditor =
+            document.getElementById(
+                "code-editor"
+            );
+
+        this.runCodeButton =
+            document.getElementById(
+                "run-code-button"
+            );
+
+        this.clearCodeButton =
+            document.getElementById(
+                "clear-code-button"
+            );
+
+        this.consoleOutput =
+            document.getElementById(
+                "console-output"
+            );
+
+        this.codeErrorHighlight =
+            document.getElementById(
+                "code-error-highlight"
+            );
+
+
+        /*
+        Guide Pyt
+        */
 
         this.pytGuide =
-            $("pyt-guide");
+            document.getElementById(
+                "pyt-guide"
+            );
 
-        this.pytGuideMessage =
-            $("pyt-guide-message");
-
-        this.pytGuideActions =
-            $("pyt-guide-actions");
+        this.pytGuideText =
+            document.getElementById(
+                "pyt-guide-text"
+            );
 
         this.closePytGuideButton =
-            $("close-pyt-guide-button");
+            document.getElementById(
+                "close-pyt-guide-button"
+            );
 
-        this.robotThoughtBubble =
-            $("robot-thought-bubble");
 
-        this.modalBackground =
-            $("modal-background");
+        /*
+        Modal
+        */
 
-        this.messageModal =
-            $("message-modal");
-
-        this.modalLabel =
-            $("modal-label");
+        this.modal =
+            document.getElementById(
+                "general-modal"
+            );
 
         this.modalTitle =
-            $("modal-title");
+            document.getElementById(
+                "modal-title"
+            );
 
-        this.modalMessage =
-            $("modal-message");
+        this.modalText =
+            document.getElementById(
+                "modal-text"
+            );
 
         this.modalPrimaryButton =
-            $("modal-primary-button");
+            document.getElementById(
+                "modal-primary-button"
+            );
 
         this.modalSecondaryButton =
-            $("modal-secondary-button");
+            document.getElementById(
+                "modal-secondary-button"
+            );
     }
 
 
@@ -221,97 +317,184 @@ class PytUI {
     ===================================================== */
 
     connectEvents() {
-        this.courseButton?.addEventListener(
-            "click",
-            () =>
-                this.reviewTheory()
-        );
 
-        this.mapButton?.addEventListener(
-            "click",
-            () =>
-                this.showMap()
-        );
+        this.courseButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.reviewTheory()
+            );
 
-        this.openCodeButton?.addEventListener(
-            "click",
-            () =>
-                this.openCode()
-        );
 
-        this.closeCodeButton?.addEventListener(
-            "click",
-            () =>
-                this.closeCode()
-        );
+        this.mapButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.showMap()
+            );
 
-        this.restartButton?.addEventListener(
-            "click",
-            () =>
-                this.onRestart?.()
-        );
 
-        this.codeRestartButton?.addEventListener(
-            "click",
-            () =>
-                this.onRestart?.()
-        );
+        this.openCodeButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.openCodeWindow()
+            );
 
-        this.runCodeButton?.addEventListener(
-            "click",
-            () =>
-                this.runCode()
-        );
 
-        this.clearCodeButton?.addEventListener(
-            "click",
-            () => {
-                if (this.codeEditor) {
-                    this.codeEditor.value = "";
-                    this.codeEditor.focus();
+        this.missionCodeButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.openCodeWindow()
+            );
+
+
+        this.closeCodeButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.closeCodeWindow()
+            );
+
+
+        this.restartButton
+            ?.addEventListener(
+                "click",
+                () => {
+                    if (
+                        typeof this.onRestart ===
+                        "function"
+                    ) {
+                        this.onRestart();
+                    }
                 }
+            );
 
-                this.clearErrorHighlight();
-            }
-        );
 
-        this.courseMapButton?.addEventListener(
-            "click",
-            () =>
-                this.leaveCourse()
-        );
+        this.clearCodeButton
+            ?.addEventListener(
+                "click",
+                () => {
+                    if (
+                        this.codeEditor
+                    ) {
+                        this.codeEditor.value =
+                            "";
+                    }
 
-        this.mapCourseButton?.addEventListener(
-            "click",
-            () =>
-                this.showCourse()
-        );
+                    this.clearErrorHighlight();
+
+                    if (
+                        this.consoleOutput
+                    ) {
+                        this.consoleOutput.textContent =
+                            "";
+                    }
+
+                    this.codeEditor?.focus();
+                }
+            );
+
+
+        this.runCodeButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.requestRun()
+            );
+
+
+        this.courseMapButton
+            ?.addEventListener(
+                "click",
+                () => {
+                    if (
+                        this.returnToExerciseAfterTheory
+                    ) {
+                        this.returnToExerciseAfterTheory =
+                            false;
+
+                        this.showGame();
+
+                        if (
+                            this.codeEditor
+                        ) {
+                            this.codeEditor.value =
+                                this.savedCodeBeforeTheory;
+                        }
+
+                        return;
+                    }
+
+                    this.showMap();
+                }
+            );
+
+
+        this.mapCourseButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.showCourse()
+            );
+
 
         this.previousChapterButton
             ?.addEventListener(
                 "click",
                 () =>
-                    this.changeMapChapter(-1)
+                    this.changeMapChapter(
+                        -1
+                    )
             );
+
 
         this.nextChapterButton
             ?.addEventListener(
                 "click",
                 () =>
-                    this.changeMapChapter(1)
+                    this.changeMapChapter(
+                        1
+                    )
             );
 
-        this.levelNodes.forEach(
-            (node, index) => {
-                node?.addEventListener(
-                    "click",
-                    () =>
-                        this.selectLevel(
-                            index + 1
-                        )
-                );
-            }
-        );
+
+        for (
+            const node
+            of this.levelNodes
+        ) {
+            node.addEventListener(
+                "click",
+                () => {
+                    const exercise =
+                        Number(
+                            node.dataset
+                                .levelExercise
+                        );
+
+                    this.selectLevelFromMap(
+                        exercise
+                    );
+                }
+            );
+        }
+
+
+        this.codeEditor
+            ?.addEventListener(
+                "keydown",
+                event =>
+                    this.handleEditorKeydown(
+                        event
+                    )
+            );
+
+
+        /*
+        Nouveau :
+        la bulle de Pyt peut être fermée.
+        */
 
         this.closePytGuideButton
             ?.addEventListener(
@@ -320,132 +503,148 @@ class PytUI {
                     this.hideGuide()
             );
 
-        this.codeEditor?.addEventListener(
-            "keydown",
-            event => {
-                if (
-                    event.key === "Tab"
-                ) {
-                    event.preventDefault();
 
-                    const start =
-                        this.codeEditor
-                            .selectionStart;
-
-                    const end =
-                        this.codeEditor
-                            .selectionEnd;
-
-                    const value =
-                        this.codeEditor.value;
-
-                    this.codeEditor.value =
-                        value.slice(0, start) +
-                        "    " +
-                        value.slice(end);
-
-                    this.codeEditor
-                        .selectionStart =
-                        start + 4;
-
-                    this.codeEditor
-                        .selectionEnd =
-                        start + 4;
-                }
-
-                if (
-                    event.key === "Enter" &&
-                    (
-                        event.ctrlKey ||
-                        event.metaKey
-                    )
-                ) {
-                    event.preventDefault();
-                    this.runCode();
-                }
+        window.addEventListener(
+            "resize",
+            () => {
+                this.resizeCanvas();
+                this.render();
             }
         );
-
-        this.connectCodeDragging();
     }
 
 
-    /* =====================================================
-       MOBILE
-    ===================================================== */
+    handleEditorKeydown(event) {
+        if (
+            event.key === "Tab"
+        ) {
+            event.preventDefault();
 
-    isMobile() {
-        return window.matchMedia(
-            "(max-width: 760px)"
-        ).matches;
-    }
+            const editor =
+                this.codeEditor;
 
+            if (!editor) {
+                return;
+            }
 
-    updateMobileState() {
-        document.body.classList.toggle(
-            "mobile-layout",
-            this.isMobile()
-        );
+            const start =
+                editor.selectionStart;
 
-        /*
-        Sur mobile les éléments flottants sont
-        intégrés dans la page par le CSS.
+            const end =
+                editor.selectionEnd;
 
-        On supprime aussi toute position de fenêtre
-        éventuellement ajoutée par le glisser-déposer.
-        */
+            const value =
+                editor.value;
+
+            editor.value =
+                value.slice(
+                    0,
+                    start
+                ) +
+                "    " +
+                value.slice(
+                    end
+                );
+
+            editor.selectionStart =
+                start + 4;
+
+            editor.selectionEnd =
+                start + 4;
+
+            return;
+        }
+
 
         if (
-            this.isMobile() &&
-            this.codeWindow
+            event.key === "Enter" &&
+            (
+                event.ctrlKey ||
+                event.metaKey
+            )
         ) {
-            this.codeWindow.style.left = "";
-            this.codeWindow.style.right = "";
-            this.codeWindow.style.top = "";
-            this.codeWindow.style.bottom = "";
+            event.preventDefault();
+
+            this.requestRun();
         }
     }
 
 
+    requestRun() {
+        if (
+            typeof this.onRunCode !==
+            "function"
+        ) {
+            return;
+        }
+
+        this.clearErrorHighlight();
+
+        this.onRunCode(
+            this.codeEditor?.value ||
+            ""
+        );
+    }
+
+
     /* =====================================================
-       JEU / NIVEAU
+       GAME / LEVEL
     ===================================================== */
 
     setGame(game) {
-        this.game = game;
+        this.game =
+            game;
 
         this.render();
     }
 
 
     setLevel(level) {
-        this.level = level;
-
-        if (!level) {
-            return;
-        }
+        this.level =
+            level;
 
         this.currentChapter =
-            Number(level.chapter) || 1;
+            Number(
+                level?.chapter ||
+                1
+            );
 
         this.currentExercise =
-            Number(level.exercise) || 1;
+            Number(
+                level?.exercise ||
+                1
+            );
+
 
         this.refreshLevelInformation();
 
+
         /*
-        Le starter code n'est placé que lorsqu'on
-        change réellement de niveau.
+        setLevel() n'est appelé que lors d'un vrai
+        changement de niveau.
+
+        Le code de départ peut donc être chargé ici.
+        Un simple Run/Restart ne doit PAS rappeler
+        setLevel(), ce qui permet de conserver le
+        programme écrit par l'élève.
         */
 
-        if (this.codeEditor) {
+        if (
+            this.codeEditor
+        ) {
             this.codeEditor.value =
-                level.starterCode || "";
+                level?.starterCode ||
+                "";
         }
 
-        if (this.consoleOutput) {
-            this.consoleOutput.textContent = "";
+
+        if (
+            this.consoleOutput
+        ) {
+            this.consoleOutput.textContent =
+                "";
         }
+
 
         this.clearErrorHighlight();
         this.hideThoughtBubble();
@@ -459,37 +658,48 @@ class PytUI {
             return;
         }
 
-        const chapter =
-            Number(this.level.chapter) || 1;
 
-        const exercise =
-            Number(this.level.exercise) || 1;
-
-        if (this.chapterBadge) {
-            this.chapterBadge.textContent =
-                `Chapitre ${chapter} · Exercice ${exercise}`;
+        if (
+            this.chapterDisplay
+        ) {
+            this.chapterDisplay.textContent =
+                `Chapitre ${this.currentChapter} · Exercice ${this.currentExercise}`;
         }
 
-        if (this.difficultyBadge) {
-            this.difficultyBadge.textContent =
+
+        if (
+            this.difficultyDisplay
+        ) {
+            this.difficultyDisplay.textContent =
                 this.translateDifficulty(
                     this.level.difficulty
                 );
         }
 
-        if (this.roomName) {
+
+        if (
+            this.roomName
+        ) {
             this.roomName.textContent =
                 this.level.room ||
-                this.getRoomName(chapter);
+                this.getRoomName(
+                    this.currentChapter
+                );
         }
 
-        if (this.missionTitle) {
+
+        if (
+            this.missionTitle
+        ) {
             this.missionTitle.textContent =
                 this.level.title ||
-                `Exercice ${exercise}`;
+                "Mission";
         }
 
-        if (this.missionInstruction) {
+
+        if (
+            this.missionInstruction
+        ) {
             this.missionInstruction.textContent =
                 this.level.instruction ||
                 "";
@@ -497,33 +707,33 @@ class PytUI {
     }
 
 
-    translateDifficulty(value) {
-        const difficulty =
-            String(value || "")
+    translateDifficulty(
+        difficulty
+    ) {
+        const value =
+            String(
+                difficulty ||
+                ""
+            )
+                .trim()
                 .toLowerCase();
 
-        if (
-            difficulty === "easy" ||
-            difficulty === "facile"
-        ) {
-            return "Facile";
-        }
+        const names = {
+            easy: "Facile",
+            facile: "Facile",
 
-        if (
-            difficulty === "medium" ||
-            difficulty === "moyen"
-        ) {
-            return "Moyen";
-        }
+            medium: "Moyen",
+            moyen: "Moyen",
 
-        if (
-            difficulty === "hard" ||
-            difficulty === "difficile"
-        ) {
-            return "Difficile";
-        }
+            hard: "Difficile",
+            difficile: "Difficile"
+        };
 
-        return value || "Facile";
+        return (
+            names[value] ||
+            difficulty ||
+            ""
+        );
     }
 
 
@@ -542,7 +752,7 @@ class PytUI {
 
         return (
             rooms[chapter] ||
-            `Chapitre ${chapter}`
+            "Maison"
         );
     }
 
@@ -551,12 +761,12 @@ class PytUI {
        NAVIGATION
     ===================================================== */
 
-    hideGameSections() {
+    hideInternalScreens() {
         this.gameScreen?.classList.add(
             "hidden"
         );
 
-        this.chapterScreen?.classList.add(
+        this.courseScreen?.classList.add(
             "hidden"
         );
 
@@ -567,154 +777,90 @@ class PytUI {
 
 
     showGame() {
-        this.hideGameSections();
+        this.gameInterface?.classList.remove(
+            "hidden"
+        );
+
+        this.hideInternalScreens();
 
         this.gameScreen?.classList.remove(
             "hidden"
         );
 
-        this.refreshLevelInformation();
         this.resizeCanvas();
         this.render();
-
-        window.setTimeout(
-            () => {
-                this.resizeCanvas();
-                this.render();
-            },
-            50
-        );
     }
 
 
-    showMap(chapter = null) {
-        this.hideGameSections();
+    showMap() {
+        this.gameInterface?.classList.remove(
+            "hidden"
+        );
+
+        this.hideInternalScreens();
 
         this.mapScreen?.classList.remove(
             "hidden"
         );
 
-        if (
-            Number.isInteger(chapter)
-        ) {
-            this.currentChapter =
-                Math.max(
-                    1,
-                    Math.min(
-                        9,
-                        chapter
-                    )
-                );
-        } else if (this.level) {
-            this.currentChapter =
-                Number(
-                    this.level.chapter
-                ) || 1;
-        }
+        this.returnToExerciseAfterTheory =
+            false;
 
         this.refreshMap();
+
+        this.mapFirstVisit =
+            false;
     }
 
 
-    showCourse(chapter = null) {
-        this.hideGameSections();
-
-        this.chapterScreen
-            ?.classList.remove(
-                "hidden"
-            );
-
-        if (
-            Number.isInteger(chapter)
-        ) {
-            this.currentChapter =
-                Math.max(
-                    1,
-                    Math.min(
-                        9,
-                        chapter
-                    )
-                );
-        } else if (this.level) {
-            this.currentChapter =
-                Number(
-                    this.level.chapter
-                ) || 1;
-        }
-
-        this.renderCourse(
-            this.currentChapter
+    showCourse() {
+        this.gameInterface?.classList.remove(
+            "hidden"
         );
+
+        this.hideInternalScreens();
+
+        this.courseScreen?.classList.remove(
+            "hidden"
+        );
+
+        this.refreshCourse();
     }
 
 
     showCourseAtChapterStart() {
-        const chapter =
-            this.level?.chapter || 1;
-
         const key =
-            String(chapter);
+            String(
+                this.currentChapter
+            );
 
         if (
             this.seenCourses.has(key)
         ) {
-            this.showMap(
-                Number(chapter)
-            );
-
+            this.showGame();
             return;
         }
 
-        this.seenCourses.add(key);
+        this.seenCourses.add(
+            key
+        );
 
         this.returnToExerciseAfterTheory =
             false;
 
-        this.showCourse(
-            Number(chapter)
-        );
+        this.showCourse();
     }
 
 
     reviewTheory() {
         this.savedCodeBeforeTheory =
-            this.codeEditor?.value || "";
+            this.codeEditor?.value ||
+            "";
 
         this.returnToExerciseAfterTheory =
             true;
 
-        this.closeCode();
-
-        this.showCourse(
-            this.level?.chapter ||
-            this.currentChapter
-        );
-    }
-
-
-    leaveCourse() {
-        if (
-            this.returnToExerciseAfterTheory &&
-            this.level
-        ) {
-            this.returnToExerciseAfterTheory =
-                false;
-
-            this.showGame();
-
-            if (this.codeEditor) {
-                this.codeEditor.value =
-                    this.savedCodeBeforeTheory;
-            }
-
-            this.openCode();
-
-            return;
-        }
-
-        this.showMap(
-            this.currentChapter
-        );
+        this.showCourse();
     }
 
 
@@ -726,243 +872,147 @@ class PytUI {
         const courses = {
 
             1: {
-                title: "Déplacer Pyt",
-                subtitle:
-                    "Apprends à avancer, reculer et tourner.",
-                html: `
-                    <p>
-                        Pyt se déplace case par case.
-                        Les premières instructions sont :
-                    </p>
+                title:
+                    "Chapitre 1 — Déplacements",
 
-                    <pre>forward(1)
-backward(1)
+                text:
+                    "Pyt se déplace case par case. forward() le fait avancer, backward() le fait reculer. right(90) et left(90) permettent de changer sa direction.",
+
+                example:
+`forward(2)
 right(90)
-left(90)</pre>
-
-                    <p>
-                        <strong>forward(1)</strong>
-                        avance d'une case.
-                    </p>
-
-                    <p>
-                        <strong>backward(1)</strong>
-                        recule d'une case.
-                    </p>
-
-                    <p>
-                        <strong>right(90)</strong>
-                        tourne Pyt de 90° vers la droite.
-                    </p>
-
-                    <p>
-                        <strong>left(90)</strong>
-                        tourne Pyt de 90° vers la gauche.
-                    </p>
-                `
+forward(1)`
             },
+
 
             2: {
-                title: "Variables et calculs",
-                subtitle:
-                    "Stocke des valeurs et utilise-les dans tes programmes.",
-                html: `
-                    <p>
-                        Une variable permet de garder une valeur
-                        pour la réutiliser plus tard.
-                    </p>
+                title:
+                    "Chapitre 2 — Variables et calculs",
 
-                    <pre>distance = 3
-forward(distance)</pre>
+                text:
+                    "Une variable permet de garder une valeur pour la réutiliser. Python peut aussi effectuer des calculs et convertir des valeurs avec int(), float() et str().",
 
-                    <p>
-                        Python permet aussi de faire des calculs :
-                    </p>
+                example:
+`distance = 2
+bonus = 1
+total = distance + bonus
 
-                    <pre>a = 2
-b = 3
-distance = a + b</pre>
-
-                    <p>
-                        Tu peux convertir certaines valeurs avec
-                        <strong>int()</strong>,
-                        <strong>float()</strong> et
-                        <strong>str()</strong>.
-                    </p>
-                `
+forward(total)`
             },
+
 
             3: {
-                title: "Conditions",
-                subtitle:
-                    "Fais prendre des décisions à ton programme.",
-                html: `
-                    <p>
-                        Une condition permet d'exécuter du code
-                        seulement dans certaines situations.
-                    </p>
+                title:
+                    "Chapitre 3 — Conditions",
 
-                    <pre>distance = 3
+                text:
+                    "Une condition permet de choisir quoi faire. if teste une situation. elif ajoute un autre cas et else traite le reste. On peut combiner des conditions avec and, or et not.",
 
-if distance > 2:
-    forward(1)
+                example:
+`distance = 2
+
+if distance == 2:
+    forward(2)
 else:
-    backward(1)</pre>
-
-                    <p>
-                        Tu peux utiliser
-                        <strong>if</strong>,
-                        <strong>elif</strong>,
-                        <strong>else</strong>,
-                        ainsi que
-                        <strong>and</strong>,
-                        <strong>or</strong> et
-                        <strong>not</strong>.
-                    </p>
-                `
+    forward(1)`
             },
+
 
             4: {
-                title: "Boucles for",
-                subtitle:
-                    "Répète une action un nombre précis de fois.",
-                html: `
-                    <p>
-                        Une boucle <strong>for</strong>
-                        évite de répéter plusieurs fois
-                        la même ligne.
-                    </p>
+                title:
+                    "Chapitre 4 — Boucles for",
 
-                    <pre>for i in range(4):
-    forward(1)</pre>
+                text:
+                    "Une boucle for répète des instructions un nombre déterminé de fois. range() permet de créer une suite de nombres.",
 
-                    <p>
-                        <strong>range(4)</strong>
-                        produit ici quatre répétitions.
-                    </p>
-                `
+                example:
+`for i in range(3):
+    forward(1)`
             },
+
 
             5: {
-                title: "Boucles while",
-                subtitle:
-                    "Répète tant qu'une condition reste vraie.",
-                html: `
-                    <p>
-                        Une boucle <strong>while</strong>
-                        continue tant que sa condition est vraie.
-                    </p>
+                title:
+                    "Chapitre 5 — Boucles while",
 
-                    <pre>distance = 3
+                text:
+                    "Une boucle while continue tant que sa condition est vraie. break permet de quitter la boucle immédiatement.",
 
-while distance > 0:
+                example:
+`distance = 0
+
+while distance < 3:
     forward(1)
-    distance -= 1</pre>
-
-                    <p>
-                        <strong>break</strong>
-                        permet de quitter une boucle.
-                    </p>
-                `
+    distance += 1`
             },
+
 
             6: {
-                title: "Listes",
-                subtitle:
-                    "Regroupe plusieurs valeurs dans une seule variable.",
-                html: `
-                    <p>
-                        Une liste contient plusieurs valeurs.
-                    </p>
+                title:
+                    "Chapitre 6 — Listes",
 
-                    <pre>mouvements = [1, 1, 2]
+                text:
+                    "Une liste permet de ranger plusieurs valeurs dans une même variable. On peut lire un élément avec son index et ajouter une valeur avec append().",
 
-for distance in mouvements:
-    forward(distance)</pre>
+                example:
+`actions = [1, 1, 1]
 
-                    <p>
-                        Tu peux ajouter une valeur avec :
-                    </p>
-
-                    <pre>mouvements.append(3)</pre>
-                `
+for distance in actions:
+    forward(distance)`
             },
+
 
             7: {
-                title: "Fonctions",
-                subtitle:
-                    "Crée tes propres instructions.",
-                html: `
-                    <p>
-                        Une fonction permet de regrouper plusieurs
-                        instructions sous un même nom.
-                    </p>
+                title:
+                    "Chapitre 7 — Fonctions",
 
-                    <pre>def avancer_deux():
-    forward(1)
-    forward(1)
+                text:
+                    "Une fonction regroupe plusieurs instructions sous un nom. Elle permet de réutiliser facilement le même comportement.",
 
-avancer_deux()</pre>
+                example:
+`def avancer_deux():
+    forward(2)
 
-                    <p>
-                        Une fonction peut également recevoir
-                        des paramètres.
-                    </p>
-                `
+avancer_deux()`
             },
 
-            8: {
-                title: "Combiner les notions",
-                subtitle:
-                    "Utilise plusieurs outils Python ensemble.",
-                html: `
-                    <p>
-                        Tu connais maintenant les variables,
-                        conditions, boucles, listes et fonctions.
-                    </p>
 
-                    <pre>def avancer(distance):
+            8: {
+                title:
+                    "Chapitre 8 — Combiner les notions",
+
+                text:
+                    "Les programmes deviennent plus intéressants quand plusieurs notions sont combinées : variables, conditions, boucles, listes et fonctions.",
+
+                example:
+`def avancer(distance):
     for i in range(distance):
         forward(1)
 
-distances = [2, 1]
+distance = 3
 
-for distance in distances:
-    avancer(distance)</pre>
-
-                    <p>
-                        Il existe souvent plusieurs solutions
-                        correctes pour une même mission.
-                    </p>
-                `
+if distance > 0:
+    avancer(distance)`
             },
 
+
             9: {
-                title: "Examen final",
-                subtitle:
-                    "Utilise tout ce que tu as appris.",
-                html: `
-                    <p>
-                        Le dernier chapitre n'introduit
-                        aucune nouvelle notion.
-                    </p>
+                title:
+                    "Chapitre 9 — Examen final",
 
-                    <p>
-                        Observe la mission, réfléchis à ton
-                        algorithme et combine les outils appris
-                        pendant les chapitres précédents.
-                    </p>
+                text:
+                    "Aucune nouvelle notion. Utilise tout ce que tu as appris pour résoudre les trois dernières missions de Pyt.",
 
-                    <pre># À toi de jouer !
+                example:
+`def trajet(actions):
+    for action in actions:
+        if action == 1:
+            forward(1)
 
-# variables
-# conditions
-# boucles
-# listes
-# fonctions</pre>
-                `
+trajet([1, 1, 1])`
             }
         };
+
 
         return (
             courses[chapter] ||
@@ -971,35 +1021,68 @@ for distance in distances:
     }
 
 
-    renderCourse(chapter) {
+    refreshCourse() {
         const course =
-            this.getCourseData(chapter);
+            this.getCourseData(
+                this.currentChapter
+            );
 
-        if (this.courseChapterNumber) {
-            this.courseChapterNumber.textContent =
-                `Chapitre ${chapter}`;
-        }
 
-        if (this.courseTitle) {
+        if (
+            this.courseTitle
+        ) {
             this.courseTitle.textContent =
                 course.title;
         }
 
-        if (this.courseSubtitle) {
-            this.courseSubtitle.textContent =
-                course.subtitle;
-        }
 
-        if (this.courseContent) {
+        if (
+            this.courseContent
+        ) {
             this.courseContent.innerHTML =
-                course.html;
-        }
+                "";
 
-        if (this.courseMapButton) {
-            this.courseMapButton.textContent =
-                this.returnToExerciseAfterTheory
-                    ? "Retour à l'exercice"
-                    : "Voir la carte";
+            const paragraph =
+                document.createElement(
+                    "p"
+                );
+
+            paragraph.textContent =
+                course.text;
+
+
+            const exampleTitle =
+                document.createElement(
+                    "h3"
+                );
+
+            exampleTitle.textContent =
+                "Exemple";
+
+
+            const pre =
+                document.createElement(
+                    "pre"
+                );
+
+            const code =
+                document.createElement(
+                    "code"
+                );
+
+            code.textContent =
+                course.example;
+
+            pre.appendChild(
+                code
+            );
+
+
+            this.courseContent.append(
+                paragraph,
+                exampleTitle,
+                pre
+            );
         }
     }
 
@@ -1008,97 +1091,155 @@ for distance in distances:
        CARTE
     ===================================================== */
 
+    changeMapChapter(direction) {
+        const next =
+            this.currentChapter +
+            direction;
+
+        if (
+            next < 1 ||
+            next > 9
+        ) {
+            return;
+        }
+
+
+        if (
+            direction > 0 &&
+            !this.isChapterUnlocked(
+                next
+            )
+        ) {
+            this.showGuide(
+                "Termine les exercices précédents avant d'aller dans cette pièce."
+            );
+
+            return;
+        }
+
+
+        this.currentChapter =
+            next;
+
+        this.refreshMap();
+    }
+
+
+    isChapterUnlocked(chapter) {
+        if (
+            chapter === 1
+        ) {
+            return true;
+        }
+
+        return this.unlockedLevels.has(
+            `${chapter}-1`
+        );
+    }
+
+
     refreshMap() {
         const chapter =
             this.currentChapter;
 
-        if (this.mapTitle) {
-            this.mapTitle.textContent =
-                `Chapitre ${chapter} — ${this.getRoomName(chapter)}`;
-        }
-
-        if (this.mapSubtitle) {
-            this.mapSubtitle.textContent =
-                "Choisis un exercice pour commencer.";
-        }
-
-        if (this.mapChapterIndicator) {
-            this.mapChapterIndicator.textContent =
-                `${chapter} / 9`;
-        }
-
-        if (this.mapBackground) {
-            for (
-                let i = 1;
-                i <= 9;
-                i++
-            ) {
-                this.mapBackground.classList.remove(
-                    `chapter-theme-${i}`
-                );
-            }
-
-            this.mapBackground.classList.add(
-                `chapter-theme-${chapter}`
+        const room =
+            this.getRoomName(
+                chapter
             );
+
+
+        if (
+            this.mapTitle
+        ) {
+            this.mapTitle.textContent =
+                `Chapitre ${chapter} — ${room}`;
         }
 
-        this.renderMapDecoration(
-            chapter
-        );
 
-        this.levelNodes.forEach(
-            (node, index) => {
-                if (!node) {
-                    return;
-                }
+        if (
+            this.mapSubtitle
+        ) {
+            if (
+                chapter === 9
+            ) {
+                this.mapSubtitle.textContent =
+                    "Le laboratoire · Examen final";
 
-                const exercise =
-                    index + 1;
-
-                const key =
-                    `${chapter}-${exercise}`;
-
-                const unlocked =
-                    this.unlockedLevels.has(key);
-
-                const completed =
-                    this.completedLevels.has(key);
-
-                node.classList.toggle(
-                    "locked",
-                    !unlocked
-                );
-
-                node.classList.toggle(
-                    "completed",
-                    completed
-                );
-
-                node.disabled =
-                    !unlocked;
-
-                const state =
-                    node.querySelector(
-                        ".level-node-state"
-                    );
-
-                if (state) {
-                    if (completed) {
-                        state.textContent =
-                            "Rejouer";
-
-                    } else if (unlocked) {
-                        state.textContent =
-                            "Exercice";
-
-                    } else {
-                        state.textContent =
-                            "Verrouillé";
-                    }
-                }
+            } else {
+                this.mapSubtitle.textContent =
+                    "Choisis un exercice";
             }
-        );
+        }
+
+
+        if (
+            this.mapRoom
+        ) {
+            this.mapRoom.dataset.chapter =
+                String(chapter);
+
+            this.mapRoom.dataset.room =
+                room;
+        }
+
+
+        for (
+            const node
+            of this.levelNodes
+        ) {
+            const exercise =
+                Number(
+                    node.dataset
+                        .levelExercise
+                );
+
+            const key =
+                `${chapter}-${exercise}`;
+
+            const unlocked =
+                this.unlockedLevels.has(
+                    key
+                );
+
+            const completed =
+                this.completedLevels.has(
+                    key
+                );
+
+
+            node.classList.toggle(
+                "locked",
+                !unlocked
+            );
+
+            node.classList.toggle(
+                "unlocked",
+                unlocked &&
+                !completed
+            );
+
+            node.classList.toggle(
+                "completed",
+                completed
+            );
+
+            node.disabled =
+                !unlocked;
+
+
+            const label =
+                node.querySelector(
+                    ".level-node-label"
+                );
+
+            if (label) {
+                label.textContent =
+                    completed
+                        ? `Exercice ${exercise} ✓`
+                        : `Exercice ${exercise}`;
+            }
+        }
+
 
         if (
             this.previousChapterButton
@@ -1107,94 +1248,88 @@ for distance in distances:
                 chapter <= 1;
         }
 
+
         if (
             this.nextChapterButton
         ) {
-            const nextChapter =
-                chapter + 1;
-
             this.nextChapterButton.disabled =
                 chapter >= 9 ||
-                !this.unlockedLevels.has(
-                    `${nextChapter}-1`
+                !this.isChapterUnlocked(
+                    chapter + 1
                 );
         }
+
+
+        this.decorateMapRoom(
+            chapter
+        );
     }
 
 
-    renderMapDecoration(chapter) {
-        if (!this.mapDecoration) {
+    decorateMapRoom(chapter) {
+        if (!this.mapRoom) {
             return;
         }
 
-        /*
-        Décoration simple correspondant aux pièces.
-        Elle utilise le style déjà présent et ne
-        remplace pas les graphismes du jeu.
-        */
+        const decoration =
+            this.mapRoom.querySelector(
+                ".map-room-decoration"
+            );
+
+        if (!decoration) {
+            return;
+        }
+
 
         const decorations = {
             1: "🚪",
             2: "🍳",
             3: "🛋️",
             4: "📚",
-            5: "🛁",
+            5: "🫧",
             6: "🛏️",
             7: "🔧",
             8: "📦",
             9: "⚗️"
         };
 
-        this.mapDecoration.textContent =
-            decorations[chapter] || "";
+
+        decoration.textContent =
+            decorations[chapter] ||
+            "✦";
     }
 
 
-    changeMapChapter(direction) {
-        const target =
-            this.currentChapter +
-            direction;
-
-        if (
-            target < 1 ||
-            target > 9
-        ) {
-            return;
-        }
-
-        if (
-            direction > 0 &&
-            !this.unlockedLevels.has(
-                `${target}-1`
-            )
-        ) {
-            return;
-        }
-
-        this.currentChapter =
-            target;
-
-        this.refreshMap();
-    }
-
-
-    selectLevel(exercise) {
+    selectLevelFromMap(exercise) {
         const key =
             `${this.currentChapter}-${exercise}`;
 
         if (
-            !this.unlockedLevels.has(key)
+            !this.unlockedLevels.has(
+                key
+            )
         ) {
+            this.showGuide(
+                "Cet exercice est encore verrouillé."
+            );
+
             return;
         }
+
 
         this.currentExercise =
             exercise;
 
-        this.onSelectLevel?.(
-            this.currentChapter,
-            exercise
-        );
+
+        if (
+            typeof this.onSelectLevel ===
+            "function"
+        ) {
+            this.onSelectLevel(
+                this.currentChapter,
+                exercise
+            );
+        }
     }
 
 
@@ -1202,389 +1337,188 @@ for distance in distances:
        PROGRESSION
     ===================================================== */
 
-    registerAttempt(levelId) {
-        const id =
-            String(
-                levelId ||
-                `${this.currentChapter}-${this.currentExercise}`
-            );
-
-        if (!this.attempts[id]) {
-            this.attempts[id] = 0;
-        }
-
-        this.attempts[id]++;
-
-        return this.attempts[id];
-    }
-
-
     completeCurrentLevel() {
         if (!this.level) {
             return;
         }
 
+
         const chapter =
-            Number(this.level.chapter);
+            Number(
+                this.level.chapter
+            );
 
         const exercise =
-            Number(this.level.exercise);
+            Number(
+                this.level.exercise
+            );
 
         const key =
             `${chapter}-${exercise}`;
+
 
         this.completedLevels.add(
             key
         );
 
-        if (exercise < 3) {
+
+        if (
+            exercise < 3
+        ) {
             this.unlockedLevels.add(
                 `${chapter}-${exercise + 1}`
             );
 
-        } else if (chapter < 9) {
+        } else if (
+            chapter < 9
+        ) {
             this.unlockedLevels.add(
                 `${chapter + 1}-1`
             );
         }
 
-        this.refreshMap();
 
         if (
             chapter === 9 &&
             exercise === 3
         ) {
             this.showGuide(
-                "Incroyable ! Tu as terminé l'aventure PYT. Tu as utilisé toutes les notions apprises pendant le jeu.",
-                [
-                    {
-                        label: "Revoir la carte",
-                        action:
-                            () =>
-                                this.showMap(9)
-                    }
-                ]
+                "Tu as terminé l'aventure de Pyt ! Tous les chapitres sont maintenant accomplis."
             );
 
             return;
         }
 
-        const actions = [];
 
-        if (exercise < 3) {
-            actions.push({
-                label:
-                    `Exercice ${exercise + 1}`,
-                action:
-                    () => {
-                        this.hideGuide();
+        const successMessage =
+            this.level.successMessage ||
+            "Bravo ! Mission réussie.";
 
-                        this.onSelectLevel?.(
-                            chapter,
-                            exercise + 1
-                        );
-                    }
-            });
+        this.showSuccessModal(
+            successMessage
+        );
+    }
 
-        } else if (chapter < 9) {
-            actions.push({
-                label:
-                    `Chapitre ${chapter + 1}`,
-                action:
-                    () => {
-                        this.hideGuide();
 
-                        this.currentChapter =
-                            chapter + 1;
+    showSuccessModal(message) {
+        if (!this.modal) {
+            this.showGuide(
+                message
+            );
 
-                        this.showCourseAtChapterStart();
-                    }
-            });
+            return;
         }
 
-        actions.push({
-            label: "Carte",
-            action:
+
+        if (
+            this.modalTitle
+        ) {
+            this.modalTitle.textContent =
+                "Mission réussie";
+        }
+
+
+        if (
+            this.modalText
+        ) {
+            this.modalText.textContent =
+                message;
+        }
+
+
+        this.modal.classList.remove(
+            "hidden"
+        );
+
+
+        if (
+            this.modalPrimaryButton
+        ) {
+            this.modalPrimaryButton.textContent =
+                "Continuer";
+
+            this.modalPrimaryButton.onclick =
                 () => {
-                    this.hideGuide();
-                    this.showMap(chapter);
-                }
-        });
+                    this.modal.classList.add(
+                        "hidden"
+                    );
+
+                    this.showMap();
+                };
+        }
+
+
+        if (
+            this.modalSecondaryButton
+        ) {
+            this.modalSecondaryButton.textContent =
+                "Rejouer";
+
+            this.modalSecondaryButton.onclick =
+                () => {
+                    this.modal.classList.add(
+                        "hidden"
+                    );
+
+                    if (
+                        typeof this.onRestart ===
+                        "function"
+                    ) {
+                        this.onRestart();
+                    }
+                };
+        }
+    }
+
+
+    /* =====================================================
+       TENTATIVES / AIDE
+    ===================================================== */
+
+    registerAttempt(levelId) {
+        const key =
+            String(levelId);
+
+        if (
+            !this.attempts[key]
+        ) {
+            this.attempts[key] =
+                0;
+        }
+
+        this.attempts[key]++;
+
+        return this.attempts[
+            key
+        ];
+    }
+
+
+    showFailureGuide(
+        message,
+        options = {}
+    ) {
+        const attempt =
+            Number(
+                options.attempt ||
+                1
+            );
+
+
+        if (
+            attempt <= 1
+        ) {
+            this.showGuide(
+                `${message} Réessaie en observant bien le trajet de Pyt.`
+            );
+
+            return;
+        }
+
 
         this.showGuide(
-            this.level.successMessage ||
-            "Bravo ! Mission réussie.",
-            actions
+            `${message} Si tu veux, retourne voir le cours avant de réessayer.`
         );
-    }
-
-
-    /* =====================================================
-       CODE
-    ===================================================== */
-
-    openCode() {
-        if (!this.codeWindow) {
-            return;
-        }
-
-        this.codeWindow.classList.remove(
-            "hidden"
-        );
-
-        /*
-        Sur mobile la fenêtre fait partie de la page.
-        On la fait simplement apparaître dans la zone
-        visible sans la transformer en pop-up.
-        */
-
-        if (this.isMobile()) {
-            window.setTimeout(
-                () => {
-                    this.codeWindow.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start"
-                    });
-                },
-                20
-            );
-        }
-
-        window.setTimeout(
-            () =>
-                this.codeEditor?.focus(),
-            50
-        );
-    }
-
-
-    closeCode() {
-        this.codeWindow?.classList.add(
-            "hidden"
-        );
-    }
-
-
-    runCode() {
-        if (
-            !this.onRunCode ||
-            !this.codeEditor
-        ) {
-            return;
-        }
-
-        this.clearErrorHighlight();
-
-        this.onRunCode(
-            this.codeEditor.value
-        );
-    }
-
-
-    connectCodeDragging() {
-        if (
-            !this.codeWindow ||
-            !this.codeWindowHeader
-        ) {
-            return;
-        }
-
-        let dragging = false;
-        let offsetX = 0;
-        let offsetY = 0;
-
-
-        this.codeWindowHeader
-            .addEventListener(
-                "pointerdown",
-                event => {
-                    if (
-                        this.isMobile() ||
-                        event.target.closest(
-                            "button"
-                        )
-                    ) {
-                        return;
-                    }
-
-                    dragging = true;
-
-                    const rect =
-                        this.codeWindow
-                            .getBoundingClientRect();
-
-                    offsetX =
-                        event.clientX -
-                        rect.left;
-
-                    offsetY =
-                        event.clientY -
-                        rect.top;
-
-                    this.codeWindowHeader
-                        .setPointerCapture?.(
-                            event.pointerId
-                        );
-                }
-            );
-
-
-        window.addEventListener(
-            "pointermove",
-            event => {
-                if (
-                    !dragging ||
-                    this.isMobile()
-                ) {
-                    return;
-                }
-
-                const maxX =
-                    window.innerWidth -
-                    this.codeWindow.offsetWidth;
-
-                const maxY =
-                    window.innerHeight -
-                    this.codeWindow.offsetHeight;
-
-                const x =
-                    Math.max(
-                        0,
-                        Math.min(
-                            maxX,
-                            event.clientX -
-                            offsetX
-                        )
-                    );
-
-                const y =
-                    Math.max(
-                        0,
-                        Math.min(
-                            maxY,
-                            event.clientY -
-                            offsetY
-                        )
-                    );
-
-                this.codeWindow.style.left =
-                    `${x}px`;
-
-                this.codeWindow.style.top =
-                    `${y}px`;
-
-                this.codeWindow.style.right =
-                    "auto";
-
-                this.codeWindow.style.bottom =
-                    "auto";
-            }
-        );
-
-
-        window.addEventListener(
-            "pointerup",
-            () => {
-                dragging = false;
-            }
-        );
-    }
-
-
-    /* =====================================================
-       ERREURS
-    ===================================================== */
-
-    clearErrorHighlight() {
-        if (
-            this.codeErrorHighlights
-        ) {
-            this.codeErrorHighlights.innerHTML =
-                "";
-        }
-    }
-
-
-    highlightErrorLine(lineNumber) {
-        if (
-            !this.codeEditor ||
-            !this.codeErrorHighlights ||
-            !Number.isInteger(lineNumber) ||
-            lineNumber < 1
-        ) {
-            return;
-        }
-
-        const lines =
-            this.codeEditor.value
-                .split("\n");
-
-        if (
-            lineNumber >
-            lines.length
-        ) {
-            return;
-        }
-
-        this.codeErrorHighlights.innerHTML =
-            "";
-
-        for (
-            let i = 0;
-            i < lines.length;
-            i++
-        ) {
-            const line =
-                document.createElement(
-                    "span"
-                );
-
-            line.textContent =
-                lines[i] || " ";
-
-            if (
-                i ===
-                lineNumber - 1
-            ) {
-                line.className =
-                    "code-error-line";
-            }
-
-            this.codeErrorHighlights
-                .appendChild(line);
-
-            if (
-                i <
-                lines.length - 1
-            ) {
-                this.codeErrorHighlights
-                    .appendChild(
-                        document.createTextNode(
-                            "\n"
-                        )
-                    );
-            }
-        }
-
-        const lineHeight =
-            parseFloat(
-                window
-                    .getComputedStyle(
-                        this.codeEditor
-                    )
-                    .lineHeight
-            ) || 23;
-
-        this.codeEditor.scrollTop =
-            Math.max(
-                0,
-                (
-                    lineNumber - 3
-                ) * lineHeight
-            );
-
-        this.codeErrorHighlights.scrollTop =
-            this.codeEditor.scrollTop;
     }
 
 
@@ -1592,98 +1526,65 @@ for distance in distances:
        GUIDE PYT
     ===================================================== */
 
-    showGuide(
-        message,
-        actions = []
-    ) {
+    showGuide(message) {
         if (
-            !this.pytGuide ||
-            !this.pytGuideMessage
+            !this.pytGuide
         ) {
             return;
         }
 
-        if (
-            this.guideHideTimer
-        ) {
-            window.clearTimeout(
-                this.guideHideTimer
-            );
 
-            this.guideHideTimer = null;
-        }
-
-        this.pytGuideMessage.textContent =
-            message;
-
-        if (
-            this.pytGuideActions
-        ) {
-            this.pytGuideActions.innerHTML =
-                "";
-
-            actions.forEach(
-                actionData => {
-                    const button =
-                        document.createElement(
-                            "button"
-                        );
-
-                    button.type =
-                        "button";
-
-                    button.textContent =
-                        actionData.label;
-
-                    button.addEventListener(
-                        "click",
-                        () =>
-                            actionData.action?.()
-                    );
-
-                    this.pytGuideActions
-                        .appendChild(button);
-                }
-            );
-        }
-
-        this.pytGuide.classList.remove(
-            "hidden",
-            "guide-leaving",
-            "guide-entering"
+        window.clearTimeout(
+            this.guideAnimationTimer
         );
 
+
+        if (
+            this.pytGuideText
+        ) {
+            this.pytGuideText.textContent =
+                message;
+        }
+
+
         /*
-        Relance l'animation à chaque apparition.
+        Si une animation de sortie était en cours,
+        on l'annule proprement.
+        */
+
+        this.pytGuide.classList.remove(
+            "guide-leaving"
+        );
+
+        this.pytGuide.classList.remove(
+            "hidden"
+        );
+
+
+        /*
+        Force le navigateur à prendre en compte
+        l'état initial avant l'animation d'entrée.
         */
 
         void this.pytGuide.offsetWidth;
+
 
         this.pytGuide.classList.add(
             "guide-entering"
         );
 
-        window.setTimeout(
-            () => {
-                this.pytGuide?.classList.remove(
-                    "guide-entering"
-                );
-            },
-            450
-        );
 
-        if (this.isMobile()) {
+        this.guideAnimationTimer =
             window.setTimeout(
                 () => {
                     this.pytGuide
-                        ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "nearest"
-                        });
+                        ?.classList
+                        .remove(
+                            "guide-entering"
+                        );
                 },
-                80
+                450
             );
-        }
     }
 
 
@@ -1697,13 +1598,11 @@ for distance in distances:
             return;
         }
 
-        if (
-            this.guideHideTimer
-        ) {
-            window.clearTimeout(
-                this.guideHideTimer
-            );
-        }
+
+        window.clearTimeout(
+            this.guideAnimationTimer
+        );
+
 
         this.pytGuide.classList.remove(
             "guide-entering"
@@ -1713,9 +1612,16 @@ for distance in distances:
             "guide-leaving"
         );
 
-        this.guideHideTimer =
+
+        this.guideAnimationTimer =
             window.setTimeout(
                 () => {
+                    if (
+                        !this.pytGuide
+                    ) {
+                        return;
+                    }
+
                     this.pytGuide.classList.add(
                         "hidden"
                     );
@@ -1723,81 +1629,323 @@ for distance in distances:
                     this.pytGuide.classList.remove(
                         "guide-leaving"
                     );
-
-                    this.guideHideTimer =
-                        null;
                 },
-                320
+                330
             );
     }
 
 
-    showFailureGuide(
-        message,
-        information = {}
-    ) {
-        const actions = [
-            {
-                label: "Réessayer",
-                action:
-                    () => {
-                        this.hideGuide();
-                        this.openCode();
-                    }
-            },
-            {
-                label: "Revoir le cours",
-                action:
-                    () => {
-                        this.hideGuide();
-                        this.reviewTheory();
-                    }
-            }
-        ];
-
-        let guideMessage =
-            message;
-
-        if (
-            information.attempt === 1
-        ) {
-            guideMessage +=
-                " Tu peux réessayer ou revoir le cours si tu veux un rappel.";
-        } else {
-            guideMessage +=
-                " Regarde bien ton programme et essaie de comprendre ce qui ne fonctionne pas.";
-        }
-
-        this.showGuide(
-            guideMessage,
-            actions
-        );
-    }
-
-
     /* =====================================================
-       PENSÉE
+       BULLE DE PENSÉE
     ===================================================== */
 
     showThoughtBubble(message) {
         if (
-            !this.robotThoughtBubble
+            !this.thoughtBubble
         ) {
             return;
         }
 
-        this.robotThoughtBubble.textContent =
-            message;
 
-        this.robotThoughtBubble.classList.remove(
+        if (
+            this.thoughtText
+        ) {
+            this.thoughtText.textContent =
+                message;
+        }
+
+
+        this.thoughtBubble.classList.remove(
             "hidden"
         );
     }
 
 
     hideThoughtBubble() {
-        this.robotThoughtBubble?.classList.add(
+        this.thoughtBubble?.classList.add(
             "hidden"
+        );
+    }
+
+
+    /* =====================================================
+       ÉDITEUR
+    ===================================================== */
+
+    openCodeWindow() {
+        this.codeWindow?.classList.remove(
+            "hidden"
+        );
+
+        this.codeEditor?.focus();
+
+
+        /*
+        Sur téléphone la fenêtre est intégrée
+        directement dans la page grâce au CSS.
+        On la rend visible sans essayer de la placer
+        comme une popup.
+        */
+
+        if (
+            this.isMobileLayout() &&
+            this.codeWindow
+        ) {
+            window.setTimeout(
+                () => {
+                    this.codeWindow.scrollIntoView({
+                        behavior: "smooth",
+                        block: "start"
+                    });
+                },
+                50
+            );
+        }
+    }
+
+
+    closeCodeWindow() {
+        this.codeWindow?.classList.add(
+            "hidden"
+        );
+    }
+
+
+    isMobileLayout() {
+        return window.matchMedia(
+            "(max-width: 760px)"
+        ).matches;
+    }
+
+
+    setupCodeWindowDrag() {
+        if (
+            !this.codeWindow ||
+            !this.codeWindowHeader
+        ) {
+            return;
+        }
+
+
+        let dragging =
+            false;
+
+        let offsetX =
+            0;
+
+        let offsetY =
+            0;
+
+
+        this.codeWindowHeader.addEventListener(
+            "pointerdown",
+            event => {
+                if (
+                    this.isMobileLayout()
+                ) {
+                    return;
+                }
+
+                if (
+                    event.target.closest(
+                        "button"
+                    )
+                ) {
+                    return;
+                }
+
+
+                dragging =
+                    true;
+
+                const rect =
+                    this.codeWindow
+                        .getBoundingClientRect();
+
+                offsetX =
+                    event.clientX -
+                    rect.left;
+
+                offsetY =
+                    event.clientY -
+                    rect.top;
+
+
+                this.codeWindowHeader
+                    .setPointerCapture?.(
+                        event.pointerId
+                    );
+            }
+        );
+
+
+        this.codeWindowHeader.addEventListener(
+            "pointermove",
+            event => {
+                if (
+                    !dragging ||
+                    this.isMobileLayout()
+                ) {
+                    return;
+                }
+
+
+                const width =
+                    this.codeWindow
+                        .offsetWidth;
+
+                const height =
+                    this.codeWindow
+                        .offsetHeight;
+
+
+                const maximumX =
+                    Math.max(
+                        0,
+                        window.innerWidth -
+                        width
+                    );
+
+                const maximumY =
+                    Math.max(
+                        0,
+                        window.innerHeight -
+                        height
+                    );
+
+
+                const left =
+                    Math.max(
+                        0,
+                        Math.min(
+                            maximumX,
+                            event.clientX -
+                            offsetX
+                        )
+                    );
+
+                const top =
+                    Math.max(
+                        0,
+                        Math.min(
+                            maximumY,
+                            event.clientY -
+                            offsetY
+                        )
+                    );
+
+
+                this.codeWindow.style.left =
+                    `${left}px`;
+
+                this.codeWindow.style.top =
+                    `${top}px`;
+
+                this.codeWindow.style.right =
+                    "auto";
+
+                this.codeWindow.style.bottom =
+                    "auto";
+            }
+        );
+
+
+        const stopDragging =
+            () => {
+                dragging =
+                    false;
+            };
+
+
+        this.codeWindowHeader.addEventListener(
+            "pointerup",
+            stopDragging
+        );
+
+        this.codeWindowHeader.addEventListener(
+            "pointercancel",
+            stopDragging
+        );
+    }
+
+
+    /* =====================================================
+       ERREURS DANS LE CODE
+    ===================================================== */
+
+    highlightErrorLine(lineNumber) {
+        if (
+            !this.codeEditor ||
+            !lineNumber
+        ) {
+            return;
+        }
+
+
+        this.codeEditor.dataset.errorLine =
+            String(
+                lineNumber
+            );
+
+        this.codeEditor.classList.add(
+            "has-error-line"
+        );
+
+
+        const lines =
+            this.codeEditor.value
+                .split("\n");
+
+        let start =
+            0;
+
+        for (
+            let index = 0;
+            index <
+            lineNumber - 1;
+            index++
+        ) {
+            start +=
+                (
+                    lines[index] ||
+                    ""
+                ).length + 1;
+        }
+
+
+        const end =
+            start +
+            (
+                lines[
+                    lineNumber - 1
+                ] ||
+                ""
+            ).length;
+
+
+        this.openCodeWindow();
+
+        this.codeEditor.focus();
+
+        this.codeEditor.setSelectionRange(
+            start,
+            end
+        );
+    }
+
+
+    clearErrorHighlight() {
+        if (
+            !this.codeEditor
+        ) {
+            return;
+        }
+
+        delete this.codeEditor.dataset
+            .errorLine;
+
+        this.codeEditor.classList.remove(
+            "has-error-line"
         );
     }
 
@@ -1807,7 +1955,9 @@ for distance in distances:
     ===================================================== */
 
     setStatus(message) {
-        if (this.gameStatus) {
+        if (
+            this.gameStatus
+        ) {
             this.gameStatus.textContent =
                 message || "";
         }
@@ -1815,104 +1965,115 @@ for distance in distances:
 
 
     /* =====================================================
-       MODALE
+       ACTIONS / ANIMATIONS
     ===================================================== */
 
-    showModal({
-        label = "PYT",
-        title = "Message",
-        message = "",
-        primaryText = "Continuer",
-        secondaryText = null,
-        onPrimary = null,
-        onSecondary = null
-    } = {}) {
+    playActions(
+        actions,
+        performAction,
+        onFinished
+    ) {
+        const queue =
+            Array.isArray(actions)
+                ? [...actions]
+                : [];
+
+
+        let index =
+            0;
+
+        let blockedAction =
+            null;
+
+
+        const next =
+            () => {
+                if (
+                    index >=
+                    queue.length
+                ) {
+                    if (
+                        typeof onFinished ===
+                        "function"
+                    ) {
+                        onFinished(
+                            blockedAction
+                        );
+                    }
+
+                    return;
+                }
+
+
+                const action =
+                    queue[index];
+
+                index++;
+
+
+                let success =
+                    true;
+
+
+                if (
+                    typeof performAction ===
+                    "function"
+                ) {
+                    success =
+                        performAction(
+                            action
+                        ) !== false;
+                }
+
+
+                this.render();
+
+
+                if (
+                    !success
+                ) {
+                    blockedAction =
+                        action;
+
+                    if (
+                        typeof onFinished ===
+                        "function"
+                    ) {
+                        window.setTimeout(
+                            () =>
+                                onFinished(
+                                    blockedAction
+                                ),
+                            this.actionDelay
+                        );
+                    }
+
+                    return;
+                }
+
+
+                window.setTimeout(
+                    next,
+                    this.actionDelay
+                );
+            };
+
+
         if (
-            !this.modalBackground
+            queue.length === 0
         ) {
+            if (
+                typeof onFinished ===
+                "function"
+            ) {
+                onFinished(null);
+            }
+
             return;
         }
 
-        if (this.modalLabel) {
-            this.modalLabel.textContent =
-                label;
-        }
 
-        if (this.modalTitle) {
-            this.modalTitle.textContent =
-                title;
-        }
-
-        if (this.modalMessage) {
-            this.modalMessage.textContent =
-                message;
-        }
-
-        if (this.modalPrimaryButton) {
-            this.modalPrimaryButton.textContent =
-                primaryText;
-
-            this.modalPrimaryButton.onclick =
-                () => {
-                    this.hideModal();
-                    onPrimary?.();
-                };
-        }
-
-        if (this.modalSecondaryButton) {
-            if (secondaryText) {
-                this.modalSecondaryButton
-                    .classList.remove(
-                        "hidden"
-                    );
-
-                this.modalSecondaryButton.textContent =
-                    secondaryText;
-
-                this.modalSecondaryButton.onclick =
-                    () => {
-                        this.hideModal();
-                        onSecondary?.();
-                    };
-
-            } else {
-                this.modalSecondaryButton
-                    .classList.add(
-                        "hidden"
-                    );
-
-                this.modalSecondaryButton.onclick =
-                    null;
-            }
-        }
-
-        this.modalBackground.classList.remove(
-            "hidden"
-        );
-
-        /*
-        Sur mobile la modale est dans la page.
-        */
-
-        if (this.isMobile()) {
-            window.setTimeout(
-                () => {
-                    this.modalBackground
-                        ?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center"
-                        });
-                },
-                50
-            );
-        }
-    }
-
-
-    hideModal() {
-        this.modalBackground?.classList.add(
-            "hidden"
-        );
+        next();
     }
 
 
@@ -1920,13 +2081,16 @@ for distance in distances:
        CANVAS
     ===================================================== */
 
-    prepareCanvas() {
+    setupCanvas() {
         if (
             !this.canvas ||
-            !this.ctx
+            !this.context
         ) {
             return;
         }
+
+        this.context.imageSmoothingEnabled =
+            false;
 
         this.resizeCanvas();
     }
@@ -1934,79 +2098,86 @@ for distance in distances:
 
     resizeCanvas() {
         if (
-            !this.canvas ||
-            !this.canvas.parentElement
+            !this.canvas
         ) {
             return;
         }
 
-        const container =
-            this.canvas.parentElement;
 
         const rect =
-            container.getBoundingClientRect();
-
-        if (
-            rect.width <= 0 ||
-            rect.height <= 0
-        ) {
-            return;
-        }
-
-        const ratio =
-            Math.min(
-                window.devicePixelRatio || 1,
-                2
-            );
+            this.canvas
+                .getBoundingClientRect();
 
         const width =
             Math.max(
                 320,
                 Math.floor(
-                    rect.width * ratio
+                    rect.width ||
+                    this.canvas.clientWidth ||
+                    800
                 )
             );
 
         const height =
             Math.max(
-                220,
+                260,
                 Math.floor(
-                    rect.height * ratio
+                    rect.height ||
+                    this.canvas.clientHeight ||
+                    520
                 )
             );
 
+
         if (
-            this.canvas.width !== width ||
-            this.canvas.height !== height
+            this.canvas.width !==
+            width
         ) {
             this.canvas.width =
                 width;
+        }
 
+
+        if (
+            this.canvas.height !==
+            height
+        ) {
             this.canvas.height =
                 height;
+        }
+
+
+        if (
+            this.context
+        ) {
+            this.context.imageSmoothingEnabled =
+                false;
         }
     }
 
 
     render() {
         if (
-            !this.ctx ||
             !this.canvas ||
+            !this.context ||
             !this.game
         ) {
             return;
         }
 
+
         this.resizeCanvas();
 
+
         const ctx =
-            this.ctx;
+            this.context;
 
         const width =
             this.canvas.width;
 
         const height =
             this.canvas.height;
+
 
         ctx.clearRect(
             0,
@@ -2015,15 +2186,16 @@ for distance in distances:
             height
         );
 
+
         this.drawRoomBackground(
             ctx,
             width,
             height
         );
 
+
         const grid =
-            this.game.grid ||
-            this.level?.grid;
+            this.game.grid;
 
         if (
             !Array.isArray(grid) ||
@@ -2031,6 +2203,7 @@ for distance in distances:
         ) {
             return;
         }
+
 
         const rows =
             grid.length;
@@ -2045,6 +2218,7 @@ for distance in distances:
                 )
             );
 
+
         if (
             rows <= 0 ||
             cols <= 0
@@ -2052,36 +2226,46 @@ for distance in distances:
             return;
         }
 
-        const padding =
+
+        const margin =
             Math.max(
                 16,
                 Math.min(
-                    width,
-                    height
-                ) * 0.05
+                    48,
+                    width * 0.05
+                )
             );
+
 
         const availableWidth =
             width -
-            padding * 2;
+            margin * 2;
 
         const availableHeight =
             height -
-            padding * 2;
+            margin * 2;
+
 
         const tileSize =
             Math.floor(
                 Math.min(
-                    availableWidth / cols,
-                    availableHeight / rows
+                    availableWidth /
+                    cols,
+
+                    availableHeight /
+                    rows
                 )
             );
 
+
         const boardWidth =
-            tileSize * cols;
+            tileSize *
+            cols;
 
         const boardHeight =
-            tileSize * rows;
+            tileSize *
+            rows;
+
 
         const startX =
             Math.floor(
@@ -2110,25 +2294,28 @@ for distance in distances:
                 col < cols;
                 col++
             ) {
-                const tile =
-                    this.game.getTileType
-                        ? this.game.getTileType(
-                            row,
-                            col
-                        )
-                        : grid[row]?.[col];
+                const x =
+                    startX +
+                    col *
+                    tileSize;
+
+                const y =
+                    startY +
+                    row *
+                    tileSize;
+
 
                 this.drawTile(
                     ctx,
-                    tile,
                     row,
                     col,
-                    startX,
-                    startY,
+                    x,
+                    y,
                     tileSize
                 );
             }
         }
+
 
         this.drawRobot(
             ctx,
@@ -2139,60 +2326,40 @@ for distance in distances:
     }
 
 
-    /* =====================================================
-       DÉCOR
-    ===================================================== */
-
     drawRoomBackground(
         ctx,
         width,
         height
     ) {
-        const chapter =
-            Number(
-                this.level?.chapter ||
-                this.currentChapter ||
-                1
-            );
-
         /*
-        Palette volontairement proche du style actuel :
-        violet / bleu nuit avec accents colorés.
+        On conserve volontairement le style actuel :
+        fond violet / bleu nuit, sans refaire les
+        graphismes du jeu.
         */
-
-        const palettes = {
-            1: ["#17102e", "#28164b"],
-            2: ["#24122e", "#51233d"],
-            3: ["#141735", "#242c58"],
-            4: ["#17122e", "#3a2450"],
-            5: ["#0e2036", "#17435a"],
-            6: ["#19132f", "#38264e"],
-            7: ["#21172c", "#49372d"],
-            8: ["#171225", "#382d49"],
-            9: ["#071d2b", "#123e49"]
-        };
-
-        const palette =
-            palettes[chapter] ||
-            palettes[1];
 
         const gradient =
             ctx.createLinearGradient(
                 0,
                 0,
-                0,
+                width,
                 height
             );
 
         gradient.addColorStop(
             0,
-            palette[0]
+            "#160f33"
+        );
+
+        gradient.addColorStop(
+            0.55,
+            "#24124b"
         );
 
         gradient.addColorStop(
             1,
-            palette[1]
+            "#0d1733"
         );
+
 
         ctx.fillStyle =
             gradient;
@@ -2205,48 +2372,105 @@ for distance in distances:
         );
 
 
-        /*
-        Petites lignes de décor rétro.
-        */
+        this.drawRoomDecoration(
+            ctx,
+            width,
+            height,
+            this.currentChapter
+        );
+    }
 
+
+    drawRoomDecoration(
+        ctx,
+        width,
+        height,
+        chapter
+    ) {
         ctx.save();
 
-        ctx.globalAlpha = 0.08;
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 2;
+        ctx.globalAlpha =
+            0.14;
+
+        ctx.fillStyle =
+            "#58f4ff";
 
         const spacing =
             Math.max(
-                28,
+                36,
                 Math.floor(
-                    Math.min(
-                        width,
-                        height
-                    ) / 12
+                    width / 15
                 )
             );
+
 
         for (
             let x = 0;
             x < width;
             x += spacing
         ) {
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, height);
-            ctx.stroke();
+            ctx.fillRect(
+                x,
+                0,
+                1,
+                height
+            );
         }
+
+
+        ctx.fillStyle =
+            "#ff4fc8";
+
 
         for (
             let y = 0;
             y < height;
             y += spacing
         ) {
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(width, y);
-            ctx.stroke();
+            ctx.fillRect(
+                0,
+                y,
+                width,
+                1
+            );
         }
+
+
+        ctx.globalAlpha =
+            0.12;
+
+        ctx.font =
+            `${Math.max(
+                42,
+                width * 0.07
+            )}px sans-serif`;
+
+        ctx.textAlign =
+            "right";
+
+        ctx.textBaseline =
+            "bottom";
+
+
+        const symbols = {
+            1: "⌂",
+            2: "✦",
+            3: "◆",
+            4: "▤",
+            5: "○",
+            6: "☾",
+            7: "⚙",
+            8: "▣",
+            9: "⌬"
+        };
+
+
+        ctx.fillText(
+            symbols[chapter] ||
+            "✦",
+            width - 24,
+            height - 18
+        );
 
         ctx.restore();
     }
@@ -2254,35 +2478,29 @@ for distance in distances:
 
     drawTile(
         ctx,
-        tile,
         row,
         col,
-        startX,
-        startY,
+        x,
+        y,
         size
     ) {
-        const x =
-            startX +
-            col * size;
-
-        const y =
-            startY +
-            row * size;
-
         const type =
-            String(
-                tile || "floor"
-            ).toLowerCase();
+            this.game.getTileType(
+                row,
+                col
+            );
 
 
         /*
-        Sol.
+        Sol
         */
 
         ctx.fillStyle =
-            (row + col) % 2 === 0
-                ? "#2a1b4b"
-                : "#251742";
+            (
+                row + col
+            ) % 2 === 0
+                ? "#30245d"
+                : "#392a6b";
 
         ctx.fillRect(
             x,
@@ -2291,8 +2509,9 @@ for distance in distances:
             size
         );
 
+
         ctx.strokeStyle =
-            "rgba(0,0,0,0.45)";
+            "#17102c";
 
         ctx.lineWidth =
             Math.max(
@@ -2308,172 +2527,143 @@ for distance in distances:
         );
 
 
-        if (
-            type === "floor" ||
-            type === "start" ||
-            type === "." ||
-            type === "empty"
-        ) {
-            return;
-        }
+        const padding =
+            size * 0.12;
 
 
-        if (
-            type === "wall" ||
-            type === "#"
-        ) {
-            ctx.fillStyle =
-                "#100b1d";
+        switch (type) {
 
-            ctx.fillRect(
-                x + size * 0.05,
-                y + size * 0.05,
-                size * 0.9,
-                size * 0.9
-            );
+            case "wall":
+                ctx.fillStyle =
+                    "#171226";
 
-            ctx.strokeStyle =
-                "#05040b";
-
-            ctx.lineWidth =
-                Math.max(
-                    2,
-                    size * 0.07
+                ctx.fillRect(
+                    x,
+                    y,
+                    size,
+                    size
                 );
 
-            ctx.strokeRect(
-                x + size * 0.05,
-                y + size * 0.05,
-                size * 0.9,
-                size * 0.9
-            );
+                ctx.fillStyle =
+                    "#4a3670";
 
-            return;
-        }
+                ctx.fillRect(
+                    x + padding,
+                    y + padding,
+                    size -
+                    padding * 2,
+                    size -
+                    padding * 2
+                );
 
-
-        if (
-            type === "goal"
-        ) {
-            this.drawGoal(
-                ctx,
-                x,
-                y,
-                size
-            );
-
-            return;
-        }
+                break;
 
 
-        if (
-            type === "object" ||
-            type === "item"
-        ) {
-            this.drawObject(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "goal":
+                this.drawGoal(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
 
-            return;
-        }
+                break;
 
 
-        if (
-            type === "dirt"
-        ) {
-            this.drawDirt(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "object":
+                this.drawObject(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
 
-            return;
-        }
+                break;
 
 
-        if (
-            type === "button"
-        ) {
-            this.drawButton(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "dirt":
+                this.drawDirt(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
 
-            return;
-        }
+                break;
 
 
-        if (
-            type === "door"
-        ) {
-            this.drawDoor(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "button":
+                this.drawButtonTile(
+                    ctx,
+                    x,
+                    y,
+                    size,
+                    this.game
+                        .activatedButtons
+                        .has(
+                            this.game.positionKey(
+                                row,
+                                col
+                            )
+                        )
+                );
 
-            return;
-        }
-
-
-        if (
-            type === "charger"
-        ) {
-            this.drawCharger(
-                ctx,
-                x,
-                y,
-                size
-            );
-
-            return;
-        }
+                break;
 
 
-        if (
-            type === "deposit"
-        ) {
-            this.drawDeposit(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "door":
+                this.drawDoor(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
 
-            return;
-        }
+                break;
 
 
-        if (
-            type === "box"
-        ) {
-            this.drawBox(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "charger":
+                this.drawCharger(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
 
-            return;
-        }
+                break;
 
 
-        if (
-            type === "box_goal"
-        ) {
-            this.drawBoxGoal(
-                ctx,
-                x,
-                y,
-                size
-            );
+            case "deposit":
+                this.drawDeposit(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
+
+                break;
+
+
+            case "box":
+                this.drawBox(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
+
+                break;
+
+
+            case "box_goal":
+                this.drawBoxGoal(
+                    ctx,
+                    x,
+                    y,
+                    size
+                );
+
+                break;
         }
     }
 
@@ -2484,43 +2674,78 @@ for distance in distances:
         y,
         size
     ) {
+        const centerX =
+            x +
+            size / 2;
+
+        const centerY =
+            y +
+            size / 2;
+
+
         ctx.save();
 
+        ctx.fillStyle =
+            "#ffe55c";
+
+        ctx.beginPath();
+
+        for (
+            let i = 0;
+            i < 8;
+            i++
+        ) {
+            const angle =
+                (
+                    Math.PI * 2 *
+                    i
+                ) / 8 -
+                Math.PI / 2;
+
+            const radius =
+                i % 2 === 0
+                    ? size * 0.3
+                    : size * 0.14;
+
+            const px =
+                centerX +
+                Math.cos(angle) *
+                radius;
+
+            const py =
+                centerY +
+                Math.sin(angle) *
+                radius;
+
+            if (
+                i === 0
+            ) {
+                ctx.moveTo(
+                    px,
+                    py
+                );
+
+            } else {
+                ctx.lineTo(
+                    px,
+                    py
+                );
+            }
+        }
+
+        ctx.closePath();
+        ctx.fill();
+
         ctx.strokeStyle =
-            "#ffe45e";
+            "#201536";
 
         ctx.lineWidth =
             Math.max(
-                3,
-                size * 0.07
+                2,
+                size * 0.05
             );
 
-        ctx.beginPath();
-
-        ctx.arc(
-            x + size / 2,
-            y + size / 2,
-            size * 0.28,
-            0,
-            Math.PI * 2
-        );
-
         ctx.stroke();
-
-        ctx.fillStyle =
-            "#ffe45e";
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x + size / 2,
-            y + size / 2,
-            size * 0.08,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
 
         ctx.restore();
     }
@@ -2532,45 +2757,66 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
+        const w =
+            size * 0.48;
+
+        const h =
+            size * 0.56;
+
+        const px =
+            x +
+            (
+                size -
+                w
+            ) / 2;
+
+        const py =
+            y +
+            (
+                size -
+                h
+            ) / 2;
+
 
         ctx.fillStyle =
-            "#42e8ff";
+            "#ff9f43";
+
+        ctx.fillRect(
+            px,
+            py,
+            w,
+            h
+        );
+
+
+        ctx.fillStyle =
+            "#ffe7a3";
+
+        ctx.fillRect(
+            px +
+            w * 0.14,
+            py +
+            h * 0.12,
+            w * 0.72,
+            h * 0.12
+        );
+
 
         ctx.strokeStyle =
-            "#05040b";
+            "#21162f";
 
         ctx.lineWidth =
             Math.max(
                 2,
-                size * 0.06
+                size * 0.05
             );
 
-        ctx.fillRect(
-            x + size * 0.29,
-            y + size * 0.25,
-            size * 0.42,
-            size * 0.5
-        );
-
         ctx.strokeRect(
-            x + size * 0.29,
-            y + size * 0.25,
-            size * 0.42,
-            size * 0.5
+            px,
+            py,
+            w,
+            h
         );
-
-        ctx.fillStyle =
-            "#f7f5ff";
-
-        ctx.fillRect(
-            x + size * 0.36,
-            y + size * 0.33,
-            size * 0.28,
-            size * 0.07
-        );
-
-        ctx.restore();
     }
 
 
@@ -2580,73 +2826,74 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
-
         ctx.fillStyle =
-            "#6e4c35";
-
-        const points = [
-            [0.32, 0.42, 0.12],
-            [0.55, 0.55, 0.15],
-            [0.43, 0.65, 0.09],
-            [0.68, 0.38, 0.07]
-        ];
-
-        for (
-            const point
-            of points
-        ) {
-            ctx.beginPath();
-
-            ctx.arc(
-                x + size * point[0],
-                y + size * point[1],
-                size * point[2],
-                0,
-                Math.PI * 2
-            );
-
-            ctx.fill();
-        }
-
-        ctx.restore();
-    }
-
-
-    drawButton(
-        ctx,
-        x,
-        y,
-        size
-    ) {
-        ctx.save();
-
-        ctx.fillStyle =
-            "#ff4fa3";
-
-        ctx.strokeStyle =
-            "#05040b";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.06
-            );
+            "#795548";
 
         ctx.beginPath();
 
         ctx.arc(
-            x + size / 2,
-            y + size / 2,
-            size * 0.22,
+            x +
+            size * 0.38,
+            y +
+            size * 0.55,
+            size * 0.18,
+            0,
+            Math.PI * 2
+        );
+
+        ctx.arc(
+            x +
+            size * 0.58,
+            y +
+            size * 0.5,
+            size * 0.2,
             0,
             Math.PI * 2
         );
 
         ctx.fill();
-        ctx.stroke();
+    }
 
-        ctx.restore();
+
+    drawButtonTile(
+        ctx,
+        x,
+        y,
+        size,
+        active
+    ) {
+        ctx.fillStyle =
+            active
+                ? "#55f5a3"
+                : "#ff4f91";
+
+        ctx.fillRect(
+            x +
+            size * 0.24,
+            y +
+            size * 0.36,
+            size * 0.52,
+            size * 0.3
+        );
+
+
+        ctx.strokeStyle =
+            "#1c142b";
+
+        ctx.lineWidth =
+            Math.max(
+                2,
+                size * 0.05
+            );
+
+        ctx.strokeRect(
+            x +
+            size * 0.24,
+            y +
+            size * 0.36,
+            size * 0.52,
+            size * 0.3
+        );
     }
 
 
@@ -2656,50 +2903,49 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
+        ctx.fillStyle =
+            "#e95ab9";
+
+        ctx.fillRect(
+            x +
+            size * 0.22,
+            y +
+            size * 0.08,
+            size * 0.56,
+            size * 0.84
+        );
+
 
         ctx.fillStyle =
-            "#ff9d3d";
+            "#ffe55c";
+
+        ctx.fillRect(
+            x +
+            size * 0.63,
+            y +
+            size * 0.5,
+            size * 0.08,
+            size * 0.08
+        );
+
 
         ctx.strokeStyle =
-            "#05040b";
+            "#1d132d";
 
         ctx.lineWidth =
             Math.max(
                 2,
-                size * 0.06
+                size * 0.05
             );
 
-        ctx.fillRect(
-            x + size * 0.18,
-            y + size * 0.08,
-            size * 0.64,
-            size * 0.84
-        );
-
         ctx.strokeRect(
-            x + size * 0.18,
-            y + size * 0.08,
-            size * 0.64,
+            x +
+            size * 0.22,
+            y +
+            size * 0.08,
+            size * 0.56,
             size * 0.84
         );
-
-        ctx.fillStyle =
-            "#05040b";
-
-        ctx.beginPath();
-
-        ctx.arc(
-            x + size * 0.68,
-            y + size * 0.5,
-            size * 0.045,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fill();
-
-        ctx.restore();
     }
 
 
@@ -2709,73 +2955,68 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
-
         ctx.fillStyle =
-            "#29e6c5";
-
-        ctx.strokeStyle =
-            "#05040b";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.06
-            );
+            "#43f2ff";
 
         ctx.fillRect(
-            x + size * 0.2,
-            y + size * 0.2,
-            size * 0.6,
-            size * 0.6
+            x +
+            size * 0.22,
+            y +
+            size * 0.22,
+            size * 0.56,
+            size * 0.56
         );
 
-        ctx.strokeRect(
-            x + size * 0.2,
-            y + size * 0.2,
-            size * 0.6,
-            size * 0.6
-        );
 
         ctx.fillStyle =
-            "#05040b";
+            "#15223e";
 
         ctx.beginPath();
 
         ctx.moveTo(
-            x + size * 0.55,
-            y + size * 0.27
+            x +
+            size * 0.54,
+            y +
+            size * 0.28
         );
 
         ctx.lineTo(
-            x + size * 0.4,
-            y + size * 0.52
+            x +
+            size * 0.4,
+            y +
+            size * 0.53
         );
 
         ctx.lineTo(
-            x + size * 0.51,
-            y + size * 0.52
+            x +
+            size * 0.51,
+            y +
+            size * 0.53
         );
 
         ctx.lineTo(
-            x + size * 0.43,
-            y + size * 0.72
+            x +
+            size * 0.44,
+            y +
+            size * 0.72
         );
 
         ctx.lineTo(
-            x + size * 0.65,
-            y + size * 0.45
+            x +
+            size * 0.65,
+            y +
+            size * 0.45
         );
 
         ctx.lineTo(
-            x + size * 0.53,
-            y + size * 0.45
+            x +
+            size * 0.54,
+            y +
+            size * 0.45
         );
 
         ctx.closePath();
         ctx.fill();
-
-        ctx.restore();
     }
 
 
@@ -2785,10 +3026,8 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
-
         ctx.strokeStyle =
-            "#42e8ff";
+            "#59f6b5";
 
         ctx.lineWidth =
             Math.max(
@@ -2797,37 +3036,35 @@ for distance in distances:
             );
 
         ctx.strokeRect(
-            x + size * 0.18,
-            y + size * 0.18,
+            x +
+            size * 0.18,
+            y +
+            size * 0.18,
             size * 0.64,
             size * 0.64
         );
 
-        ctx.beginPath();
 
-        ctx.moveTo(
-            x + size * 0.3,
-            y + size * 0.5
+        ctx.fillStyle =
+            "#59f6b5";
+
+        ctx.fillRect(
+            x +
+            size * 0.42,
+            y +
+            size * 0.31,
+            size * 0.16,
+            size * 0.38
         );
 
-        ctx.lineTo(
-            x + size * 0.7,
-            y + size * 0.5
+        ctx.fillRect(
+            x +
+            size * 0.31,
+            y +
+            size * 0.51,
+            size * 0.38,
+            size * 0.16
         );
-
-        ctx.moveTo(
-            x + size * 0.5,
-            y + size * 0.3
-        );
-
-        ctx.lineTo(
-            x + size * 0.5,
-            y + size * 0.7
-        );
-
-        ctx.stroke();
-
-        ctx.restore();
     }
 
 
@@ -2837,59 +3074,69 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
-
         ctx.fillStyle =
-            "#a56c3f";
+            "#d98032";
+
+        ctx.fillRect(
+            x +
+            size * 0.14,
+            y +
+            size * 0.14,
+            size * 0.72,
+            size * 0.72
+        );
+
 
         ctx.strokeStyle =
-            "#05040b";
+            "#4c2818";
 
         ctx.lineWidth =
             Math.max(
                 2,
-                size * 0.06
+                size * 0.055
             );
 
-        ctx.fillRect(
-            x + size * 0.14,
-            y + size * 0.14,
+        ctx.strokeRect(
+            x +
+            size * 0.14,
+            y +
+            size * 0.14,
             size * 0.72,
             size * 0.72
         );
 
-        ctx.strokeRect(
-            x + size * 0.14,
-            y + size * 0.14,
-            size * 0.72,
-            size * 0.72
-        );
 
         ctx.beginPath();
 
         ctx.moveTo(
-            x + size * 0.2,
-            y + size * 0.2
+            x +
+            size * 0.22,
+            y +
+            size * 0.22
         );
 
         ctx.lineTo(
-            x + size * 0.8,
-            y + size * 0.8
+            x +
+            size * 0.78,
+            y +
+            size * 0.78
         );
 
         ctx.moveTo(
-            x + size * 0.8,
-            y + size * 0.2
+            x +
+            size * 0.78,
+            y +
+            size * 0.22
         );
 
         ctx.lineTo(
-            x + size * 0.2,
-            y + size * 0.8
+            x +
+            size * 0.22,
+            y +
+            size * 0.78
         );
 
         ctx.stroke();
-
-        ctx.restore();
     }
 
 
@@ -2899,30 +3146,30 @@ for distance in distances:
         y,
         size
     ) {
-        ctx.save();
-
         ctx.strokeStyle =
-            "#ff9d3d";
+            "#ffe55c";
 
         ctx.lineWidth =
             Math.max(
-                3,
-                size * 0.06
+                2,
+                size * 0.055
             );
 
         ctx.setLineDash([
-            size * 0.09,
-            size * 0.06
+            size * 0.1,
+            size * 0.07
         ]);
 
         ctx.strokeRect(
-            x + size * 0.17,
-            y + size * 0.17,
-            size * 0.66,
-            size * 0.66
+            x +
+            size * 0.16,
+            y +
+            size * 0.16,
+            size * 0.68,
+            size * 0.68
         );
 
-        ctx.restore();
+        ctx.setLineDash([]);
     }
 
 
@@ -2934,142 +3181,191 @@ for distance in distances:
         ctx,
         startX,
         startY,
-        size
+        tileSize
     ) {
-        if (
-            !this.game ||
-            !this.game.robot
-        ) {
+        const robot =
+            this.game?.robot;
+
+        if (!robot) {
             return;
         }
 
-        const robot =
-            this.game.robot;
 
         const position =
-            robot.getPosition
+            typeof robot.getPosition ===
+            "function"
                 ? robot.getPosition()
                 : {
-                    row: robot.row,
-                    col: robot.col
+                    row:
+                        robot.row,
+
+                    col:
+                        robot.col
                 };
 
-        if (
-            !position ||
-            !Number.isFinite(position.row) ||
-            !Number.isFinite(position.col)
-        ) {
-            return;
-        }
+
+        const x =
+            startX +
+            position.col *
+            tileSize;
+
+        const y =
+            startY +
+            position.row *
+            tileSize;
+
 
         const centerX =
-            startX +
-            position.col * size +
-            size / 2;
+            x +
+            tileSize / 2;
 
         const centerY =
-            startY +
-            position.row * size +
-            size / 2;
+            y +
+            tileSize / 2;
 
-        const robotSize =
-            size * 0.62;
+
+        const bodyWidth =
+            tileSize * 0.48;
+
+        const bodyHeight =
+            tileSize * 0.38;
+
+        const headWidth =
+            tileSize * 0.56;
+
+        const headHeight =
+            tileSize * 0.32;
+
 
         ctx.save();
 
-        ctx.translate(
+
+        /*
+        Ombre.
+        */
+
+        ctx.globalAlpha =
+            0.25;
+
+        ctx.fillStyle =
+            "#000000";
+
+        ctx.beginPath();
+
+        ctx.ellipse(
             centerX,
-            centerY
+            y +
+            tileSize * 0.78,
+            tileSize * 0.28,
+            tileSize * 0.09,
+            0,
+            0,
+            Math.PI * 2
         );
 
-        const direction =
-            robot.getDirection
-                ? robot.getDirection()
-                : robot.direction;
+        ctx.fill();
 
-        const rotation = {
-            NORTH: 0,
-            EAST: Math.PI / 2,
-            SOUTH: Math.PI,
-            WEST: -Math.PI / 2,
-            N: 0,
-            E: Math.PI / 2,
-            S: Math.PI,
-            W: -Math.PI / 2
-        }[
-            String(direction || "EAST")
-                .toUpperCase()
-        ] ?? Math.PI / 2;
 
-        ctx.rotate(rotation);
+        ctx.globalAlpha =
+            1;
 
 
         /*
-        Corps.
+        Corps blanc.
         */
 
         ctx.fillStyle =
-            "#f4f1ff";
+            "#f5f3ff";
+
+        ctx.fillRect(
+            centerX -
+            bodyWidth / 2,
+            centerY,
+            bodyWidth,
+            bodyHeight
+        );
+
 
         ctx.strokeStyle =
-            "#05040b";
+            "#181126";
 
         ctx.lineWidth =
             Math.max(
                 2,
-                size * 0.055
+                tileSize * 0.045
             );
 
-        ctx.beginPath();
-
-        ctx.roundRect(
-            -robotSize * 0.31,
-            -robotSize * 0.17,
-            robotSize * 0.62,
-            robotSize * 0.55,
-            robotSize * 0.12
+        ctx.strokeRect(
+            centerX -
+            bodyWidth / 2,
+            centerY,
+            bodyWidth,
+            bodyHeight
         );
 
-        ctx.fill();
-        ctx.stroke();
+
+        /*
+        Cœur cyan.
+        */
+
+        ctx.fillStyle =
+            "#4ff4ff";
+
+        ctx.fillRect(
+            centerX -
+            tileSize * 0.08,
+            centerY +
+            tileSize * 0.1,
+            tileSize * 0.16,
+            tileSize * 0.12
+        );
 
 
         /*
         Tête.
         */
 
-        ctx.beginPath();
+        ctx.fillStyle =
+            "#f7f5ff";
 
-        ctx.roundRect(
-            -robotSize * 0.38,
-            -robotSize * 0.46,
-            robotSize * 0.76,
-            robotSize * 0.38,
-            robotSize * 0.16
+        ctx.fillRect(
+            centerX -
+            headWidth / 2,
+            y +
+            tileSize * 0.22,
+            headWidth,
+            headHeight
         );
 
-        ctx.fill();
-        ctx.stroke();
+
+        ctx.strokeStyle =
+            "#181126";
+
+        ctx.strokeRect(
+            centerX -
+            headWidth / 2,
+            y +
+            tileSize * 0.22,
+            headWidth,
+            headHeight
+        );
 
 
         /*
-        Visage.
+        Visage sombre.
         */
 
         ctx.fillStyle =
-            "#17132b";
+            "#211937";
 
-        ctx.beginPath();
-
-        ctx.roundRect(
-            -robotSize * 0.29,
-            -robotSize * 0.39,
-            robotSize * 0.58,
-            robotSize * 0.22,
-            robotSize * 0.08
+        ctx.fillRect(
+            centerX -
+            headWidth * 0.34,
+            y +
+            tileSize * 0.29,
+            headWidth * 0.68,
+            headHeight * 0.48
         );
-
-        ctx.fill();
 
 
         /*
@@ -3077,134 +3373,179 @@ for distance in distances:
         */
 
         ctx.fillStyle =
-            "#42e8ff";
+            "#55f5ff";
 
-        ctx.beginPath();
-
-        ctx.arc(
-            -robotSize * 0.14,
-            -robotSize * 0.28,
-            robotSize * 0.045,
-            0,
-            Math.PI * 2
+        ctx.fillRect(
+            centerX -
+            tileSize * 0.15,
+            y +
+            tileSize * 0.34,
+            tileSize * 0.07,
+            tileSize * 0.07
         );
 
-        ctx.arc(
-            robotSize * 0.14,
-            -robotSize * 0.28,
-            robotSize * 0.045,
-            0,
-            Math.PI * 2
+        ctx.fillRect(
+            centerX +
+            tileSize * 0.08,
+            y +
+            tileSize * 0.34,
+            tileSize * 0.07,
+            tileSize * 0.07
         );
-
-        ctx.fill();
 
 
         /*
-        Cœur.
+        Direction.
         */
 
-        ctx.fillStyle =
-            "#ff4fa3";
-
-        ctx.strokeStyle =
-            "#05040b";
-
-        ctx.beginPath();
-
-        ctx.arc(
-            0,
-            robotSize * 0.09,
-            robotSize * 0.09,
-            0,
-            Math.PI * 2
+        this.drawRobotDirection(
+            ctx,
+            centerX,
+            centerY,
+            tileSize,
+            robot.direction
         );
 
-        ctx.fill();
-        ctx.stroke();
-
-
-        /*
-        Indicateur de direction.
-        Le robot regarde toujours vers le haut
-        dans son repère local.
-        */
-
-        ctx.fillStyle =
-            "#ffe45e";
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            0,
-            -robotSize * 0.58
-        );
-
-        ctx.lineTo(
-            -robotSize * 0.09,
-            -robotSize * 0.47
-        );
-
-        ctx.lineTo(
-            robotSize * 0.09,
-            -robotSize * 0.47
-        );
-
-        ctx.closePath();
-        ctx.fill();
 
         ctx.restore();
     }
 
 
-    /* =====================================================
-       ACTIONS ANIMÉES
-    ===================================================== */
-
-    playActions(
-        actions,
-        performAction,
-        finished
+    drawRobotDirection(
+        ctx,
+        centerX,
+        centerY,
+        size,
+        direction
     ) {
-        const queue =
-            Array.isArray(actions)
-                ? [...actions]
-                : [];
+        const normalized =
+            String(
+                direction ||
+                "EAST"
+            ).toUpperCase();
 
-        const next =
-            () => {
-                if (
-                    queue.length === 0
-                ) {
-                    finished?.();
-                    return;
-                }
 
-                const action =
-                    queue.shift();
+        let dx = 1;
+        let dy = 0;
 
-                const result =
-                    performAction?.(
-                        action
-                    );
 
-                this.render();
+        if (
+            normalized === "NORTH" ||
+            normalized === "N"
+        ) {
+            dx = 0;
+            dy = -1;
 
-                if (result === false) {
-                    finished?.(
-                        action
-                    );
+        } else if (
+            normalized === "SOUTH" ||
+            normalized === "S"
+        ) {
+            dx = 0;
+            dy = 1;
 
-                    return;
-                }
+        } else if (
+            normalized === "WEST" ||
+            normalized === "W"
+        ) {
+            dx = -1;
+            dy = 0;
+        }
 
-                window.setTimeout(
-                    next,
-                    this.actionDelay
-                );
-            };
 
-        next();
+        const startX =
+            centerX +
+            dx *
+            size * 0.24;
+
+        const startY =
+            centerY +
+            dy *
+            size * 0.24;
+
+
+        const endX =
+            centerX +
+            dx *
+            size * 0.42;
+
+        const endY =
+            centerY +
+            dy *
+            size * 0.42;
+
+
+        ctx.strokeStyle =
+            "#ffe55c";
+
+        ctx.fillStyle =
+            "#ffe55c";
+
+        ctx.lineWidth =
+            Math.max(
+                2,
+                size * 0.05
+            );
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            startX,
+            startY
+        );
+
+        ctx.lineTo(
+            endX,
+            endY
+        );
+
+        ctx.stroke();
+
+
+        const perpendicularX =
+            -dy;
+
+        const perpendicularY =
+            dx;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            endX,
+            endY
+        );
+
+        ctx.lineTo(
+            endX -
+            dx *
+            size * 0.11 +
+            perpendicularX *
+            size * 0.07,
+
+            endY -
+            dy *
+            size * 0.11 +
+            perpendicularY *
+            size * 0.07
+        );
+
+        ctx.lineTo(
+            endX -
+            dx *
+            size * 0.11 -
+            perpendicularX *
+            size * 0.07,
+
+            endY -
+            dy *
+            size * 0.11 -
+            perpendicularY *
+            size * 0.07
+        );
+
+        ctx.closePath();
+        ctx.fill();
     }
 }
 
@@ -3213,5 +3554,4 @@ for distance in distances:
    EXPORT
 ========================================================= */
 
-window.PytUI =
-    PytUI;
+window.PytUI = PytUI;
