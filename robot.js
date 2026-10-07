@@ -1,24 +1,9 @@
 "use strict";
 
-/*
-============================================================
-PYT - robot.js
-
-État et comportement du robot Pyt.
-
-Responsabilités :
-- position ;
-- direction ;
-- rotations ;
-- déplacements ;
-- inventaire ;
-- énergie ;
-- état du robot.
-
-Les collisions et interactions avec le monde
-restent gérées par game.js.
-============================================================
-*/
+/* =========================================================
+   PYT - robot.js
+   État et déplacements du robot.
+========================================================= */
 
 class Robot {
 
@@ -33,37 +18,29 @@ class Robot {
         col = 1,
         direction = Robot.EAST
     ) {
-
-        this.row =
-            Number(row);
-
-        this.col =
-            Number(col);
+        this.row = row;
+        this.col = col;
 
         this.direction =
             this.normalizeDirection(
                 direction
             );
 
-        this.inventory = [];
+        this.inventory = {};
 
         this.maxEnergy = 100;
         this.energy = 100;
     }
 
 
-    // =====================================================
-    // POSITION
-    // =====================================================
+    /* =====================================================
+       POSITION
+    ===================================================== */
 
     getPosition() {
-
         return {
-            row:
-                this.row,
-
-            col:
-                this.col
+            row: this.row,
+            col: this.col
         };
     }
 
@@ -72,26 +49,18 @@ class Robot {
         row,
         col
     ) {
-
         const nextRow =
             Number(row);
 
         const nextCol =
             Number(col);
 
-
         if (
-            !Number.isFinite(
-                nextRow
-            ) ||
-            !Number.isFinite(
-                nextCol
-            )
+            !Number.isFinite(nextRow) ||
+            !Number.isFinite(nextCol)
         ) {
-
             return false;
         }
-
 
         this.row =
             nextRow;
@@ -103,79 +72,50 @@ class Robot {
     }
 
 
-    // =====================================================
-    // DIRECTION
-    // =====================================================
+    /* =====================================================
+       DIRECTION
+    ===================================================== */
 
     normalizeDirection(direction) {
-
         const value =
             String(
                 direction ||
-                Robot.NORTH
+                Robot.EAST
             )
                 .trim()
                 .toUpperCase();
 
-
         const aliases = {
+            N: Robot.NORTH,
+            NORTH: Robot.NORTH,
+            UP: Robot.NORTH,
 
-            N:
-                Robot.NORTH,
+            E: Robot.EAST,
+            EAST: Robot.EAST,
+            RIGHT: Robot.EAST,
 
-            NORTH:
-                Robot.NORTH,
+            S: Robot.SOUTH,
+            SOUTH: Robot.SOUTH,
+            DOWN: Robot.SOUTH,
 
-            UP:
-                Robot.NORTH,
-
-
-            E:
-                Robot.EAST,
-
-            EAST:
-                Robot.EAST,
-
-            RIGHT:
-                Robot.EAST,
-
-
-            S:
-                Robot.SOUTH,
-
-            SOUTH:
-                Robot.SOUTH,
-
-            DOWN:
-                Robot.SOUTH,
-
-
-            W:
-                Robot.WEST,
-
-            WEST:
-                Robot.WEST,
-
-            LEFT:
-                Robot.WEST
+            W: Robot.WEST,
+            WEST: Robot.WEST,
+            LEFT: Robot.WEST
         };
-
 
         return (
             aliases[value] ||
-            Robot.NORTH
+            Robot.EAST
         );
     }
 
 
     getDirection() {
-
         return this.direction;
     }
 
 
     setDirection(direction) {
-
         this.direction =
             this.normalizeDirection(
                 direction
@@ -186,61 +126,48 @@ class Robot {
 
 
     getDirectionIndex() {
-
-        return [
+        const directions = [
             Robot.NORTH,
             Robot.EAST,
             Robot.SOUTH,
             Robot.WEST
-        ].indexOf(
+        ];
+
+        return directions.indexOf(
             this.direction
         );
     }
 
 
     getDirectionVector() {
-
         switch (
-            this.direction
+            this.normalizeDirection(
+                this.direction
+            )
         ) {
-
             case Robot.NORTH:
-
                 return {
                     row: -1,
                     col: 0
                 };
 
-
-            case Robot.EAST:
-
-                return {
-                    row: 0,
-                    col: 1
-                };
-
-
             case Robot.SOUTH:
-
                 return {
                     row: 1,
                     col: 0
                 };
 
-
             case Robot.WEST:
-
                 return {
                     row: 0,
                     col: -1
                 };
 
-
+            case Robot.EAST:
             default:
-
                 return {
-                    row: -1,
-                    col: 0
+                    row: 0,
+                    col: 1
                 };
         }
     }
@@ -249,18 +176,13 @@ class Robot {
     getForwardPosition(
         steps = 1
     ) {
-
         const amount =
-            Math.max(
-                0,
-                Math.floor(
-                    Number(steps) || 0
-                )
+            this.normalizeSteps(
+                steps
             );
 
         const vector =
             this.getDirectionVector();
-
 
         return {
             row:
@@ -279,18 +201,13 @@ class Robot {
     getBackwardPosition(
         steps = 1
     ) {
-
         const amount =
-            Math.max(
-                0,
-                Math.floor(
-                    Number(steps) || 0
-                )
+            this.normalizeSteps(
+                steps
             );
 
         const vector =
             this.getDirectionVector();
-
 
         return {
             row:
@@ -306,12 +223,11 @@ class Robot {
     }
 
 
-    // =====================================================
-    // ROTATIONS
-    // =====================================================
+    /* =====================================================
+       ROTATIONS
+    ===================================================== */
 
     turnRight() {
-
         const directions = [
             Robot.NORTH,
             Robot.EAST,
@@ -319,25 +235,21 @@ class Robot {
             Robot.WEST
         ];
 
-
-        const current =
+        const index =
             this.getDirectionIndex();
-
 
         this.direction =
             directions[
                 (
-                    current + 1
+                    index + 1
                 ) % 4
             ];
-
 
         return this.direction;
     }
 
 
     turnLeft() {
-
         const directions = [
             Robot.NORTH,
             Robot.EAST,
@@ -345,25 +257,21 @@ class Robot {
             Robot.WEST
         ];
 
-
-        const current =
+        const index =
             this.getDirectionIndex();
-
 
         this.direction =
             directions[
                 (
-                    current + 3
+                    index + 3
                 ) % 4
             ];
-
 
         return this.direction;
     }
 
 
     turnAround() {
-
         this.turnRight();
         this.turnRight();
 
@@ -372,156 +280,94 @@ class Robot {
 
 
     rotateRight(
-        angle = 90
+        degrees = 90
     ) {
-
         return this.rotate(
-            angle
+            degrees
         );
     }
 
 
     rotateLeft(
-        angle = 90
+        degrees = 90
     ) {
-
         return this.rotate(
-            -Number(angle)
+            -degrees
         );
     }
 
 
-    rotate(angle = 90) {
-
-        const numericAngle =
-            Number(angle);
-
+    rotate(degrees) {
+        const value =
+            Number(degrees);
 
         if (
-            !Number.isFinite(
-                numericAngle
-            )
+            !Number.isFinite(value)
         ) {
-
             return false;
         }
 
-
         if (
-            numericAngle % 90 !== 0
+            value % 90 !== 0
         ) {
-
             return false;
         }
-
 
         let turns =
-            Math.abs(
-                numericAngle / 90
-            ) % 4;
-
+            Math.round(
+                value / 90
+            );
 
         while (
             turns > 0
         ) {
-
-            if (
-                numericAngle > 0
-            ) {
-
-                this.turnRight();
-
-            } else {
-
-                this.turnLeft();
-            }
-
+            this.turnRight();
             turns--;
         }
 
+        while (
+            turns < 0
+        ) {
+            this.turnLeft();
+            turns++;
+        }
 
         return this.direction;
     }
 
 
-    // =====================================================
-    // DÉPLACEMENTS
-    // =====================================================
+    /* =====================================================
+       DÉPLACEMENTS
+    ===================================================== */
 
     forward(
         game,
         steps = 1
     ) {
-
         if (
-            !game
+            !game ||
+            typeof game.moveForward !==
+            "function"
         ) {
-
             return false;
         }
-
 
         const amount =
             this.normalizeSteps(
                 steps
             );
 
-
-        if (
-            amount === null
-        ) {
-
-            return false;
-        }
-
-
         for (
             let i = 0;
             i < amount;
             i++
         ) {
-
-            let moved = false;
-
-
             if (
-                typeof game.moveForward ===
-                "function"
+                !game.moveForward()
             ) {
-
-                moved =
-                    game.moveForward();
-
-            } else {
-
-                const position =
-                    this.getForwardPosition(
-                        1
-                    );
-
-
-                if (
-                    typeof game.moveRobotTo ===
-                    "function"
-                ) {
-
-                    moved =
-                        game.moveRobotTo(
-                            position.row,
-                            position.col
-                        );
-                }
-            }
-
-
-            if (
-                moved === false
-            ) {
-
                 return false;
             }
         }
-
 
         return true;
     }
@@ -531,320 +377,283 @@ class Robot {
         game,
         steps = 1
     ) {
-
         if (
-            !game
+            !game ||
+            typeof game.moveBackward !==
+            "function"
         ) {
-
             return false;
         }
-
 
         const amount =
             this.normalizeSteps(
                 steps
             );
 
-
-        if (
-            amount === null
-        ) {
-
-            return false;
-        }
-
-
         for (
             let i = 0;
             i < amount;
             i++
         ) {
-
-            let moved = false;
-
-
             if (
-                typeof game.moveBackward ===
-                "function"
+                !game.moveBackward()
             ) {
-
-                moved =
-                    game.moveBackward();
-
-            } else {
-
-                const position =
-                    this.getBackwardPosition(
-                        1
-                    );
-
-
-                if (
-                    typeof game.moveRobotTo ===
-                    "function"
-                ) {
-
-                    moved =
-                        game.moveRobotTo(
-                            position.row,
-                            position.col
-                        );
-                }
-            }
-
-
-            if (
-                moved === false
-            ) {
-
                 return false;
             }
         }
-
 
         return true;
     }
 
 
     normalizeSteps(steps) {
-
         const amount =
             Number(steps);
 
-
         if (
-            !Number.isFinite(
-                amount
+            !Number.isFinite(amount)
+        ) {
+            return 1;
+        }
+
+        return Math.max(
+            0,
+            Math.floor(
+                Math.abs(amount)
             )
-        ) {
-
-            return null;
-        }
-
-
-        if (
-            amount < 0
-        ) {
-
-            return null;
-        }
-
-
-        if (
-            !Number.isInteger(
-                amount
-            )
-        ) {
-
-            return null;
-        }
-
-
-        return amount;
+        );
     }
 
 
-    // =====================================================
-    // INVENTAIRE
-    // =====================================================
+    /* =====================================================
+       INVENTAIRE
+    ===================================================== */
 
     addItem(
-        item = "object"
+        item = "object",
+        amount = 1
     ) {
+        const name =
+            String(
+                item ||
+                "object"
+            );
 
-        this.inventory.push(
-            item
-        );
+        const quantity =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(amount) || 0
+                )
+            );
 
-        return this.inventory.length;
+        if (
+            quantity === 0
+        ) {
+            return this.getItemCount(
+                name
+            );
+        }
+
+        if (
+            !Object.prototype
+                .hasOwnProperty.call(
+                    this.inventory,
+                    name
+                )
+        ) {
+            this.inventory[name] = 0;
+        }
+
+        this.inventory[name] +=
+            quantity;
+
+        return this.inventory[name];
     }
 
 
     removeItem(
-        item = null
+        item = "object",
+        amount = 1
     ) {
-
-        if (
-            this.inventory.length === 0
-        ) {
-
-            return null;
-        }
-
-
-        if (
-            item === null ||
-            item === undefined
-        ) {
-
-            return this.inventory.pop();
-        }
-
-
-        const index =
-            this.inventory.indexOf(
-                item
+        const name =
+            String(
+                item ||
+                "object"
             );
 
-
-        if (
-            index === -1
-        ) {
-
-            return null;
-        }
-
-
-        const removed =
-            this.inventory.splice(
-                index,
-                1
+        const quantity =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(amount) || 0
+                )
             );
 
+        const current =
+            this.getItemCount(
+                name
+            );
 
-        return (
-            removed[0] ||
-            null
-        );
+        if (
+            current <
+            quantity
+        ) {
+            return false;
+        }
+
+        this.inventory[name] =
+            current -
+            quantity;
+
+        if (
+            this.inventory[name] <= 0
+        ) {
+            delete this.inventory[name];
+        }
+
+        return true;
     }
 
 
     hasItem(
-        item = null
+        item = "object",
+        amount = 1
     ) {
+        return (
+            this.getItemCount(item) >=
+            Math.max(
+                0,
+                Number(amount) || 0
+            )
+        );
+    }
 
-        if (
-            item === null ||
-            item === undefined
-        ) {
 
-            return (
-                this.inventory.length >
-                0
+    getItemCount(
+        item = "object"
+    ) {
+        const name =
+            String(
+                item ||
+                "object"
             );
-        }
 
-
-        return this.inventory.includes(
-            item
+        return (
+            Number(
+                this.inventory[name]
+            ) || 0
         );
     }
 
 
     getInventory() {
-
-        return [
+        return {
             ...this.inventory
-        ];
+        };
     }
 
 
     getInventoryCount() {
+        return Object.values(
+            this.inventory
+        ).reduce(
+            (
+                total,
+                amount
+            ) =>
+                total +
+                (
+                    Number(amount) ||
+                    0
+                ),
+            0
+        );
+    }
 
-        return this.inventory.length;
+
+    /*
+    Compatibilité avec d'anciennes versions.
+    */
+
+    getCount() {
+        return this.getInventoryCount();
     }
 
 
     clearInventory() {
-
-        const oldInventory =
-            [
-                ...this.inventory
-            ];
-
-
-        this.inventory.length =
-            0;
-
-
-        return oldInventory;
+        this.inventory = {};
     }
 
 
-    // =====================================================
-    // ÉNERGIE
-    // =====================================================
+    /* =====================================================
+       ÉNERGIE
+    ===================================================== */
 
     getEnergy() {
-
         return this.energy;
     }
 
 
     setEnergy(value) {
-
-        const numericValue =
+        const energy =
             Number(value);
 
-
         if (
-            !Number.isFinite(
-                numericValue
-            )
+            !Number.isFinite(energy)
         ) {
-
             return this.energy;
         }
-
 
         this.energy =
             Math.max(
                 0,
                 Math.min(
                     this.maxEnergy,
-                    numericValue
+                    energy
                 )
             );
-
 
         return this.energy;
     }
 
 
-    useEnergy(
-        amount = 1
-    ) {
-
-        const cost =
+    useEnergy(amount = 1) {
+        const value =
             Math.max(
                 0,
                 Number(amount) || 0
             );
 
-
         if (
             this.energy <
-            cost
+            value
         ) {
-
             return false;
         }
 
-
         this.energy -=
-            cost;
-
+            value;
 
         return true;
     }
 
 
-    addEnergy(
-        amount = 1
-    ) {
-
-        return this.setEnergy(
-            this.energy +
+    addEnergy(amount = 1) {
+        const value =
             Math.max(
                 0,
                 Number(amount) || 0
-            )
+            );
+
+        return this.setEnergy(
+            this.energy +
+            value
         );
     }
 
 
     restoreEnergy() {
-
         this.energy =
             this.maxEnergy;
 
@@ -853,24 +662,30 @@ class Robot {
 
 
     isOutOfEnergy() {
-
         return (
-            this.energy <=
-            0
+            this.energy <= 0
         );
     }
 
 
-    // =====================================================
-    // RESET
-    // =====================================================
+    /*
+    Compatibilité courte.
+    */
+
+    isOut() {
+        return this.isOutOfEnergy();
+    }
+
+
+    /* =====================================================
+       RESET
+    ===================================================== */
 
     reset(
         row = 1,
         col = 1,
         direction = Robot.EAST
     ) {
-
         this.setPosition(
             row,
             col
@@ -881,21 +696,18 @@ class Robot {
         );
 
         this.clearInventory();
-
         this.restoreEnergy();
 
         return this;
     }
 
 
-    // =====================================================
-    // ÉTAT
-    // =====================================================
+    /* =====================================================
+       ÉTAT
+    ===================================================== */
 
     getState() {
-
         return {
-
             row:
                 this.row,
 
@@ -916,7 +728,7 @@ class Robot {
             inventory:
                 this.getInventory(),
 
-            inventoryCount:
+            count:
                 this.getInventoryCount(),
 
             energy:
@@ -928,16 +740,10 @@ class Robot {
     }
 
 
-    // =====================================================
-    // AFFICHAGE / DEBUG
-    // =====================================================
-
     getDirectionSymbol() {
-
         switch (
             this.direction
         ) {
-
             case Robot.NORTH:
                 return "↑";
 
@@ -957,13 +763,11 @@ class Robot {
 
 
     symbol() {
-
         return this.getDirectionSymbol();
     }
 
 
     toString() {
-
         return (
             `Pyt(${this.row}, ${this.col}) ` +
             `${this.getDirectionSymbol()}`
@@ -972,9 +776,8 @@ class Robot {
 }
 
 
-// =========================================================
-// EXPOSITION NAVIGATEUR
-// =========================================================
+/* =========================================================
+   EXPORT
+========================================================= */
 
-window.Robot =
-    Robot;
+window.Robot = Robot;

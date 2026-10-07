@@ -2,22 +2,12 @@
 
 /* =========================================================
    PYT - app.js
-
-   Gestion générale :
-   - lancement du jeu ;
-   - intro interactive ;
-   - crédits ;
-   - paramètres audio ;
-   - navigation ;
-   - exécution du pseudo-Python ;
-   - animation des actions ;
-   - messages d'erreur ;
-   - progression.
+   Application principale + exécution du Python simplifié.
 ========================================================= */
 
 
 /* =========================================================
-   INTERPRÉTEUR PYTHON CONTRÔLÉ
+   MINI INTERPRÉTEUR PYTHON
 ========================================================= */
 
 class BrowserPythonRunner {
@@ -29,31 +19,36 @@ class BrowserPythonRunner {
 
         this.actions = [];
         this.output = [];
+
         this.variables = {};
         this.functions = {};
 
         this.iterations = 0;
         this.functionCalls = 0;
+
+        this.lines = [];
     }
 
 
     run(code) {
         this.actions = [];
         this.output = [];
+
         this.variables = {};
         this.functions = {};
+
         this.iterations = 0;
         this.functionCalls = 0;
 
         try {
             this.checkForbiddenCode(code);
 
-            const lines = this.prepareLines(code);
+            this.lines =
+                this.prepareLines(code);
 
             this.executeBlock(
-                lines,
                 0,
-                lines.length,
+                this.lines.length,
                 0
             );
 
@@ -66,49 +61,63 @@ class BrowserPythonRunner {
             };
 
         } catch (error) {
-
-            let errorLine = null;
-
-            const match =
-                String(error.message)
-                    .match(/Ligne\s+(\d+)/i);
-
-            if (match) {
-                errorLine = Number(match[1]);
-            }
-
             return {
                 success: false,
+
+                /*
+                On conserve les actions valides exécutées
+                avant l'erreur afin que Pyt puisse les jouer.
+                */
                 actions: [...this.actions],
+
                 output: [...this.output],
-                error: error.message,
-                errorLine
+
+                error:
+                    error instanceof Error
+                        ? error.message
+                        : String(error),
+
+                errorLine:
+                    this.extractErrorLine(
+                        error instanceof Error
+                            ? error.message
+                            : String(error)
+                    )
             };
         }
     }
 
 
+    /* =====================================================
+       PRÉPARATION
+    ===================================================== */
+
     checkForbiddenCode(code) {
         const forbidden = [
-            /\bimport\b/,
-            /\bfrom\b/,
-            /\beval\s*\(/,
-            /\bexec\s*\(/,
-            /\bopen\s*\(/,
-            /\b__import__\b/,
-            /\bglobals\s*\(/,
-            /\blocals\s*\(/,
-            /\bcompile\s*\(/,
-            /\binput\s*\(/,
-            /\bos\./,
-            /\bsys\./,
-            /\bsubprocess\b/
+            /\bimport\b/i,
+            /\bfrom\b/i,
+            /\beval\s*\(/i,
+            /\bexec\s*\(/i,
+            /\bopen\s*\(/i,
+            /\b__import__\s*\(/i,
+            /\bglobals\s*\(/i,
+            /\blocals\s*\(/i,
+            /\bcompile\s*\(/i,
+            /\binput\s*\(/i,
+            /\bos\./i,
+            /\bsys\./i,
+            /\bsubprocess\b/i
         ];
 
-        for (const pattern of forbidden) {
-            if (pattern.test(code)) {
+        for (
+            const pattern
+            of forbidden
+        ) {
+            if (
+                pattern.test(code)
+            ) {
                 throw new Error(
-                    "Cette instruction n'est pas autorisée dans PYT."
+                    "Cette instruction n'est pas disponible dans PYT."
                 );
             }
         }
@@ -118,74 +127,114 @@ class BrowserPythonRunner {
     prepareLines(code) {
         const rawLines =
             String(code || "")
-                .replace(/\r/g, "")
+                .replace(/\r\n/g, "\n")
+                .replace(/\r/g, "\n")
                 .split("\n");
 
-        const result = [];
+        return rawLines.map(
+            (raw, index) => {
+                const withoutComment =
+                    this.removeComment(raw);
 
-        for (
-            let index = 0;
-            index < rawLines.length;
-            index++
-        ) {
-            const original =
-                rawLines[index];
+                const indentationMatch =
+                    withoutComment.match(
+                        /^(\s*)/
+                    );
 
-            const withoutComment =
-                this.removeComment(original);
+                const indentationText =
+                    indentationMatch
+                        ? indentationMatch[1]
+                        : "";
 
-            if (
-                withoutComment.trim() === ""
-            ) {
-                continue;
+                if (
+                    indentationText.includes(
+                        "\t"
+                    )
+                ) {
+                    throw new Error(
+                        `Ligne ${index + 1} : utilise 4 espaces pour l'indentation.`
+                    );
+                }
+
+                const indentation =
+                    indentationText.length;
+
+                if (
+                    indentation % 4 !== 0
+                ) {
+                    throw new Error(
+                        `Ligne ${index + 1} : l'indentation doit utiliser des groupes de 4 espaces.`
+                    );
+                }
+
+                return {
+                    number:
+                        index + 1,
+
+                    indent:
+                        indentation,
+
+                    text:
+                        withoutComment.trim(),
+
+                    raw
+                };
             }
-
-            const spaces =
-                withoutComment.match(/^ */)[0].length;
-
-            if (spaces % 4 !== 0) {
-                throw new Error(
-                    `Ligne ${index + 1} : l'indentation doit utiliser des groupes de 4 espaces.`
-                );
-            }
-
-            result.push({
-                text: withoutComment.trim(),
-                indent: spaces,
-                lineNumber: index + 1
-            });
-        }
-
-        return result;
+        );
     }
 
 
     removeComment(line) {
         let quote = null;
+        let escaped = false;
 
         for (
             let i = 0;
             i < line.length;
             i++
         ) {
-            const char = line[i];
+            const char =
+                line[i];
 
-            if (
-                (char === '"' || char === "'") &&
-                line[i - 1] !== "\\"
-            ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
+            if (escaped) {
+                escaped = false;
+                continue;
             }
 
             if (
-                char === "#" &&
-                !quote
+                char === "\\"
             ) {
-                return line.slice(0, i);
+                escaped = true;
+                continue;
+            }
+
+            if (
+                quote
+            ) {
+                if (
+                    char === quote
+                ) {
+                    quote = null;
+                }
+
+                continue;
+            }
+
+            if (
+                char === '"' ||
+                char === "'"
+            ) {
+                quote = char;
+                continue;
+            }
+
+            if (
+                char === "#"
+            ) {
+                return line.slice(
+                    0,
+                    i
+                );
             }
         }
 
@@ -193,70 +242,155 @@ class BrowserPythonRunner {
     }
 
 
+    extractErrorLine(message) {
+        const match =
+            String(message || "")
+                .match(
+                    /Ligne\s+(\d+)/i
+                );
+
+        return match
+            ? Number(match[1])
+            : null;
+    }
+
+
+    /* =====================================================
+       BLOCS
+    ===================================================== */
+
     executeBlock(
-        lines,
         start,
         end,
         indent
     ) {
-        let i = start;
+        let index =
+            start;
 
-        while (i < end) {
-            const line = lines[i];
+        while (
+            index < end
+        ) {
+            const line =
+                this.lines[index];
 
-            if (line.indent < indent) {
+            if (
+                !line ||
+                !line.text
+            ) {
+                index++;
+                continue;
+            }
+
+            if (
+                line.indent < indent
+            ) {
                 break;
             }
 
-            if (line.indent > indent) {
+            if (
+                line.indent > indent
+            ) {
                 throw new Error(
-                    `Ligne ${line.lineNumber} : indentation inattendue.`
+                    `Ligne ${line.number} : indentation inattendue.`
                 );
             }
 
-            const text = line.text;
 
-            if (/^if\b/.test(text)) {
-                i =
+            if (
+                line.text.startsWith(
+                    "if "
+                )
+            ) {
+                const result =
                     this.executeIfChain(
-                        lines,
-                        i,
+                        index,
                         end,
                         indent
                     );
 
+                if (
+                    result.signal
+                ) {
+                    return result;
+                }
+
+                index =
+                    result.nextIndex;
+
                 continue;
             }
 
-            if (/^for\b/.test(text)) {
-                i =
+
+            if (
+                line.text.startsWith(
+                    "elif "
+                ) ||
+                line.text === "else:"
+            ) {
+                break;
+            }
+
+
+            if (
+                line.text.startsWith(
+                    "for "
+                )
+            ) {
+                const result =
                     this.executeFor(
-                        lines,
-                        i,
+                        index,
                         end,
                         indent
                     );
 
+                if (
+                    result.signal ===
+                    "return"
+                ) {
+                    return result;
+                }
+
+                index =
+                    result.nextIndex;
+
                 continue;
             }
 
-            if (/^while\b/.test(text)) {
-                i =
+
+            if (
+                line.text.startsWith(
+                    "while "
+                )
+            ) {
+                const result =
                     this.executeWhile(
-                        lines,
-                        i,
+                        index,
                         end,
                         indent
                     );
 
+                if (
+                    result.signal ===
+                    "return"
+                ) {
+                    return result;
+                }
+
+                index =
+                    result.nextIndex;
+
                 continue;
             }
 
-            if (/^def\b/.test(text)) {
-                i =
+
+            if (
+                line.text.startsWith(
+                    "def "
+                )
+            ) {
+                index =
                     this.registerFunction(
-                        lines,
-                        i,
+                        index,
                         end,
                         indent
                     );
@@ -264,178 +398,376 @@ class BrowserPythonRunner {
                 continue;
             }
 
-            if (text === "break") {
+
+            if (
+                line.text === "break"
+            ) {
                 return {
-                    type: "break",
-                    nextIndex: i + 1
+                    signal: "break",
+                    nextIndex:
+                        index + 1
                 };
             }
 
-            if (/^return\b/.test(text)) {
-                const expression =
-                    text.replace(/^return\b/, "")
-                        .trim();
 
+            if (
+                line.text === "return"
+            ) {
                 return {
-                    type: "return",
+                    signal: "return",
+                    value: null,
+                    nextIndex:
+                        index + 1
+                };
+            }
+
+
+            if (
+                line.text.startsWith(
+                    "return "
+                )
+            ) {
+                return {
+                    signal: "return",
+
                     value:
-                        expression
-                            ? this.evaluateExpression(
-                                expression,
-                                line.lineNumber
-                            )
-                            : null,
-                    nextIndex: i + 1
+                        this.evaluateExpression(
+                            line.text.slice(7),
+                            line.number
+                        ),
+
+                    nextIndex:
+                        index + 1
                 };
             }
 
-            if (text === "pass") {
-                i++;
+
+            if (
+                line.text === "pass"
+            ) {
+                index++;
                 continue;
             }
+
 
             this.executeStatement(
-                text,
-                line.lineNumber
+                line.text,
+                line.number
             );
 
-            i++;
+            index++;
         }
 
         return {
-            type: "normal",
-            nextIndex: i
+            signal: null,
+            nextIndex: index
         };
     }
 
 
     findBlockEnd(
-        lines,
         start,
         end,
-        indent
+        parentIndent
     ) {
-        let i = start;
+        let index =
+            start + 1;
 
         while (
-            i < end &&
-            lines[i].indent > indent
+            index < end
         ) {
-            i++;
+            const line =
+                this.lines[index];
+
+            if (
+                line.text &&
+                line.indent <=
+                parentIndent
+            ) {
+                break;
+            }
+
+            index++;
         }
 
-        return i;
+        return index;
     }
 
 
+    getChildIndent(
+        index,
+        end
+    ) {
+        for (
+            let i =
+                index + 1;
+            i < end;
+            i++
+        ) {
+            const line =
+                this.lines[i];
+
+            if (!line.text) {
+                continue;
+            }
+
+            if (
+                line.indent <=
+                this.lines[index].indent
+            ) {
+                break;
+            }
+
+            return line.indent;
+        }
+
+        throw new Error(
+            `Ligne ${this.lines[index].number} : bloc vide.`
+        );
+    }
+
+
+    /* =====================================================
+       IF / ELIF / ELSE
+    ===================================================== */
+
     executeIfChain(
-        lines,
         index,
         end,
         indent
     ) {
-        let i = index;
-        let executed = false;
+        let cursor =
+            index;
 
-        while (i < end) {
-            const line = lines[i];
+        let executed =
+            false;
 
-            if (line.indent !== indent) {
+        while (
+            cursor < end
+        ) {
+            const line =
+                this.lines[cursor];
+
+            if (
+                !line.text ||
+                line.indent !== indent
+            ) {
                 break;
             }
 
-            const text = line.text;
+            const isIf =
+                line.text.startsWith(
+                    "if "
+                );
 
-            let condition = null;
+            const isElif =
+                line.text.startsWith(
+                    "elif "
+                );
 
-            if (/^if\b/.test(text)) {
-                condition =
-                    text
-                        .replace(/^if\s+/, "")
-                        .replace(/:\s*$/, "");
+            const isElse =
+                line.text === "else:";
 
-            } else if (/^elif\b/.test(text)) {
-                condition =
-                    text
-                        .replace(/^elif\s+/, "")
-                        .replace(/:\s*$/, "");
-
-            } else if (/^else\s*:/.test(text)) {
-                condition = true;
-
-            } else {
+            if (
+                !isIf &&
+                !isElif &&
+                !isElse
+            ) {
                 break;
             }
 
-            const blockStart = i + 1;
+
+            if (
+                (
+                    isIf ||
+                    isElif
+                ) &&
+                !line.text.endsWith(":")
+            ) {
+                throw new Error(
+                    `Ligne ${line.number} : il manque ":" à la fin de la condition.`
+                );
+            }
+
+
             const blockEnd =
                 this.findBlockEnd(
-                    lines,
-                    blockStart,
+                    cursor,
                     end,
                     indent
                 );
 
-            let shouldExecute = false;
+            const childIndent =
+                this.getChildIndent(
+                    cursor,
+                    blockEnd
+                );
 
-            if (!executed) {
-                if (condition === true) {
-                    shouldExecute = true;
-                } else {
-                    shouldExecute =
-                        Boolean(
-                            this.evaluateExpression(
-                                condition,
-                                line.lineNumber
-                            )
-                        );
-                }
-            }
 
-            if (shouldExecute) {
-                executed = true;
+            let condition =
+                false;
 
-                const result =
-                    this.executeBlock(
-                        lines,
-                        blockStart,
-                        blockEnd,
-                        indent + 4
+            if (isElse) {
+                condition = true;
+
+            } else {
+                const prefixLength =
+                    isIf
+                        ? 3
+                        : 5;
+
+                const expression =
+                    line.text
+                        .slice(
+                            prefixLength,
+                            -1
+                        )
+                        .trim();
+
+                condition =
+                    Boolean(
+                        this.evaluateExpression(
+                            expression,
+                            line.number
+                        )
                     );
-
-                if (
-                    result &&
-                    result.type !== "normal"
-                ) {
-                    return blockEnd;
-                }
             }
 
-            i = blockEnd;
 
             if (
-                i >= end ||
-                lines[i].indent !== indent ||
-                !/^(elif\b|else\s*:)/.test(
-                    lines[i].text
-                )
+                !executed &&
+                condition
+            ) {
+                const result =
+                    this.executeBlock(
+                        cursor + 1,
+                        blockEnd,
+                        childIndent
+                    );
+
+                executed = true;
+
+                if (
+                    result.signal
+                ) {
+                    return {
+                        ...result,
+                        nextIndex:
+                            this.findIfChainEnd(
+                                blockEnd,
+                                end,
+                                indent
+                            )
+                    };
+                }
+            }
+
+
+            cursor =
+                blockEnd;
+
+
+            while (
+                cursor < end &&
+                !this.lines[cursor].text
+            ) {
+                cursor++;
+            }
+
+
+            if (
+                cursor >= end ||
+                this.lines[cursor].indent !==
+                indent
+            ) {
+                break;
+            }
+
+
+            if (
+                !this.lines[cursor]
+                    .text
+                    .startsWith("elif ") &&
+                this.lines[cursor].text !==
+                "else:"
             ) {
                 break;
             }
         }
 
-        return i;
+
+        return {
+            signal: null,
+            nextIndex: cursor
+        };
     }
 
 
+    findIfChainEnd(
+        index,
+        end,
+        indent
+    ) {
+        let cursor =
+            index;
+
+        while (
+            cursor < end
+        ) {
+            const line =
+                this.lines[cursor];
+
+            if (!line.text) {
+                cursor++;
+                continue;
+            }
+
+            if (
+                line.indent !== indent
+            ) {
+                break;
+            }
+
+            if (
+                !line.text.startsWith(
+                    "elif "
+                ) &&
+                line.text !== "else:"
+            ) {
+                break;
+            }
+
+            cursor =
+                this.findBlockEnd(
+                    cursor,
+                    end,
+                    indent
+                );
+        }
+
+        return cursor;
+    }
+
+
+    /* =====================================================
+       FOR
+    ===================================================== */
+
     executeFor(
-        lines,
         index,
         end,
         indent
     ) {
         const line =
-            lines[index];
+            this.lines[index];
+
+        if (
+            !line.text.endsWith(":")
+        ) {
+            throw new Error(
+                `Ligne ${line.number} : il manque ":" après la boucle for.`
+            );
+        }
 
         const match =
             line.text.match(
@@ -444,7 +776,7 @@ class BrowserPythonRunner {
 
         if (!match) {
             throw new Error(
-                `Ligne ${line.lineNumber} : boucle for invalide.`
+                `Ligne ${line.number} : boucle for invalide.`
             );
         }
 
@@ -454,147 +786,197 @@ class BrowserPythonRunner {
         const iterable =
             this.evaluateExpression(
                 match[2],
-                line.lineNumber
+                line.number
             );
 
-        if (!Array.isArray(iterable)) {
+        if (
+            !Array.isArray(iterable)
+        ) {
             throw new Error(
-                `Ligne ${line.lineNumber} : la boucle for attend une liste ou range(...).`
+                `Ligne ${line.number} : la boucle for attend une liste ou range().`
             );
         }
 
-        const blockStart =
-            index + 1;
 
         const blockEnd =
             this.findBlockEnd(
-                lines,
-                blockStart,
+                index,
                 end,
                 indent
             );
 
-        for (const value of iterable) {
+        const childIndent =
+            this.getChildIndent(
+                index,
+                blockEnd
+            );
+
+
+        for (
+            const value
+            of iterable
+        ) {
             this.iterations++;
 
-            if (
-                this.iterations >
-                this.maxIterations
-            ) {
-                throw new Error(
-                    `Ligne ${line.lineNumber} : trop d'itérations.`
-                );
-            }
+            this.checkIterationLimit(
+                line.number
+            );
 
-            this.variables[variableName] =
-                value;
+            this.variables[
+                variableName
+            ] = value;
 
             const result =
                 this.executeBlock(
-                    lines,
-                    blockStart,
+                    index + 1,
                     blockEnd,
-                    indent + 4
+                    childIndent
                 );
 
             if (
-                result &&
-                result.type === "break"
+                result.signal ===
+                "break"
             ) {
                 break;
             }
 
             if (
-                result &&
-                result.type === "return"
+                result.signal ===
+                "return"
             ) {
-                return blockEnd;
+                return {
+                    ...result,
+                    nextIndex:
+                        blockEnd
+                };
             }
         }
 
-        return blockEnd;
+
+        return {
+            signal: null,
+            nextIndex:
+                blockEnd
+        };
     }
 
 
+    /* =====================================================
+       WHILE
+    ===================================================== */
+
     executeWhile(
-        lines,
         index,
         end,
         indent
     ) {
         const line =
-            lines[index];
+            this.lines[index];
 
-        const condition =
+        if (
+            !line.text.endsWith(":")
+        ) {
+            throw new Error(
+                `Ligne ${line.number} : il manque ":" après la boucle while.`
+            );
+        }
+
+        const expression =
             line.text
-                .replace(/^while\s+/, "")
-                .replace(/:\s*$/, "");
-
-        const blockStart =
-            index + 1;
+                .slice(
+                    6,
+                    -1
+                )
+                .trim();
 
         const blockEnd =
             this.findBlockEnd(
-                lines,
-                blockStart,
+                index,
                 end,
                 indent
             );
 
+        const childIndent =
+            this.getChildIndent(
+                index,
+                blockEnd
+            );
+
+
         while (
             Boolean(
                 this.evaluateExpression(
-                    condition,
-                    line.lineNumber
+                    expression,
+                    line.number
                 )
             )
         ) {
             this.iterations++;
 
-            if (
-                this.iterations >
-                this.maxIterations
-            ) {
-                throw new Error(
-                    `Ligne ${line.lineNumber} : la boucle while semble infinie.`
-                );
-            }
+            this.checkIterationLimit(
+                line.number
+            );
 
             const result =
                 this.executeBlock(
-                    lines,
-                    blockStart,
+                    index + 1,
                     blockEnd,
-                    indent + 4
+                    childIndent
                 );
 
             if (
-                result &&
-                result.type === "break"
+                result.signal ===
+                "break"
             ) {
                 break;
             }
 
             if (
-                result &&
-                result.type === "return"
+                result.signal ===
+                "return"
             ) {
-                return blockEnd;
+                return {
+                    ...result,
+                    nextIndex:
+                        blockEnd
+                };
             }
         }
 
-        return blockEnd;
+
+        return {
+            signal: null,
+            nextIndex:
+                blockEnd
+        };
     }
 
 
+    checkIterationLimit(
+        lineNumber
+    ) {
+        if (
+            this.iterations >
+            this.maxIterations
+        ) {
+            throw new Error(
+                `Ligne ${lineNumber} : trop de répétitions. Vérifie ta boucle.`
+            );
+        }
+    }
+
+
+    /* =====================================================
+       FONCTIONS
+    ===================================================== */
+
     registerFunction(
-        lines,
         index,
         end,
         indent
     ) {
         const line =
-            lines[index];
+            this.lines[index];
 
         const match =
             line.text.match(
@@ -603,132 +985,201 @@ class BrowserPythonRunner {
 
         if (!match) {
             throw new Error(
-                `Ligne ${line.lineNumber} : définition de fonction invalide.`
+                `Ligne ${line.number} : définition de fonction invalide.`
             );
         }
 
         const name =
             match[1];
 
-        const params =
+        const parameters =
             match[2].trim()
-                ? match[2]
-                    .split(",")
-                    .map(
-                        value =>
-                            value.trim()
-                    )
+                ? this.splitArguments(
+                    match[2]
+                ).map(
+                    parameter =>
+                        parameter.trim()
+                )
                 : [];
 
-        const blockStart =
-            index + 1;
+        for (
+            const parameter
+            of parameters
+        ) {
+            if (
+                !/^[A-Za-z_]\w*$/
+                    .test(parameter)
+            ) {
+                throw new Error(
+                    `Ligne ${line.number} : paramètre invalide.`
+                );
+            }
+        }
+
 
         const blockEnd =
             this.findBlockEnd(
-                lines,
-                blockStart,
+                index,
                 end,
                 indent
             );
 
+        const childIndent =
+            this.getChildIndent(
+                index,
+                blockEnd
+            );
+
+
         this.functions[name] = {
-            params,
-            lines,
-            start: blockStart,
-            end: blockEnd,
-            indent: indent + 4,
-            lineNumber: line.lineNumber
+            parameters,
+            start:
+                index + 1,
+            end:
+                blockEnd,
+            indent:
+                childIndent,
+            line:
+                line.number
         };
+
 
         return blockEnd;
     }
 
 
-    executeStatement(
-        text,
+    callUserFunction(
+        name,
+        args,
         lineNumber
     ) {
-        let match;
+        const definition =
+            this.functions[name];
 
-
-        match =
-            text.match(
-                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=)\s*(.+)$/
+        if (!definition) {
+            throw new Error(
+                `Ligne ${lineNumber} : fonction "${name}" inconnue.`
             );
+        }
 
-        if (match) {
-            const name =
-                match[1];
-
-            const operator =
-                match[2];
-
-            const value =
-                this.evaluateExpression(
-                    match[3],
-                    lineNumber
-                );
-
-            const current =
-                this.variables[name] ?? 0;
-
-            if (operator === "+=") {
-                this.variables[name] =
-                    current + value;
-            }
-
-            if (operator === "-=") {
-                this.variables[name] =
-                    current - value;
-            }
-
-            if (operator === "*=") {
-                this.variables[name] =
-                    current * value;
-            }
-
-            return;
+        if (
+            args.length !==
+            definition.parameters.length
+        ) {
+            throw new Error(
+                `Ligne ${lineNumber} : "${name}" attend ${definition.parameters.length} argument(s).`
+            );
         }
 
 
-        match =
-            text.match(
-                /^([A-Za-z_]\w*)\s*=\s*(.+)$/
+        this.functionCalls++;
+
+        if (
+            this.functionCalls >
+            this.maxFunctionCalls
+        ) {
+            throw new Error(
+                `Ligne ${lineNumber} : trop d'appels de fonctions.`
             );
-
-        if (match) {
-            this.variables[match[1]] =
-                this.evaluateExpression(
-                    match[2],
-                    lineNumber
-                );
-
-            return;
         }
 
 
-        match =
-            text.match(
-                /^([A-Za-z_]\w*)\.append\((.*)\)$/
+        const previousVariables =
+            {...this.variables};
+
+
+        definition.parameters
+            .forEach(
+                (
+                    parameter,
+                    index
+                ) => {
+                    this.variables[
+                        parameter
+                    ] = args[index];
+                }
             );
 
-        if (match) {
-            const name =
-                match[1];
+
+        const result =
+            this.executeBlock(
+                definition.start,
+                definition.end,
+                definition.indent
+            );
+
+
+        const changedGlobals =
+            {...this.variables};
+
+        this.variables =
+            previousVariables;
+
+
+        for (
+            const key
+            of Object.keys(
+                previousVariables
+            )
+        ) {
+            if (
+                Object.prototype
+                    .hasOwnProperty.call(
+                        changedGlobals,
+                        key
+                    ) &&
+                !definition.parameters
+                    .includes(key)
+            ) {
+                this.variables[key] =
+                    changedGlobals[key];
+            }
+        }
+
+
+        return (
+            result.signal ===
+            "return"
+                ? result.value
+                : null
+        );
+    }
+
+
+    /* =====================================================
+       INSTRUCTIONS
+    ===================================================== */
+
+    executeStatement(
+        statement,
+        lineNumber
+    ) {
+        const appendMatch =
+            statement.match(
+                /^([A-Za-z_]\w*)\.append\s*\((.*)\)$/
+            );
+
+        if (appendMatch) {
+            const variable =
+                appendMatch[1];
 
             if (
                 !Array.isArray(
-                    this.variables[name]
+                    this.variables[
+                        variable
+                    ]
                 )
             ) {
                 throw new Error(
-                    `Ligne ${lineNumber} : ${name} n'est pas une liste.`
+                    `Ligne ${lineNumber} : "${variable}" n'est pas une liste.`
                 );
             }
 
-            this.variables[name].push(
+            this.variables[
+                variable
+            ].push(
                 this.evaluateExpression(
-                    match[2],
+                    appendMatch[2],
                     lineNumber
                 )
             );
@@ -737,13 +1188,84 @@ class BrowserPythonRunner {
         }
 
 
-        if (
-            /^[A-Za-z_]\w*\s*\(.*\)$/.test(
-                text
-            )
-        ) {
-            this.evaluateExpression(
-                text,
+        const augmentedMatch =
+            statement.match(
+                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=)\s*(.+)$/
+            );
+
+        if (augmentedMatch) {
+            const name =
+                augmentedMatch[1];
+
+            const operator =
+                augmentedMatch[2];
+
+            const value =
+                this.evaluateExpression(
+                    augmentedMatch[3],
+                    lineNumber
+                );
+
+            if (
+                !Object.prototype
+                    .hasOwnProperty.call(
+                        this.variables,
+                        name
+                    )
+            ) {
+                throw new Error(
+                    `Ligne ${lineNumber} : variable "${name}" inconnue.`
+                );
+            }
+
+            if (
+                operator === "+="
+            ) {
+                this.variables[name] +=
+                    value;
+
+            } else if (
+                operator === "-="
+            ) {
+                this.variables[name] -=
+                    value;
+
+            } else {
+                this.variables[name] *=
+                    value;
+            }
+
+            return;
+        }
+
+
+        const assignmentMatch =
+            statement.match(
+                /^([A-Za-z_]\w*)\s*=\s*(.+)$/
+            );
+
+        if (assignmentMatch) {
+            this.variables[
+                assignmentMatch[1]
+            ] =
+                this.evaluateExpression(
+                    assignmentMatch[2],
+                    lineNumber
+                );
+
+            return;
+        }
+
+
+        const call =
+            this.parseFunctionCall(
+                statement
+            );
+
+        if (call) {
+            this.executeFunctionCall(
+                call.name,
+                call.args,
                 lineNumber
             );
 
@@ -757,526 +1279,780 @@ class BrowserPythonRunner {
     }
 
 
-    evaluateExpression(
-        expression,
-        lineNumber
-    ) {
-        let expr =
-            String(expression).trim();
-
-        if (expr === "") {
-            return null;
-        }
-
-
-        if (
-            expr.startsWith("(") &&
-            expr.endsWith(")") &&
-            this.parenthesesWrapExpression(expr)
-        ) {
-            return this.evaluateExpression(
-                expr.slice(1, -1),
-                lineNumber
-            );
-        }
-
-
-        let split =
-            this.findTopLevelWord(
-                expr,
-                "or"
-            );
-
-        if (split) {
-            return (
-                Boolean(
-                    this.evaluateExpression(
-                        split.left,
-                        lineNumber
-                    )
-                ) ||
-                Boolean(
-                    this.evaluateExpression(
-                        split.right,
-                        lineNumber
-                    )
-                )
-            );
-        }
-
-
-        split =
-            this.findTopLevelWord(
-                expr,
-                "and"
-            );
-
-        if (split) {
-            return (
-                Boolean(
-                    this.evaluateExpression(
-                        split.left,
-                        lineNumber
-                    )
-                ) &&
-                Boolean(
-                    this.evaluateExpression(
-                        split.right,
-                        lineNumber
-                    )
-                )
-            );
-        }
-
-
-        if (/^not\s+/.test(expr)) {
-            return !Boolean(
-                this.evaluateExpression(
-                    expr.replace(/^not\s+/, ""),
-                    lineNumber
-                )
-            );
-        }
-
-
-        const comparisons = [
-            "==",
-            "!=",
-            ">=",
-            "<=",
-            ">",
-            "<"
-        ];
-
-        for (
-            const operator
-            of comparisons
-        ) {
-            const comparison =
-                this.findTopLevelOperator(
-                    expr,
-                    operator
-                );
-
-            if (comparison) {
-                const left =
-                    this.evaluateExpression(
-                        comparison.left,
-                        lineNumber
-                    );
-
-                const right =
-                    this.evaluateExpression(
-                        comparison.right,
-                        lineNumber
-                    );
-
-                switch (operator) {
-                    case "==":
-                        return left === right;
-
-                    case "!=":
-                        return left !== right;
-
-                    case ">=":
-                        return left >= right;
-
-                    case "<=":
-                        return left <= right;
-
-                    case ">":
-                        return left > right;
-
-                    case "<":
-                        return left < right;
-                }
-            }
-        }
-
-
-        for (
-            const operator
-            of ["+", "-"]
-        ) {
-            const operation =
-                this.findTopLevelOperatorFromRight(
-                    expr,
-                    operator
-                );
-
-            if (operation) {
-                const left =
-                    this.evaluateExpression(
-                        operation.left,
-                        lineNumber
-                    );
-
-                const right =
-                    this.evaluateExpression(
-                        operation.right,
-                        lineNumber
-                    );
-
-                if (operator === "+") {
-                    return left + right;
-                }
-
-                return left - right;
-            }
-        }
-
-
-        for (
-            const operator
-            of ["*", "/", "%"]
-        ) {
-            const operation =
-                this.findTopLevelOperatorFromRight(
-                    expr,
-                    operator
-                );
-
-            if (operation) {
-                const left =
-                    this.evaluateExpression(
-                        operation.left,
-                        lineNumber
-                    );
-
-                const right =
-                    this.evaluateExpression(
-                        operation.right,
-                        lineNumber
-                    );
-
-                if (operator === "*") {
-                    return left * right;
-                }
-
-                if (operator === "/") {
-                    if (right === 0) {
-                        throw new Error(
-                            `Ligne ${lineNumber} : division par zéro.`
-                        );
-                    }
-
-                    return left / right;
-                }
-
-                return left % right;
-            }
-        }
-
-
-        if (/^-\d+(\.\d+)?$/.test(expr)) {
-            return Number(expr);
-        }
-
-
-        if (/^\d+(\.\d+)?$/.test(expr)) {
-            return Number(expr);
-        }
-
-
-        if (expr === "True") {
-            return true;
-        }
-
-        if (expr === "False") {
-            return false;
-        }
-
-        if (expr === "None") {
-            return null;
-        }
-
-
-        if (
-            (
-                expr.startsWith('"') &&
-                expr.endsWith('"')
-            ) ||
-            (
-                expr.startsWith("'") &&
-                expr.endsWith("'")
-            )
-        ) {
-            return expr.slice(1, -1);
-        }
-
-
-        if (
-            expr.startsWith("[") &&
-            expr.endsWith("]")
-        ) {
-            const content =
-                expr.slice(1, -1)
-                    .trim();
-
-            if (!content) {
-                return [];
-            }
-
-            return this.splitArguments(content)
-                .map(
-                    item =>
-                        this.evaluateExpression(
-                            item,
-                            lineNumber
-                        )
-                );
-        }
-
-
-        const indexMatch =
-            expr.match(
-                /^([A-Za-z_]\w*)\[(.+)\]$/
-            );
-
-        if (indexMatch) {
-            const value =
-                this.variables[
-                    indexMatch[1]
-                ];
-
-            if (
-                !Array.isArray(value) &&
-                typeof value !== "string"
-            ) {
-                throw new Error(
-                    `Ligne ${lineNumber} : impossible d'utiliser un index ici.`
-                );
-            }
-
-            const index =
-                Number(
-                    this.evaluateExpression(
-                        indexMatch[2],
-                        lineNumber
-                    )
-                );
-
-            return value[index];
-        }
-
-
-        const call =
-            expr.match(
-                /^([A-Za-z_]\w*)\s*\((.*)\)$/
-            );
-
-        if (call) {
-            const name =
-                call[1];
-
-            const args =
-                call[2].trim()
-                    ? this.splitArguments(
-                        call[2]
-                    ).map(
-                        argument =>
-                            this.evaluateExpression(
-                                argument,
-                                lineNumber
-                            )
-                    )
-                    : [];
-
-            return this.callFunction(
-                name,
-                args,
-                lineNumber
-            );
-        }
-
-
-        if (
-            Object.prototype.hasOwnProperty.call(
-                this.variables,
-                expr
-            )
-        ) {
-            return this.variables[expr];
-        }
-
-
-        throw new Error(
-            `Ligne ${lineNumber} : expression inconnue « ${expr} ».`
-        );
-    }
-
-
-    callFunction(
+    executeFunctionCall(
         name,
-        args,
+        argumentExpressions,
         lineNumber
     ) {
-        if (
-            name === "forward" ||
-            name === "backward"
-        ) {
-            const amount =
-                args.length
-                    ? Number(args[0])
-                    : 1;
+        const args =
+            argumentExpressions.map(
+                expression =>
+                    this.evaluateExpression(
+                        expression,
+                        lineNumber
+                    )
+            );
 
-            if (
-                !Number.isInteger(amount) ||
-                amount < 0
-            ) {
-                throw new Error(
-                    `Ligne ${lineNumber} : ${name} attend un nombre entier positif.`
-                );
-            }
 
-            /*
-            Une action est créée PAR CASE.
+        switch (name) {
 
-            Cela permet d'avoir réellement environ
-            0,5 seconde entre chaque déplacement.
-            */
-            for (
-                let step = 0;
-                step < amount;
-                step++
-            ) {
-                this.addAction(
-                    name,
-                    1,
+            case "forward": {
+                const steps =
+                    this.normalizeMovementSteps(
+                        args[0] ?? 1,
+                        lineNumber
+                    );
+
+                this.addMovementActions(
+                    "forward",
+                    steps,
                     lineNumber
                 );
+
+                return null;
             }
 
-            return null;
-        }
 
+            case "backward": {
+                const steps =
+                    this.normalizeMovementSteps(
+                        args[0] ?? 1,
+                        lineNumber
+                    );
 
-        if (
-            name === "right" ||
-            name === "left"
-        ) {
-            const angle =
-                args.length
-                    ? Number(args[0])
-                    : 90;
-
-            if (
-                !Number.isFinite(angle) ||
-                angle % 90 !== 0
-            ) {
-                throw new Error(
-                    `Ligne ${lineNumber} : ${name} attend un angle multiple de 90.`
-                );
-            }
-
-            const turns =
-                Math.abs(angle / 90);
-
-            for (
-                let turn = 0;
-                turn < turns;
-                turn++
-            ) {
-                this.addAction(
-                    angle >= 0
-                        ? name
-                        : (
-                            name === "right"
-                                ? "left"
-                                : "right"
-                        ),
-                    90,
+                this.addMovementActions(
+                    "backward",
+                    steps,
                     lineNumber
                 );
+
+                return null;
             }
 
-            return null;
-        }
+
+            case "right": {
+                const degrees =
+                    this.normalizeRotation(
+                        args[0] ?? 90,
+                        lineNumber
+                    );
+
+                this.addAction({
+                    type: "right",
+                    value: degrees,
+                    line: lineNumber
+                });
+
+                return null;
+            }
 
 
-        if (name === "print") {
-            this.output.push(
-                args
-                    .map(String)
-                    .join(" ")
-            );
+            case "left": {
+                const degrees =
+                    this.normalizeRotation(
+                        args[0] ?? 90,
+                        lineNumber
+                    );
 
-            return null;
-        }
+                this.addAction({
+                    type: "left",
+                    value: degrees,
+                    line: lineNumber
+                });
+
+                return null;
+            }
 
 
-        if (name === "range") {
-            return this.makeRange(args, lineNumber);
-        }
+            case "print": {
+                const text =
+                    args.map(
+                        value =>
+                            this.pythonString(
+                                value
+                            )
+                    ).join(" ");
 
-
-        if (name === "len") {
-            if (args.length !== 1) {
-                throw new Error(
-                    `Ligne ${lineNumber} : len() attend une valeur.`
+                this.output.push(
+                    text
                 );
+
+                return null;
             }
 
-            return args[0]?.length ?? 0;
+
+            default:
+                if (
+                    this.functions[name]
+                ) {
+                    return this.callUserFunction(
+                        name,
+                        args,
+                        lineNumber
+                    );
+                }
+
+                throw new Error(
+                    `Ligne ${lineNumber} : fonction "${name}" inconnue.`
+                );
         }
-
-
-        if (name === "int") {
-            return parseInt(
-                args[0] ?? 0,
-                10
-            );
-        }
-
-
-        if (name === "float") {
-            return Number(
-                args[0] ?? 0
-            );
-        }
-
-
-        if (name === "str") {
-            return String(
-                args[0] ?? ""
-            );
-        }
-
-
-        if (this.functions[name]) {
-            return this.callUserFunction(
-                name,
-                args,
-                lineNumber
-            );
-        }
-
-
-        throw new Error(
-            `Ligne ${lineNumber} : fonction inconnue « ${name} ».`
-        );
     }
 
 
-    addAction(
+    /*
+    IMPORTANT :
+    forward(3) devient 3 actions séparées.
+
+    Cela permet d'avoir environ 0,5 seconde
+    d'animation PAR CASE au lieu de téléporter
+    Pyt de trois cases puis d'attendre une seule fois.
+    */
+
+    addMovementActions(
         type,
-        value,
-        line
+        steps,
+        lineNumber
     ) {
+        for (
+            let i = 0;
+            i < steps;
+            i++
+        ) {
+            this.addAction({
+                type,
+                value: 1,
+                line: lineNumber
+            });
+        }
+    }
+
+
+    addAction(action) {
         if (
             this.actions.length >=
             this.maxActions
         ) {
             throw new Error(
-                `Ligne ${line} : trop d'actions dans ce programme.`
+                `Ligne ${action.line || "?"} : trop d'actions dans ce programme.`
             );
         }
 
-        this.actions.push({
-            type,
-            value,
-            line
-        });
+        this.actions.push(
+            action
+        );
+    }
+
+
+    normalizeMovementSteps(
+        value,
+        lineNumber
+    ) {
+        const number =
+            Number(value);
+
+        if (
+            !Number.isFinite(number) ||
+            number < 0 ||
+            !Number.isInteger(number)
+        ) {
+            throw new Error(
+                `Ligne ${lineNumber} : la distance doit être un nombre entier positif.`
+            );
+        }
+
+        return number;
+    }
+
+
+    normalizeRotation(
+        value,
+        lineNumber
+    ) {
+        const number =
+            Number(value);
+
+        if (
+            !Number.isFinite(number) ||
+            number % 90 !== 0
+        ) {
+            throw new Error(
+                `Ligne ${lineNumber} : l'angle doit être un multiple de 90°.`
+            );
+        }
+
+        return number;
+    }
+
+
+    /* =====================================================
+       EXPRESSIONS
+    ===================================================== */
+
+    evaluateExpression(
+        expression,
+        lineNumber
+    ) {
+        let text =
+            String(expression || "")
+                .trim();
+
+        if (!text) {
+            throw new Error(
+                `Ligne ${lineNumber} : expression vide.`
+            );
+        }
+
+
+        text =
+            this.stripOuterParentheses(
+                text
+            );
+
+
+        /*
+        OR
+        */
+
+        const orParts =
+            this.splitTopLevelWord(
+                text,
+                "or"
+            );
+
+        if (
+            orParts.length > 1
+        ) {
+            for (
+                const part
+                of orParts
+            ) {
+                if (
+                    Boolean(
+                        this.evaluateExpression(
+                            part,
+                            lineNumber
+                        )
+                    )
+                ) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+
+        /*
+        AND
+        */
+
+        const andParts =
+            this.splitTopLevelWord(
+                text,
+                "and"
+            );
+
+        if (
+            andParts.length > 1
+        ) {
+            for (
+                const part
+                of andParts
+            ) {
+                if (
+                    !Boolean(
+                        this.evaluateExpression(
+                            part,
+                            lineNumber
+                        )
+                    )
+                ) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+
+        /*
+        NOT
+        */
+
+        if (
+            /^not\s+/.test(text)
+        ) {
+            return !Boolean(
+                this.evaluateExpression(
+                    text.replace(
+                        /^not\s+/,
+                        ""
+                    ),
+                    lineNumber
+                )
+            );
+        }
+
+
+        /*
+        Comparaisons.
+        */
+
+        const comparison =
+            this.findTopLevelOperator(
+                text,
+                [
+                    "==",
+                    "!=",
+                    ">=",
+                    "<=",
+                    ">",
+                    "<"
+                ]
+            );
+
+        if (comparison) {
+            const left =
+                this.evaluateExpression(
+                    text.slice(
+                        0,
+                        comparison.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    text.slice(
+                        comparison.index +
+                        comparison.operator.length
+                    ),
+                    lineNumber
+                );
+
+            switch (
+                comparison.operator
+            ) {
+                case "==":
+                    return left === right;
+
+                case "!=":
+                    return left !== right;
+
+                case ">=":
+                    return left >= right;
+
+                case "<=":
+                    return left <= right;
+
+                case ">":
+                    return left > right;
+
+                case "<":
+                    return left < right;
+            }
+        }
+
+
+        /*
+        Addition / soustraction.
+        */
+
+        const addition =
+            this.findTopLevelOperatorFromRight(
+                text,
+                [
+                    "+",
+                    "-"
+                ]
+            );
+
+        if (
+            addition &&
+            !(
+                addition.operator === "-" &&
+                addition.index === 0
+            )
+        ) {
+            const left =
+                this.evaluateExpression(
+                    text.slice(
+                        0,
+                        addition.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    text.slice(
+                        addition.index + 1
+                    ),
+                    lineNumber
+                );
+
+            if (
+                addition.operator === "+"
+            ) {
+                return left + right;
+            }
+
+            return left - right;
+        }
+
+
+        /*
+        Multiplication / division / modulo.
+        */
+
+        const multiplication =
+            this.findTopLevelOperatorFromRight(
+                text,
+                [
+                    "*",
+                    "/",
+                    "%"
+                ]
+            );
+
+        if (multiplication) {
+            const left =
+                this.evaluateExpression(
+                    text.slice(
+                        0,
+                        multiplication.index
+                    ),
+                    lineNumber
+                );
+
+            const right =
+                this.evaluateExpression(
+                    text.slice(
+                        multiplication.index + 1
+                    ),
+                    lineNumber
+                );
+
+            if (
+                multiplication.operator === "*"
+            ) {
+                return left * right;
+            }
+
+            if (
+                multiplication.operator === "/"
+            ) {
+                if (
+                    Number(right) === 0
+                ) {
+                    throw new Error(
+                        `Ligne ${lineNumber} : division par zéro.`
+                    );
+                }
+
+                return left / right;
+            }
+
+            if (
+                Number(right) === 0
+            ) {
+                throw new Error(
+                    `Ligne ${lineNumber} : modulo par zéro.`
+                );
+            }
+
+            return left % right;
+        }
+
+
+        /*
+        Nombre négatif.
+        */
+
+        if (
+            text.startsWith("-")
+        ) {
+            return -Number(
+                this.evaluateExpression(
+                    text.slice(1),
+                    lineNumber
+                )
+            );
+        }
+
+
+        /*
+        Nombres.
+        */
+
+        if (
+            /^-?\d+(?:\.\d+)?$/
+                .test(text)
+        ) {
+            return Number(text);
+        }
+
+
+        /*
+        Booléens / None.
+        */
+
+        if (
+            text === "True"
+        ) {
+            return true;
+        }
+
+        if (
+            text === "False"
+        ) {
+            return false;
+        }
+
+        if (
+            text === "None"
+        ) {
+            return null;
+        }
+
+
+        /*
+        Chaînes.
+        */
+
+        if (
+            (
+                text.startsWith('"') &&
+                text.endsWith('"')
+            ) ||
+            (
+                text.startsWith("'") &&
+                text.endsWith("'")
+            )
+        ) {
+            return this.parseString(
+                text,
+                lineNumber
+            );
+        }
+
+
+        /*
+        Listes.
+        */
+
+        if (
+            text.startsWith("[") &&
+            text.endsWith("]")
+        ) {
+            const inside =
+                text.slice(
+                    1,
+                    -1
+                ).trim();
+
+            if (!inside) {
+                return [];
+            }
+
+            return this.splitArguments(
+                inside
+            ).map(
+                item =>
+                    this.evaluateExpression(
+                        item,
+                        lineNumber
+                    )
+            );
+        }
+
+
+        /*
+        Indexation : liste[0]
+        */
+
+        const indexMatch =
+            text.match(
+                /^([A-Za-z_]\w*)\s*\[(.+)\]$/
+            );
+
+        if (indexMatch) {
+            const variableName =
+                indexMatch[1];
+
+            if (
+                !Object.prototype
+                    .hasOwnProperty.call(
+                        this.variables,
+                        variableName
+                    )
+            ) {
+                throw new Error(
+                    `Ligne ${lineNumber} : variable "${variableName}" inconnue.`
+                );
+            }
+
+            const collection =
+                this.variables[
+                    variableName
+                ];
+
+            const index =
+                this.evaluateExpression(
+                    indexMatch[2],
+                    lineNumber
+                );
+
+            if (
+                !Array.isArray(collection) &&
+                typeof collection !==
+                "string"
+            ) {
+                throw new Error(
+                    `Ligne ${lineNumber} : "${variableName}" ne peut pas être indexé.`
+                );
+            }
+
+            return collection[index];
+        }
+
+
+        /*
+        Appel de fonction.
+        */
+
+        const call =
+            this.parseFunctionCall(
+                text
+            );
+
+        if (call) {
+            const args =
+                call.args.map(
+                    argument =>
+                        this.evaluateExpression(
+                            argument,
+                            lineNumber
+                        )
+                );
+
+            switch (call.name) {
+                case "range":
+                    return this.makeRange(
+                        args,
+                        lineNumber
+                    );
+
+                case "len":
+                    if (
+                        args.length !== 1
+                    ) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : len() attend un argument.`
+                        );
+                    }
+
+                    if (
+                        !Array.isArray(args[0]) &&
+                        typeof args[0] !==
+                        "string"
+                    ) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : len() attend une liste ou un texte.`
+                        );
+                    }
+
+                    return args[0].length;
+
+                case "int":
+                    if (
+                        args.length !== 1
+                    ) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : int() attend un argument.`
+                        );
+                    }
+
+                    return parseInt(
+                        args[0],
+                        10
+                    );
+
+                case "float":
+                    if (
+                        args.length !== 1
+                    ) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : float() attend un argument.`
+                        );
+                    }
+
+                    return parseFloat(
+                        args[0]
+                    );
+
+                case "str":
+                    if (
+                        args.length !== 1
+                    ) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : str() attend un argument.`
+                        );
+                    }
+
+                    return this.pythonString(
+                        args[0]
+                    );
+
+                default:
+                    if (
+                        this.functions[
+                            call.name
+                        ]
+                    ) {
+                        return this.callUserFunction(
+                            call.name,
+                            args,
+                            lineNumber
+                        );
+                    }
+
+                    throw new Error(
+                        `Ligne ${lineNumber} : fonction "${call.name}" inconnue.`
+                    );
+            }
+        }
+
+
+        /*
+        Variable.
+        */
+
+        if (
+            /^[A-Za-z_]\w*$/
+                .test(text)
+        ) {
+            if (
+                Object.prototype
+                    .hasOwnProperty.call(
+                        this.variables,
+                        text
+                    )
+            ) {
+                return this.variables[
+                    text
+                ];
+            }
+
+            throw new Error(
+                `Ligne ${lineNumber} : variable "${text}" inconnue.`
+            );
+        }
+
+
+        throw new Error(
+            `Ligne ${lineNumber} : expression non reconnue "${text}".`
+        );
     }
 
 
@@ -1284,30 +2060,45 @@ class BrowserPythonRunner {
         args,
         lineNumber
     ) {
-        let start;
-        let stop;
-        let step;
-
-        if (args.length === 1) {
-            start = 0;
-            stop = Number(args[0]);
-            step = 1;
-
-        } else if (args.length === 2) {
-            start = Number(args[0]);
-            stop = Number(args[1]);
-            step = 1;
-
-        } else if (args.length === 3) {
-            start = Number(args[0]);
-            stop = Number(args[1]);
-            step = Number(args[2]);
-
-        } else {
+        if (
+            args.length < 1 ||
+            args.length > 3
+        ) {
             throw new Error(
-                `Ligne ${lineNumber} : range() attend 1, 2 ou 3 valeurs.`
+                `Ligne ${lineNumber} : range() attend entre 1 et 3 arguments.`
             );
         }
+
+        let start = 0;
+        let stop = 0;
+        let step = 1;
+
+        if (
+            args.length === 1
+        ) {
+            stop =
+                Number(args[0]);
+
+        } else if (
+            args.length === 2
+        ) {
+            start =
+                Number(args[0]);
+
+            stop =
+                Number(args[1]);
+
+        } else {
+            start =
+                Number(args[0]);
+
+            stop =
+                Number(args[1]);
+
+            step =
+                Number(args[2]);
+        }
+
 
         if (
             !Number.isFinite(start) ||
@@ -1316,13 +2107,16 @@ class BrowserPythonRunner {
             step === 0
         ) {
             throw new Error(
-                `Ligne ${lineNumber} : range() contient une valeur invalide.`
+                `Ligne ${lineNumber} : arguments invalides dans range().`
             );
         }
 
+
         const values = [];
 
-        if (step > 0) {
+        if (
+            step > 0
+        ) {
             for (
                 let value = start;
                 value < stop;
@@ -1334,7 +2128,9 @@ class BrowserPythonRunner {
                     values.length >
                     this.maxIterations
                 ) {
-                    break;
+                    throw new Error(
+                        `Ligne ${lineNumber} : range() est trop grand.`
+                    );
                 }
             }
 
@@ -1350,7 +2146,9 @@ class BrowserPythonRunner {
                     values.length >
                     this.maxIterations
                 ) {
-                    break;
+                    throw new Error(
+                        `Ligne ${lineNumber} : range() est trop grand.`
+                    );
                 }
             }
         }
@@ -1359,82 +2157,236 @@ class BrowserPythonRunner {
     }
 
 
-    callUserFunction(
-        name,
-        args,
+    parseString(
+        text,
         lineNumber
     ) {
-        this.functionCalls++;
-
-        if (
-            this.functionCalls >
-            this.maxFunctionCalls
-        ) {
-            throw new Error(
-                `Ligne ${lineNumber} : trop d'appels de fonction.`
-            );
-        }
-
-        const definition =
-            this.functions[name];
-
-        const previousVariables = {
-            ...this.variables
-        };
-
-        for (
-            let i = 0;
-            i < definition.params.length;
-            i++
-        ) {
-            this.variables[
-                definition.params[i]
-            ] = args[i] ?? null;
-        }
-
-        const result =
-            this.executeBlock(
-                definition.lines,
-                definition.start,
-                definition.end,
-                definition.indent
-            );
-
-        const changedExisting = {};
-
-        for (
-            const key
-            of Object.keys(previousVariables)
-        ) {
+        try {
             if (
-                this.variables[key] !==
-                previousVariables[key]
+                text.startsWith('"')
             ) {
-                changedExisting[key] =
-                    this.variables[key];
+                return JSON.parse(
+                    text
+                );
             }
-        }
 
-        this.variables = {
-            ...previousVariables,
-            ...changedExisting
-        };
+            const content =
+                text.slice(
+                    1,
+                    -1
+                );
+
+            return content
+                .replace(/\\'/g, "'")
+                .replace(/\\\\/g, "\\")
+                .replace(/\\n/g, "\n")
+                .replace(/\\t/g, "\t");
+
+        } catch {
+            throw new Error(
+                `Ligne ${lineNumber} : texte invalide.`
+            );
+        }
+    }
+
+
+    pythonString(value) {
+        if (
+            value === true
+        ) {
+            return "True";
+        }
 
         if (
-            result &&
-            result.type === "return"
+            value === false
         ) {
-            return result.value;
+            return "False";
         }
 
-        return null;
+        if (
+            value === null
+        ) {
+            return "None";
+        }
+
+        if (
+            Array.isArray(value)
+        ) {
+            return (
+                "[" +
+                value
+                    .map(
+                        item =>
+                            this.pythonString(
+                                item
+                            )
+                    )
+                    .join(", ") +
+                "]"
+            );
+        }
+
+        return String(value);
+    }
+
+
+    /* =====================================================
+       PARSING
+    ===================================================== */
+
+    parseFunctionCall(text) {
+        const trimmed =
+            String(text || "")
+                .trim();
+
+        const match =
+            trimmed.match(
+                /^([A-Za-z_]\w*)\s*\((.*)\)$/
+            );
+
+        if (!match) {
+            return null;
+        }
+
+        const argsText =
+            match[2].trim();
+
+        return {
+            name:
+                match[1],
+
+            args:
+                argsText
+                    ? this.splitArguments(
+                        argsText
+                    )
+                    : []
+        };
     }
 
 
     splitArguments(text) {
-        const result = [];
+        const parts = [];
 
         let current = "";
+        let depth = 0;
+        let quote = null;
+        let escaped = false;
+
+        for (
+            let i = 0;
+            i < text.length;
+            i++
+        ) {
+            const char =
+                text[i];
+
+            if (escaped) {
+                current += char;
+                escaped = false;
+                continue;
+            }
+
+            if (
+                char === "\\"
+            ) {
+                current += char;
+                escaped = true;
+                continue;
+            }
+
+            if (quote) {
+                current += char;
+
+                if (
+                    char === quote
+                ) {
+                    quote = null;
+                }
+
+                continue;
+            }
+
+            if (
+                char === '"' ||
+                char === "'"
+            ) {
+                quote = char;
+                current += char;
+                continue;
+            }
+
+            if (
+                char === "(" ||
+                char === "[" ||
+                char === "{"
+            ) {
+                depth++;
+                current += char;
+                continue;
+            }
+
+            if (
+                char === ")" ||
+                char === "]" ||
+                char === "}"
+            ) {
+                depth--;
+                current += char;
+                continue;
+            }
+
+            if (
+                char === "," &&
+                depth === 0
+            ) {
+                parts.push(
+                    current.trim()
+                );
+
+                current = "";
+                continue;
+            }
+
+            current += char;
+        }
+
+        if (
+            current.trim() ||
+            text.trim()
+        ) {
+            parts.push(
+                current.trim()
+            );
+        }
+
+        return parts;
+    }
+
+
+    stripOuterParentheses(text) {
+        let result =
+            text.trim();
+
+        while (
+            result.startsWith("(") &&
+            result.endsWith(")") &&
+            this.outerParenthesesWrapAll(
+                result
+            )
+        ) {
+            result =
+                result.slice(
+                    1,
+                    -1
+                ).trim();
+        }
+
+        return result;
+    }
+
+
+    outerParenthesesWrapAll(text) {
         let depth = 0;
         let quote = null;
 
@@ -1443,100 +2395,46 @@ class BrowserPythonRunner {
             i < text.length;
             i++
         ) {
-            const char = text[i];
-
-            if (
-                (char === '"' || char === "'") &&
-                text[i - 1] !== "\\"
-            ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
-            }
-
-            if (!quote) {
-                if (
-                    char === "(" ||
-                    char === "["
-                ) {
-                    depth++;
-                }
-
-                if (
-                    char === ")" ||
-                    char === "]"
-                ) {
-                    depth--;
-                }
-
-                if (
-                    char === "," &&
-                    depth === 0
-                ) {
-                    result.push(
-                        current.trim()
-                    );
-
-                    current = "";
-                    continue;
-                }
-            }
-
-            current += char;
-        }
-
-        if (current.trim()) {
-            result.push(
-                current.trim()
-            );
-        }
-
-        return result;
-    }
-
-
-    parenthesesWrapExpression(expr) {
-        let depth = 0;
-        let quote = null;
-
-        for (
-            let i = 0;
-            i < expr.length;
-            i++
-        ) {
-            const char = expr[i];
-
-            if (
-                (char === '"' || char === "'") &&
-                expr[i - 1] !== "\\"
-            ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
-            }
+            const char =
+                text[i];
 
             if (quote) {
+                if (
+                    char === quote &&
+                    text[i - 1] !== "\\"
+                ) {
+                    quote = null;
+                }
+
                 continue;
             }
 
-            if (char === "(") {
-                depth++;
-            }
-
-            if (char === ")") {
-                depth--;
+            if (
+                char === '"' ||
+                char === "'"
+            ) {
+                quote = char;
+                continue;
             }
 
             if (
-                depth === 0 &&
-                i <
-                expr.length - 1
+                char === "("
             ) {
-                return false;
+                depth++;
+            }
+
+            if (
+                char === ")"
+            ) {
+                depth--;
+
+                if (
+                    depth === 0 &&
+                    i <
+                    text.length - 1
+                ) {
+                    return false;
+                }
             }
         }
 
@@ -1544,33 +2442,45 @@ class BrowserPythonRunner {
     }
 
 
-    findTopLevelWord(
-        expr,
+    splitTopLevelWord(
+        text,
         word
     ) {
+        const parts = [];
+
+        let current = "";
         let depth = 0;
         let quote = null;
 
-        for (
-            let i = 0;
-            i <=
-            expr.length - word.length;
-            i++
-        ) {
-            const char = expr[i];
+        let i = 0;
 
-            if (
-                (char === '"' || char === "'") &&
-                expr[i - 1] !== "\\"
-            ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
-            }
+        while (
+            i < text.length
+        ) {
+            const char =
+                text[i];
 
             if (quote) {
+                current += char;
+
+                if (
+                    char === quote &&
+                    text[i - 1] !== "\\"
+                ) {
+                    quote = null;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (
+                char === '"' ||
+                char === "'"
+            ) {
+                quote = char;
+                current += char;
+                i++;
                 continue;
             }
 
@@ -1579,6 +2489,9 @@ class BrowserPythonRunner {
                 char === "["
             ) {
                 depth++;
+                current += char;
+                i++;
+                continue;
             }
 
             if (
@@ -1586,37 +2499,142 @@ class BrowserPythonRunner {
                 char === "]"
             ) {
                 depth--;
+                current += char;
+                i++;
+                continue;
             }
+
 
             if (
                 depth === 0 &&
-                expr.slice(
+                text.slice(
                     i,
                     i + word.length
                 ) === word
             ) {
                 const before =
-                    expr[i - 1];
+                    text[i - 1];
 
                 const after =
-                    expr[i + word.length];
+                    text[
+                        i +
+                        word.length
+                    ];
+
+                const validBefore =
+                    !before ||
+                    /\s/.test(before);
+
+                const validAfter =
+                    !after ||
+                    /\s/.test(after);
 
                 if (
-                    (!before || /\s/.test(before)) &&
-                    (!after || /\s/.test(after))
+                    validBefore &&
+                    validAfter
+                ) {
+                    parts.push(
+                        current.trim()
+                    );
+
+                    current = "";
+
+                    i +=
+                        word.length;
+
+                    continue;
+                }
+            }
+
+            current += char;
+            i++;
+        }
+
+
+        if (
+            parts.length > 0
+        ) {
+            parts.push(
+                current.trim()
+            );
+
+            return parts;
+        }
+
+        return [text];
+    }
+
+
+    findTopLevelOperator(
+        text,
+        operators
+    ) {
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i < text.length;
+            i++
+        ) {
+            const char =
+                text[i];
+
+            if (quote) {
+                if (
+                    char === quote &&
+                    text[i - 1] !== "\\"
+                ) {
+                    quote = null;
+                }
+
+                continue;
+            }
+
+            if (
+                char === '"' ||
+                char === "'"
+            ) {
+                quote = char;
+                continue;
+            }
+
+            if (
+                char === "(" ||
+                char === "["
+            ) {
+                depth++;
+                continue;
+            }
+
+            if (
+                char === ")" ||
+                char === "]"
+            ) {
+                depth--;
+                continue;
+            }
+
+            if (
+                depth !== 0
+            ) {
+                continue;
+            }
+
+            for (
+                const operator
+                of operators
+            ) {
+                if (
+                    text.slice(
+                        i,
+                        i +
+                        operator.length
+                    ) === operator
                 ) {
                     return {
-                        left:
-                            expr
-                                .slice(0, i)
-                                .trim(),
-
-                        right:
-                            expr
-                                .slice(
-                                    i + word.length
-                                )
-                                .trim()
+                        index: i,
+                        operator
                     };
                 }
             }
@@ -1626,103 +2644,38 @@ class BrowserPythonRunner {
     }
 
 
-    findTopLevelOperator(
-        expr,
-        operator
-    ) {
-        let depth = 0;
-        let quote = null;
-
-        for (
-            let i = 0;
-            i <=
-            expr.length - operator.length;
-            i++
-        ) {
-            const char = expr[i];
-
-            if (
-                (char === '"' || char === "'") &&
-                expr[i - 1] !== "\\"
-            ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
-            }
-
-            if (quote) {
-                continue;
-            }
-
-            if (
-                char === "(" ||
-                char === "["
-            ) {
-                depth++;
-            }
-
-            if (
-                char === ")" ||
-                char === "]"
-            ) {
-                depth--;
-            }
-
-            if (
-                depth === 0 &&
-                expr.slice(
-                    i,
-                    i + operator.length
-                ) === operator
-            ) {
-                return {
-                    left:
-                        expr.slice(0, i).trim(),
-
-                    right:
-                        expr
-                            .slice(
-                                i + operator.length
-                            )
-                            .trim()
-                };
-            }
-        }
-
-        return null;
-    }
-
-
     findTopLevelOperatorFromRight(
-        expr,
-        operator
+        text,
+        operators
     ) {
         let depth = 0;
         let quote = null;
 
         for (
-            let i = expr.length - 1;
+            let i =
+                text.length - 1;
             i >= 0;
             i--
         ) {
-            const char = expr[i];
+            const char =
+                text[i];
+
+            if (quote) {
+                if (
+                    char === quote &&
+                    text[i - 1] !== "\\"
+                ) {
+                    quote = null;
+                }
+
+                continue;
+            }
 
             if (
                 char === '"' ||
                 char === "'"
             ) {
-                if (quote === char) {
-                    quote = null;
-                } else if (!quote) {
-                    quote = char;
-                }
-
-                continue;
-            }
-
-            if (quote) {
+                quote = char;
                 continue;
             }
 
@@ -1743,27 +2696,32 @@ class BrowserPythonRunner {
             }
 
             if (
-                depth === 0 &&
-                char === operator
+                depth !== 0
+            ) {
+                continue;
+            }
+
+            if (
+                operators.includes(
+                    char
+                )
             ) {
                 if (
-                    operator === "-" &&
+                    char === "-" &&
                     (
                         i === 0 ||
-                        /[+\-*/%(,<>=]/.test(
-                            expr[i - 1]
-                        )
+                        "+-*/%(,<>=!"
+                            .includes(
+                                text[i - 1]
+                            )
                     )
                 ) {
                     continue;
                 }
 
                 return {
-                    left:
-                        expr.slice(0, i).trim(),
-
-                    right:
-                        expr.slice(i + 1).trim()
+                    index: i,
+                    operator: char
                 };
             }
         }
@@ -1774,7 +2732,7 @@ class BrowserPythonRunner {
 
 
 /* =========================================================
-   APPLICATION
+   APPLICATION PYT
 ========================================================= */
 
 class PytApplication {
@@ -1789,44 +2747,36 @@ class PytApplication {
         this.runner =
             new BrowserPythonRunner();
 
+        this.currentChapter = 1;
+        this.currentExercise = 1;
+
         this.running = false;
 
-        this.actionDelay = 500;
-
         this.musicEnabled = true;
-        this.volume = 0.6;
-        this.volumeBeforeMute = 0.6;
-        this.currentMusic = null;
+        this.volume = 0.5;
 
-        this.introReadyForInput = false;
         this.introFinished = false;
+        this.introReady = false;
+        this.introContinuing = false;
 
         this.introTimers = [];
-
-        this.creditsTimer = null;
     }
 
 
+    /* =====================================================
+       DÉMARRAGE
+    ===================================================== */
+
     start() {
-        if (
-            typeof PytUI === "undefined"
-        ) {
-            console.error(
-                "PytUI n'est pas chargé."
-            );
-
-            return;
-        }
-
         this.ui =
             new PytUI();
 
         this.ui.actionDelay =
-            this.actionDelay;
+            500;
 
         this.connectUI();
         this.connectShell();
-        this.applyAudioSettings();
+        this.loadAudioSettings();
 
         this.loadLevel(
             1,
@@ -1840,18 +2790,12 @@ class PytApplication {
     }
 
 
-    /* =====================================================
-       CONNEXION UI
-    ===================================================== */
-
     connectUI() {
-        if (!this.ui) {
-            return;
-        }
-
         this.ui.onRunCode =
             code =>
-                this.runStudentCode(code);
+                this.runStudentCode(
+                    code
+                );
 
         this.ui.onRestart =
             () =>
@@ -1869,500 +2813,496 @@ class PytApplication {
     }
 
 
+    /* =====================================================
+       ÉLÉMENTS GÉNÉRAUX
+    ===================================================== */
+
     connectShell() {
-        const playButton =
-            this.$("play-button");
+        this.introScreen =
+            document.getElementById(
+                "intro-screen"
+            );
 
-        const settingsButton =
-            this.$("settings-button");
+        this.introScene =
+            document.getElementById(
+                "intro-scene"
+            );
 
-        const settingsBackButton =
-            this.$("settings-back-button");
+        this.introPyt =
+            document.getElementById(
+                "intro-pyt"
+            );
 
-        const gameSettingsButton =
-            this.$("game-settings-button");
+        this.introContinueMessage =
+            document.getElementById(
+                "intro-continue-message"
+            );
 
-        const menuButton =
-            this.$("menu-button");
+        this.skipIntroButton =
+            document.getElementById(
+                "skip-intro-button"
+            );
 
-        const skipIntroButton =
-            this.$("skip-intro-button");
+        this.mainMenu =
+            document.getElementById(
+                "main-menu"
+            );
 
-        const musicEnabled =
-            this.$("music-enabled");
+        this.playButton =
+            document.getElementById(
+                "play-button"
+            );
 
-        const volumeSlider =
-            this.$("volume-slider");
+        this.settingsButton =
+            document.getElementById(
+                "settings-button"
+            );
 
-        const clearCodeButton =
-            this.$("clear-code-button");
+        this.settingsScreen =
+            document.getElementById(
+                "settings-screen"
+            );
 
-        const creditsButton =
-            this.$("credits-button");
+        this.settingsBackButton =
+            document.getElementById(
+                "settings-back-button"
+            );
 
-        const closeCreditsButton =
-            this.$("close-credits-button");
+        this.creditsButton =
+            document.getElementById(
+                "credits-button"
+            );
+
+        this.creditsScreen =
+            document.getElementById(
+                "credits-screen"
+            );
+
+        this.closeCreditsButton =
+            document.getElementById(
+                "close-credits-button"
+            );
+
+        this.creditsScroll =
+            document.getElementById(
+                "credits-scroll"
+            );
+
+        this.gameSettingsButton =
+            document.getElementById(
+                "game-settings-button"
+            );
+
+        this.menuButton =
+            document.getElementById(
+                "menu-button"
+            );
+
+        this.musicEnabledInput =
+            document.getElementById(
+                "music-enabled"
+            );
+
+        this.volumeSlider =
+            document.getElementById(
+                "volume-slider"
+            );
+
+        this.volumeValue =
+            document.getElementById(
+                "volume-value"
+            );
+
+        this.musicAudio =
+            document.getElementById(
+                "music-audio"
+            );
+
+        this.theoryAudio =
+            document.getElementById(
+                "theory-audio"
+            );
 
 
-        playButton?.addEventListener(
+        this.playButton?.addEventListener(
             "click",
             () =>
                 this.startGame()
         );
 
 
-        settingsButton?.addEventListener(
+        this.settingsButton?.addEventListener(
             "click",
             () =>
-                this.openSettings(
+                this.showSettings(
                     "menu"
                 )
         );
 
 
-        gameSettingsButton?.addEventListener(
-            "click",
-            () =>
-                this.openSettings(
-                    "game"
-                )
-        );
+        this.gameSettingsButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.showSettings(
+                        "game"
+                    )
+            );
 
 
-        settingsBackButton?.addEventListener(
-            "click",
-            () =>
-                this.closeSettings()
-        );
+        this.settingsBackButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.leaveSettings()
+            );
 
 
-        menuButton?.addEventListener(
+        this.creditsButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.showCredits()
+            );
+
+
+        this.closeCreditsButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.hideCredits()
+            );
+
+
+        this.menuButton?.addEventListener(
             "click",
             () =>
                 this.showMainMenu()
         );
 
 
-        skipIntroButton?.addEventListener(
-            "click",
-            event => {
-                event.stopPropagation();
-                this.finishIntro();
-            }
-        );
-
-
-        musicEnabled?.addEventListener(
-            "change",
-            () => {
-                this.setMusicEnabled(
-                    musicEnabled.checked
-                );
-            }
-        );
-
-
-        volumeSlider?.addEventListener(
-            "input",
-            () => {
-                this.setVolume(
-                    Number(
-                        volumeSlider.value
-                    ) / 100
-                );
-            }
-        );
-
-
-        clearCodeButton?.addEventListener(
-            "click",
-            () => {
-                const editor =
-                    this.$("code-editor");
-
-                if (editor) {
-                    editor.value = "";
-                    editor.focus();
-                }
-
-                this.ui?.clearErrorHighlight?.();
-            }
-        );
-
-
-        creditsButton?.addEventListener(
-            "click",
-            () =>
-                this.showCredits()
-        );
-
-
-        closeCreditsButton?.addEventListener(
-            "click",
-            () =>
-                this.closeCredits()
-        );
-
-
         /*
-        Musique du cours.
+        Le bouton "Passer" est gardé dans le HTML
+        pour compatibilité, mais l'introduction ne
+        peut plus être passée avant la scène finale.
         */
 
-        this.$("course-button")
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.playMusic(
-                        "music-theory"
-                    )
+        if (
+            this.skipIntroButton
+        ) {
+            this.skipIntroButton.classList.add(
+                "hidden"
             );
 
-
-        this.$("map-course-button")
-            ?.addEventListener(
-                "click",
-                () =>
-                    this.playMusic(
-                        "music-theory"
-                    )
+            this.skipIntroButton.setAttribute(
+                "aria-hidden",
+                "true"
             );
 
+            this.skipIntroButton.tabIndex =
+                -1;
+        }
 
-        /*
-        Retour à la musique du chapitre
-        depuis la carte ou le cours.
-        */
 
-        this.$("course-map-button")
+        this.musicEnabledInput
             ?.addEventListener(
-                "click",
+                "change",
                 () => {
+                    this.musicEnabled =
+                        Boolean(
+                            this.musicEnabledInput
+                                .checked
+                        );
+
+                    /*
+                    Demande du projet :
+                    Musique = Non -> volume = 0 %.
+                    */
                     if (
-                        this.level
+                        !this.musicEnabled
                     ) {
-                        this.playChapterMusic(
-                            this.level.chapter
+                        this.setVolume(
+                            0
+                        );
+
+                    } else if (
+                        this.volume <= 0
+                    ) {
+                        this.setVolume(
+                            0.5
                         );
                     }
+
+                    this.applyAudioSettings();
                 }
             );
 
 
-        /*
-        Croix du guide Pyt.
-        L'animation de sortie est gérée par ui.js
-        lorsqu'elle existe.
-        */
-
-        this.$("close-pyt-guide-button")
+        this.volumeSlider
             ?.addEventListener(
-                "click",
+                "input",
                 () => {
+                    const value =
+                        Number(
+                            this.volumeSlider
+                                .value
+                        );
+
+                    const maximum =
+                        Number(
+                            this.volumeSlider
+                                .max
+                        ) || 100;
+
+                    this.setVolume(
+                        value /
+                        maximum
+                    );
+
+                    /*
+                    Si l'utilisateur remonte le volume,
+                    la musique repasse automatiquement
+                    sur Oui.
+                    */
                     if (
-                        this.ui &&
-                        typeof this.ui.hideGuide ===
-                        "function"
+                        this.volume > 0
                     ) {
-                        this.ui.hideGuide();
+                        this.musicEnabled =
+                            true;
 
-                    } else {
-                        const guide =
-                            this.$("pyt-guide");
-
-                        if (!guide) {
-                            return;
+                        if (
+                            this.musicEnabledInput
+                        ) {
+                            this.musicEnabledInput.checked =
+                                true;
                         }
-
-                        guide.classList.add(
-                            "guide-leaving"
-                        );
-
-                        window.setTimeout(
-                            () => {
-                                guide.classList.add(
-                                    "hidden"
-                                );
-
-                                guide.classList.remove(
-                                    "guide-leaving"
-                                );
-                            },
-                            320
-                        );
                     }
+
+                    this.applyAudioSettings();
                 }
             );
+
+
+        this.ui.courseButton
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.playTheorySound()
+            );
+
+
+        document.addEventListener(
+            "keydown",
+            event =>
+                this.handleIntroKey(
+                    event
+                )
+        );
+
+
+        this.introScreen?.addEventListener(
+            "pointerdown",
+            event =>
+                this.handleIntroPointer(
+                    event
+                )
+        );
+
+
+        this.introScreen?.addEventListener(
+            "touchstart",
+            event =>
+                this.handleIntroPointer(
+                    event
+                ),
+            {
+                passive: true
+            }
+        );
     }
 
 
     /* =====================================================
-       INTRO
+       INTRODUCTION
     ===================================================== */
 
     showIntro() {
-        const intro =
-            this.$("intro-screen");
-
-        const menu =
-            this.$("main-menu");
-
-        const game =
-            this.$("game-interface");
-
-        const settings =
-            this.$("settings-screen");
-
-        const credits =
-            this.$("credits-screen");
-
-
-        menu?.classList.add(
-            "hidden"
-        );
-
-        game?.classList.add(
-            "hidden"
-        );
-
-        settings?.classList.add(
-            "hidden"
-        );
-
-        credits?.classList.add(
-            "hidden"
-        );
-
-        intro?.classList.remove(
-            "hidden",
-            "intro-hop-1",
-            "intro-hop-2",
-            "intro-hop-3",
-            "intro-hop-4",
-            "intro-hop-5",
-            "intro-arrive",
-            "intro-y",
-            "intro-happy",
-            "intro-finished",
-            "intro-await-input"
-        );
-
-
-        this.introReadyForInput =
-            false;
+        this.clearIntroTimers();
 
         this.introFinished =
             false;
 
+        this.introReady =
+            false;
 
-        this.clearIntroTimers();
+        this.introContinuing =
+            false;
 
 
-        this.updateIntroContinueText();
+        this.hideAllMainScreens();
+
+        this.introScreen?.classList.remove(
+            "hidden",
+            "intro-ready",
+            "intro-leaving"
+        );
+
+
+        this.introScene?.classList.remove(
+            "intro-stage-1",
+            "intro-stage-2",
+            "intro-stage-3",
+            "intro-stage-final"
+        );
+
+
+        this.introPyt?.classList.remove(
+            "intro-pyt-arriving",
+            "intro-pyt-hop-1",
+            "intro-pyt-hop-2",
+            "intro-pyt-hop-3",
+            "intro-pyt-final"
+        );
+
+
+        if (
+            this.introContinueMessage
+        ) {
+            this.introContinueMessage.textContent =
+                this.isTouchDevice()
+                    ? "Touchez l’écran pour continuer"
+                    : "Appuyez sur une touche pour continuer";
+
+            this.introContinueMessage.classList.add(
+                "hidden"
+            );
+        }
 
 
         /*
-        Aucun appui ne fait continuer l'intro avant
-        la fin réelle de l'animation.
+        Animation plus lente :
+        Pyt avance par petits bonds successifs.
+        Le CSS gère le mouvement précis de chaque étape.
         */
 
-        this.introKeyHandler =
-            event => {
-                if (
-                    !this.introReadyForInput ||
-                    this.introFinished
-                ) {
-                    return;
-                }
+        this.addIntroTimer(
+            () => {
+                this.introScene?.classList.add(
+                    "intro-stage-1"
+                );
 
-                /*
-                On évite quelques touches purement
-                modificatrices.
-                */
-
-                if (
-                    [
-                        "Shift",
-                        "Control",
-                        "Alt",
-                        "Meta",
-                        "CapsLock"
-                    ].includes(
-                        event.key
-                    )
-                ) {
-                    return;
-                }
-
-                this.finishIntro();
-            };
-
-
-        this.introTouchHandler =
-            event => {
-                if (
-                    !this.introReadyForInput ||
-                    this.introFinished
-                ) {
-                    return;
-                }
-
-                /*
-                Le bouton "Passer" possède déjà
-                son propre événement.
-                */
-
-                if (
-                    event.target?.closest?.(
-                        "#skip-intro-button"
-                    )
-                ) {
-                    return;
-                }
-
-                this.finishIntro();
-            };
-
-
-        window.addEventListener(
-            "keydown",
-            this.introKeyHandler
-        );
-
-        intro?.addEventListener(
-            "pointerdown",
-            this.introTouchHandler
+                this.introPyt?.classList.add(
+                    "intro-pyt-arriving"
+                );
+            },
+            500
         );
 
 
-        this.playMusic(
-            "music-intro"
+        this.addIntroTimer(
+            () => {
+                this.introPyt?.classList.remove(
+                    "intro-pyt-arriving"
+                );
+
+                this.introPyt?.classList.add(
+                    "intro-pyt-hop-1"
+                );
+            },
+            1700
+        );
+
+
+        this.addIntroTimer(
+            () => {
+                this.introScene?.classList.add(
+                    "intro-stage-2"
+                );
+
+                this.introPyt?.classList.remove(
+                    "intro-pyt-hop-1"
+                );
+
+                this.introPyt?.classList.add(
+                    "intro-pyt-hop-2"
+                );
+            },
+            3000
+        );
+
+
+        this.addIntroTimer(
+            () => {
+                this.introScene?.classList.add(
+                    "intro-stage-3"
+                );
+
+                this.introPyt?.classList.remove(
+                    "intro-pyt-hop-2"
+                );
+
+                this.introPyt?.classList.add(
+                    "intro-pyt-hop-3"
+                );
+            },
+            4300
+        );
+
+
+        this.addIntroTimer(
+            () => {
+                this.introScene?.classList.add(
+                    "intro-stage-final"
+                );
+
+                this.introPyt?.classList.remove(
+                    "intro-pyt-hop-3"
+                );
+
+                this.introPyt?.classList.add(
+                    "intro-pyt-final"
+                );
+            },
+            5600
         );
 
 
         /*
-        Arrivée volontairement lente et sautillante.
+        L'intro s'arrête ici.
+        Aucune navigation automatique.
         */
 
-        this.scheduleIntroClass(
-            550,
-            "intro-hop-1"
-        );
+        this.addIntroTimer(
+            () => {
+                this.introReady =
+                    true;
 
-        this.scheduleIntroClass(
-            1150,
-            "intro-hop-2"
-        );
+                this.introScreen?.classList.add(
+                    "intro-ready"
+                );
 
-        this.scheduleIntroClass(
-            1750,
-            "intro-hop-3"
-        );
-
-        this.scheduleIntroClass(
-            2350,
-            "intro-hop-4"
-        );
-
-        this.scheduleIntroClass(
-            2950,
-            "intro-hop-5"
-        );
-
-        this.scheduleIntroClass(
-            3500,
-            "intro-arrive"
-        );
-
-
-        /*
-        Une fois arrivé, Pyt forme le Y.
-        */
-
-        this.introTimers.push(
-            window.setTimeout(
-                () => {
-                    intro?.classList.add(
-                        "intro-y"
+                this.introContinueMessage
+                    ?.classList.remove(
+                        "hidden"
                     );
-                },
-                4150
-            )
-        );
-
-
-        /*
-        Puis il devient heureux uniquement
-        grâce à ses yeux.
-        */
-
-        this.introTimers.push(
-            window.setTimeout(
-                () => {
-                    intro?.classList.add(
-                        "intro-happy"
-                    );
-                },
-                4750
-            )
-        );
-
-
-        /*
-        La scène finale apparaît.
-        */
-
-        this.introTimers.push(
-            window.setTimeout(
-                () => {
-                    intro?.classList.add(
-                        "intro-finished"
-                    );
-                },
-                5200
-            )
-        );
-
-
-        /*
-        IMPORTANT :
-        À partir de ce moment, l'intro ne continue
-        PLUS automatiquement.
-
-        Elle reste figée jusqu'à une interaction.
-        */
-
-        this.introTimers.push(
-            window.setTimeout(
-                () => {
-                    this.introReadyForInput =
-                        true;
-
-                    intro?.classList.add(
-                        "intro-await-input"
-                    );
-                },
-                5650
-            )
+            },
+            6800
         );
     }
 
 
-    scheduleIntroClass(
-        delay,
-        className
+    addIntroTimer(
+        callback,
+        delay
     ) {
-        const intro =
-            this.$("intro-screen");
+        const timer =
+            window.setTimeout(
+                callback,
+                delay
+            );
 
         this.introTimers.push(
-            window.setTimeout(
-                () => {
-                    intro?.classList.add(
-                        className
-                    );
-                },
-                delay
-            )
+            timer
         );
     }
 
@@ -2381,80 +3321,123 @@ class PytApplication {
     }
 
 
-    updateIntroContinueText() {
-        const message =
-            this.$(
-                "intro-continue-message"
-            );
-
-        if (!message) {
+    handleIntroKey(event) {
+        if (
+            this.introScreen
+                ?.classList
+                .contains("hidden")
+        ) {
             return;
         }
 
         if (
-            this.isMobileDevice()
+            !this.introReady ||
+            this.introContinuing
         ) {
-            message.textContent =
-                "Touchez l’écran pour continuer";
-        } else {
-            message.textContent =
-                "Appuyez sur une touche pour continuer";
+            return;
         }
+
+
+        /*
+        Évite qu'une touche modificatrice seule
+        déclenche l'introduction.
+        */
+
+        if (
+            [
+                "Shift",
+                "Control",
+                "Alt",
+                "Meta",
+                "CapsLock"
+            ].includes(
+                event.key
+            )
+        ) {
+            return;
+        }
+
+        event.preventDefault();
+
+        this.continueAfterIntro();
     }
 
 
-    finishIntro() {
+    handleIntroPointer(event) {
         if (
-            this.introFinished
+            this.introScreen
+                ?.classList
+                .contains("hidden")
         ) {
             return;
         }
+
+        if (
+            !this.introReady ||
+            this.introContinuing
+        ) {
+            return;
+        }
+
+        if (
+            event?.target?.closest?.(
+                "button"
+            )
+        ) {
+            return;
+        }
+
+        this.continueAfterIntro();
+    }
+
+
+    continueAfterIntro() {
+        if (
+            !this.introReady ||
+            this.introContinuing
+        ) {
+            return;
+        }
+
+        this.introContinuing =
+            true;
 
         this.introFinished =
             true;
 
-        this.clearIntroTimers();
+        this.introContinueMessage
+            ?.classList.add(
+                "hidden"
+            );
 
-        const intro =
-            this.$("intro-screen");
-
-        /*
-        Si le bouton Passer est utilisé avant la fin,
-        on place brièvement l'intro dans son état final.
-        */
-
-        intro?.classList.add(
-            "intro-arrive",
-            "intro-y",
-            "intro-happy",
-            "intro-finished"
-        );
-
-        intro?.classList.remove(
-            "intro-await-input"
-        );
-
-
-        window.removeEventListener(
-            "keydown",
-            this.introKeyHandler
-        );
-
-        intro?.removeEventListener(
-            "pointerdown",
-            this.introTouchHandler
+        this.introScreen?.classList.add(
+            "intro-leaving"
         );
 
 
         window.setTimeout(
             () => {
-                intro?.classList.add(
+                this.introScreen?.classList.add(
                     "hidden"
+                );
+
+                this.introScreen?.classList.remove(
+                    "intro-leaving"
                 );
 
                 this.showMainMenu();
             },
-            180
+            450
+        );
+    }
+
+
+    isTouchDevice() {
+        return (
+            window.matchMedia(
+                "(pointer: coarse)"
+            ).matches ||
+            "ontouchstart" in window
         );
     }
 
@@ -2463,81 +3446,53 @@ class PytApplication {
        MENU
     ===================================================== */
 
+    hideAllMainScreens() {
+        this.mainMenu?.classList.add(
+            "hidden"
+        );
+
+        this.settingsScreen?.classList.add(
+            "hidden"
+        );
+
+        this.creditsScreen?.classList.add(
+            "hidden"
+        );
+
+        this.ui?.gameInterface
+            ?.classList.add(
+                "hidden"
+            );
+    }
+
+
     showMainMenu() {
         this.hideAllMainScreens();
 
-        this.$("main-menu")
-            ?.classList.remove(
-                "hidden"
-            );
+        this.mainMenu?.classList.remove(
+            "hidden"
+        );
 
-        this.stopMusic();
+        this.settingsReturnTarget =
+            "menu";
     }
 
 
     startGame() {
         this.hideAllMainScreens();
 
-        this.$("game-interface")
-            ?.classList.remove(
-                "hidden"
-            );
-
-        if (
-            this.level
-        ) {
-            this.playChapterMusic(
-                this.level.chapter
-            );
-        }
+        this.ui.gameInterface?.classList.remove(
+            "hidden"
+        );
 
         /*
-        Au début du jeu, on présente d'abord le cours
-        du chapitre.
+        Au début du jeu on montre le cours
+        du chapitre 1 si nécessaire.
         */
 
-        if (
-            this.ui &&
-            typeof this.ui.showCourseAtChapterStart ===
-            "function"
-        ) {
-            this.ui.showCourseAtChapterStart();
+        this.ui.showCourseAtChapterStart();
 
-        } else if (
-            this.ui &&
-            typeof this.ui.showCourse ===
-            "function"
-        ) {
-            this.ui.showCourse();
-        }
-    }
-
-
-    hideAllMainScreens() {
-        this.$("intro-screen")
-            ?.classList.add(
-                "hidden"
-            );
-
-        this.$("main-menu")
-            ?.classList.add(
-                "hidden"
-            );
-
-        this.$("settings-screen")
-            ?.classList.add(
-                "hidden"
-            );
-
-        this.$("game-interface")
-            ?.classList.add(
-                "hidden"
-            );
-
-        this.$("credits-screen")
-            ?.classList.add(
-                "hidden"
-            );
+        this.tryPlayMusic();
     }
 
 
@@ -2545,72 +3500,90 @@ class PytApplication {
        PARAMÈTRES
     ===================================================== */
 
-    openSettings(source = "menu") {
-        const settings =
-            this.$("settings-screen");
+    showSettings(
+        returnTarget = "menu"
+    ) {
+        this.settingsReturnTarget =
+            returnTarget;
 
-        if (!settings) {
-            return;
-        }
+        this.mainMenu?.classList.add(
+            "hidden"
+        );
 
-        settings.dataset.returnTo =
-            source;
-
-        this.$("main-menu")
+        this.ui?.gameInterface
             ?.classList.add(
                 "hidden"
             );
 
-        if (
-            source === "game"
-        ) {
-            this.$("game-interface")
-                ?.classList.add(
-                    "hidden"
-                );
-        }
-
-        settings.classList.remove(
+        this.creditsScreen?.classList.add(
             "hidden"
         );
 
-        this.syncSettingsUI();
+        this.settingsScreen?.classList.remove(
+            "hidden"
+        );
+
+        this.refreshSettingsUI();
     }
 
 
-    closeSettings() {
-        const settings =
-            this.$("settings-screen");
+    leaveSettings() {
+        if (
+            this.settingsReturnTarget ===
+            "game"
+        ) {
+            this.settingsScreen?.classList.add(
+                "hidden"
+            );
 
-        const returnTo =
-            settings?.dataset.returnTo ||
-            "menu";
+            this.ui?.gameInterface
+                ?.classList.remove(
+                    "hidden"
+                );
 
-        settings?.classList.add(
-            "hidden"
-        );
+            this.ui?.showGame();
+
+            return;
+        }
+
+        this.showMainMenu();
+    }
+
+
+    refreshSettingsUI() {
+        if (
+            this.musicEnabledInput
+        ) {
+            this.musicEnabledInput.checked =
+                this.musicEnabled;
+        }
+
 
         if (
-            returnTo === "game"
+            this.volumeSlider
         ) {
-            this.$("game-interface")
-                ?.classList.remove(
-                    "hidden"
-                );
+            const maximum =
+                Number(
+                    this.volumeSlider.max
+                ) || 100;
 
-            if (
-                this.level
-            ) {
-                this.playChapterMusic(
-                    this.level.chapter
+            this.volumeSlider.value =
+                String(
+                    Math.round(
+                        this.volume *
+                        maximum
+                    )
                 );
-            }
+        }
 
-        } else {
-            this.$("main-menu")
-                ?.classList.remove(
-                    "hidden"
-                );
+
+        if (
+            this.volumeValue
+        ) {
+            this.volumeValue.textContent =
+                `${Math.round(
+                    this.volume * 100
+                )}%`;
         }
     }
 
@@ -2620,98 +3593,82 @@ class PytApplication {
     ===================================================== */
 
     showCredits() {
-        const credits =
-            this.$("credits-screen");
+        this.settingsScreen?.classList.add(
+            "hidden"
+        );
 
-        if (!credits) {
-            return;
-        }
-
-        if (
-            this.creditsTimer
-        ) {
-            window.clearTimeout(
-                this.creditsTimer
-            );
-
-            this.creditsTimer = null;
-        }
-
-        this.$("settings-screen")
-            ?.classList.add(
-                "hidden"
-            );
-
-        credits.classList.remove(
+        this.creditsScreen?.classList.remove(
             "hidden",
-            "credits-running",
             "credits-finished"
         );
 
 
         /*
-        Force un nouveau cycle d'animation
-        à chaque ouverture.
+        Relance l'animation du générique depuis
+        le début à chaque ouverture.
         */
 
-        void credits.offsetWidth;
+        if (
+            this.creditsScroll
+        ) {
+            this.creditsScroll.classList.remove(
+                "credits-running"
+            );
 
-        credits.classList.add(
-            "credits-running"
-        );
+            void this.creditsScroll.offsetWidth;
+
+            this.creditsScroll.classList.add(
+                "credits-running"
+            );
+        }
 
 
         /*
-        L'animation CSS dure 42 secondes.
-        Ensuite PYT reste figé au centre.
+        La durée correspond au générique CSS.
+        À la fin, PYT reste figé au centre.
         */
 
-        this.creditsTimer =
+        window.clearTimeout(
+            this.creditsFinishTimer
+        );
+
+        this.creditsFinishTimer =
             window.setTimeout(
                 () => {
-                    credits.classList.remove(
-                        "credits-running"
-                    );
-
-                    credits.classList.add(
+                    this.creditsScreen?.classList.add(
                         "credits-finished"
                     );
-
-                    this.creditsTimer =
-                        null;
                 },
-                42000
+                36000
             );
     }
 
 
-    closeCredits() {
-        const credits =
-            this.$("credits-screen");
+    hideCredits() {
+        window.clearTimeout(
+            this.creditsFinishTimer
+        );
 
-        if (
-            this.creditsTimer
-        ) {
-            window.clearTimeout(
-                this.creditsTimer
-            );
+        this.creditsFinishTimer =
+            null;
 
-            this.creditsTimer = null;
-        }
-
-        credits?.classList.add(
+        this.creditsScreen?.classList.add(
             "hidden"
         );
 
-        credits?.classList.remove(
-            "credits-running",
+        this.creditsScreen?.classList.remove(
             "credits-finished"
         );
 
-        this.$("settings-screen")
-            ?.classList.remove(
-                "hidden"
-            );
+        this.creditsScroll?.classList.remove(
+            "credits-running"
+        );
+
+        this.settingsScreen?.classList.remove(
+            "hidden"
+        );
+
+        this.refreshSettingsUI();
     }
 
 
@@ -2719,296 +3676,150 @@ class PytApplication {
        AUDIO
     ===================================================== */
 
-    setMusicEnabled(enabled) {
+    loadAudioSettings() {
+        /*
+        Les valeurs restent locales à la session.
+        Aucun stockage externe n'est nécessaire.
+        */
+
         this.musicEnabled =
-            Boolean(enabled);
+            true;
 
-        if (
-            !this.musicEnabled
-        ) {
-            /*
-            Demande :
-            Musique = Non -> volume = 0 %.
-            */
-
-            if (
-                this.volume > 0
-            ) {
-                this.volumeBeforeMute =
-                    this.volume;
-            }
-
-            this.volume = 0;
-
-            this.stopMusic();
-
-        } else {
-            /*
-            Si l'utilisateur réactive la musique,
-            on restaure le volume précédent.
-            */
-
-            if (
-                this.volume <= 0
-            ) {
-                this.volume =
-                    this.volumeBeforeMute > 0
-                        ? this.volumeBeforeMute
-                        : 0.6;
-            }
-
-            this.resumeRelevantMusic();
-        }
+        this.volume =
+            0.5;
 
         this.applyAudioSettings();
-        this.syncSettingsUI();
     }
 
 
-    setVolume(volume) {
-        const value =
+    setVolume(value) {
+        const next =
+            Number(value);
+
+        if (
+            !Number.isFinite(next)
+        ) {
+            return;
+        }
+
+        this.volume =
             Math.max(
                 0,
                 Math.min(
                     1,
-                    Number(volume) || 0
+                    next
                 )
             );
 
-        this.volume =
-            value;
-
         if (
-            value > 0
+            this.volume === 0
         ) {
-            this.volumeBeforeMute =
-                value;
-
-            if (
-                !this.musicEnabled
-            ) {
-                this.musicEnabled =
-                    true;
-            }
-
-        } else {
             this.musicEnabled =
                 false;
 
-            this.stopMusic();
+            if (
+                this.musicEnabledInput
+            ) {
+                this.musicEnabledInput.checked =
+                    false;
+            }
         }
 
-        this.applyAudioSettings();
-        this.syncSettingsUI();
+        this.refreshSettingsUI();
     }
 
 
     applyAudioSettings() {
-        const audios =
-            document.querySelectorAll(
-                "#audio-container audio"
-            );
-
-        audios.forEach(
-            audio => {
-                audio.volume =
-                    this.volume;
-
-                audio.muted =
-                    !this.musicEnabled ||
-                    this.volume <= 0;
-            }
-        );
-
-        this.syncSettingsUI();
-    }
+        const effectiveVolume =
+            this.musicEnabled
+                ? this.volume
+                : 0;
 
 
-    syncSettingsUI() {
-        const music =
-            this.$("music-enabled");
-
-        const slider =
-            this.$("volume-slider");
-
-        const value =
-            this.$("volume-value");
-
-
-        if (music) {
-            music.checked =
-                this.musicEnabled;
-        }
-
-        if (slider) {
-            slider.value =
-                String(
-                    Math.round(
-                        this.volume * 100
-                    )
-                );
-        }
-
-        if (value) {
-            value.textContent =
-                `${Math.round(
-                    this.volume * 100
-                )} %`;
-        }
-    }
-
-
-    playMusic(id) {
         if (
+            this.musicAudio
+        ) {
+            this.musicAudio.volume =
+                effectiveVolume;
+
+            this.musicAudio.muted =
+                !this.musicEnabled ||
+                effectiveVolume <= 0;
+
+
+            if (
+                this.musicAudio.muted
+            ) {
+                this.musicAudio.pause();
+            }
+        }
+
+
+        if (
+            this.theoryAudio
+        ) {
+            this.theoryAudio.volume =
+                effectiveVolume;
+
+            this.theoryAudio.muted =
+                !this.musicEnabled ||
+                effectiveVolume <= 0;
+        }
+
+
+        this.refreshSettingsUI();
+    }
+
+
+    tryPlayMusic() {
+        if (
+            !this.musicAudio ||
             !this.musicEnabled ||
             this.volume <= 0
         ) {
             return;
         }
 
-        const audio =
-            this.$(id);
-
-        if (!audio) {
-            return;
-        }
-
-        /*
-        Aucun src = aucun problème.
-        */
+        const playPromise =
+            this.musicAudio.play();
 
         if (
-            !audio.getAttribute("src") &&
-            !audio.querySelector("source")
-        ) {
-            return;
-        }
-
-        if (
-            this.currentMusic === audio &&
-            !audio.paused
-        ) {
-            return;
-        }
-
-        this.stopMusic();
-
-        this.currentMusic =
-            audio;
-
-        audio.volume =
-            this.volume;
-
-        audio.muted =
-            false;
-
-        const promise =
-            audio.play();
-
-        if (
-            promise &&
-            typeof promise.catch ===
+            playPromise &&
+            typeof playPromise.catch ===
             "function"
         ) {
-            promise.catch(
-                () => {
-                    /*
-                    Certains navigateurs bloquent
-                    l'audio avant interaction.
-                    Le jeu continue normalement.
-                    */
-                }
+            playPromise.catch(
+                () => {}
             );
         }
     }
 
 
-    playChapterMusic(chapter) {
-        this.playMusic(
-            `music-chapter-${chapter}`
-        );
-    }
-
-
-    stopMusic() {
-        const audios =
-            document.querySelectorAll(
-                "#audio-container audio"
-            );
-
-        audios.forEach(
-            audio => {
-                try {
-                    audio.pause();
-                } catch (_) {
-                    // Aucun blocage du jeu.
-                }
-            }
-        );
-
-        this.currentMusic =
-            null;
-    }
-
-
-    resumeRelevantMusic() {
+    playTheorySound() {
         if (
+            !this.theoryAudio ||
             !this.musicEnabled ||
             this.volume <= 0
         ) {
             return;
         }
 
-        const intro =
-            this.$("intro-screen");
+        try {
+            this.theoryAudio.currentTime =
+                0;
 
-        const game =
-            this.$("game-interface");
+            const promise =
+                this.theoryAudio.play();
 
-        const course =
-            this.$("chapter-screen");
-
-
-        if (
-            intro &&
-            !intro.classList.contains(
-                "hidden"
-            )
-        ) {
-            this.playMusic(
-                "music-intro"
+            promise?.catch?.(
+                () => {}
             );
 
-            return;
-        }
-
-
-        if (
-            game &&
-            !game.classList.contains(
-                "hidden"
-            )
-        ) {
-            if (
-                course &&
-                !course.classList.contains(
-                    "hidden"
-                )
-            ) {
-                this.playMusic(
-                    "music-theory"
-                );
-
-                return;
-            }
-
-            if (
-                this.level
-            ) {
-                this.playChapterMusic(
-                    this.level.chapter
-                );
-            }
+        } catch {
+            /*
+            L'absence d'un fichier audio ne doit
+            jamais empêcher le jeu de fonctionner.
+            */
         }
     }
 
@@ -3017,35 +3828,65 @@ class PytApplication {
        NIVEAUX
     ===================================================== */
 
+    getLevel(
+        chapter,
+        exercise
+    ) {
+        if (
+            typeof window.getLevel ===
+            "function"
+        ) {
+            return window.getLevel(
+                chapter,
+                exercise
+            );
+        }
+
+
+        if (
+            Array.isArray(
+                window.LEVELS
+            )
+        ) {
+            return window.LEVELS.find(
+                level =>
+                    Number(level.chapter) ===
+                    Number(chapter) &&
+                    Number(level.exercise) ===
+                    Number(exercise)
+            ) || null;
+        }
+
+
+        return null;
+    }
+
+
     loadLevel(
         chapter,
         exercise,
         options = {}
     ) {
-        if (
-            typeof getLevel !==
-            "function"
-        ) {
-            console.error(
-                "getLevel() n'est pas disponible."
-            );
-
-            return false;
-        }
-
         const level =
-            getLevel(
+            this.getLevel(
                 chapter,
                 exercise
             );
 
         if (!level) {
             console.error(
-                `Niveau ${chapter}-${exercise} introuvable.`
+                `Niveau introuvable : ${chapter}-${exercise}`
             );
 
             return false;
         }
+
+
+        this.currentChapter =
+            Number(chapter);
+
+        this.currentExercise =
+            Number(exercise);
 
         this.level =
             level;
@@ -3059,44 +3900,52 @@ class PytApplication {
                 this.robot
             );
 
-        if (this.ui) {
-            this.ui.setGame(
-                this.game
-            );
+        this.ui.setGame(
+            this.game
+        );
 
-            this.ui.setLevel(
-                level
-            );
+        this.ui.setLevel(
+            level
+        );
 
-            if (
-                options.showGame !== false
-            ) {
-                this.ui.showGame();
-            }
-        }
 
         if (
             options.showGame !== false
         ) {
-            this.playChapterMusic(
-                chapter
+            this.hideAllMainScreens();
+
+            this.ui.gameInterface
+                ?.classList.remove(
+                    "hidden"
+                );
+
+            this.ui.showGame();
+
+            this.ui.showGuide(
+                level.hint ||
+                level.instruction ||
+                "Observe la mission et écris ton programme."
             );
         }
+
 
         return true;
     }
 
 
     restartCurrentLevel() {
-        if (!this.level) {
+        if (
+            !this.level
+        ) {
             return;
         }
 
-        const editor =
-            this.$("code-editor");
 
         const currentCode =
-            editor?.value ?? "";
+            this.ui.codeEditor?.value ||
+            this.level.starterCode ||
+            "";
+
 
         this.robot =
             new Robot();
@@ -3107,62 +3956,41 @@ class PytApplication {
                 this.robot
             );
 
-        if (this.ui) {
-            this.ui.setGame(
-                this.game
-            );
 
-            /*
-            On ne rappelle PAS setLevel ici.
-            Cela évite d'effacer le code de l'élève.
-            */
+        this.ui.setGame(
+            this.game
+        );
 
-            this.ui.clearErrorHighlight?.();
 
-            this.ui.hideThoughtBubble?.();
+        /*
+        On ne rappelle pas setLevel ici :
+        cela évite d'effacer le code de l'élève
+        lors d'un simple redémarrage.
+        */
 
-            this.ui.render?.();
-
-            this.ui.setStatus?.(
-                ""
-            );
-        }
-
-        if (editor) {
-            editor.value =
+        if (
+            this.ui.codeEditor
+        ) {
+            this.ui.codeEditor.value =
                 currentCode;
         }
-    }
 
 
-    resetWorldForExecution() {
-        if (!this.level) {
-            return;
+        this.ui.clearErrorHighlight();
+        this.ui.hideThoughtBubble();
+
+        this.ui.setStatus(
+            ""
+        );
+
+        if (
+            this.ui.consoleOutput
+        ) {
+            this.ui.consoleOutput.textContent =
+                "";
         }
 
-        this.robot =
-            new Robot();
-
-        this.game =
-            new Game(
-                this.level,
-                this.robot
-            );
-
-        if (this.ui) {
-            this.ui.setGame(
-                this.game
-            );
-
-            /*
-            Très important :
-            pas de setLevel() ici.
-            Sinon le starterCode remplace le code
-            que l'élève vient d'écrire.
-            */
-
-            this.ui.render?.();
-        }
+        this.ui.render();
     }
 
 
@@ -3178,100 +4006,97 @@ class PytApplication {
             return;
         }
 
-        this.running = true;
 
-        this.resetWorldForExecution();
+        this.running =
+            true;
 
-        this.ui?.clearErrorHighlight?.();
-        this.ui?.hideThoughtBubble?.();
-        this.ui?.setStatus?.(
+
+        /*
+        IMPORTANT :
+        on réinitialise uniquement le moteur.
+        On ne recharge PAS le niveau via setLevel(),
+        sinon le contenu de l'éditeur serait remplacé
+        par le starterCode au moment d'exécuter.
+        */
+
+        this.robot =
+            new Robot();
+
+        this.game =
+            new Game(
+                this.level,
+                this.robot
+            );
+
+        this.ui.setGame(
+            this.game
+        );
+
+
+        this.ui.clearErrorHighlight();
+        this.ui.hideThoughtBubble();
+        this.ui.hideGuide();
+
+        this.ui.setStatus(
             "Exécution..."
         );
+
+
+        if (
+            this.ui.consoleOutput
+        ) {
+            this.ui.consoleOutput.textContent =
+                "";
+        }
+
 
         const result =
             this.runner.run(
                 code
             );
 
-        this.showConsoleOutput(
-            result
-        );
 
-        const requiredCheck =
+        if (
+            this.ui.consoleOutput &&
+            result.output.length > 0
+        ) {
+            this.ui.consoleOutput.textContent =
+                result.output.join(
+                    "\n"
+                );
+        }
+
+
+        const conceptValidation =
             this.validateRequiredConcepts(
-                code
+                code,
+                this.level.requiredConcepts ||
+                []
             );
 
 
         /*
-        Même si une erreur arrive plus tard,
-        les actions valides déjà produites
-        sont exécutées visuellement.
+        Même si une erreur Python arrive après
+        quelques instructions correctes, les actions
+        déjà produites sont animées.
         */
 
-        this.playActions(
+        this.ui.playActions(
             result.actions,
-            () => {
-                this.finishAttempt(
+            action =>
+                this.performAction(
+                    action
+                ),
+            blockedAction => {
+                this.finishAttempt({
                     code,
-                    result,
-                    requiredCheck
-                );
+                    runnerResult:
+                        result,
+                    conceptValidation,
+                    blockedAction
+                });
             }
         );
-    }
-
-
-    playActions(
-        actions,
-        onComplete
-    ) {
-        const queue =
-            Array.isArray(actions)
-                ? [...actions]
-                : [];
-
-        const next =
-            () => {
-                if (
-                    queue.length === 0
-                ) {
-                    onComplete?.();
-                    return;
-                }
-
-                const action =
-                    queue.shift();
-
-                const successful =
-                    this.performAction(
-                        action
-                    );
-
-                this.ui?.render?.();
-
-                if (!successful) {
-                    /*
-                    Le programme s'arrête lorsqu'une
-                    action physique est impossible.
-                    */
-
-                    queue.length = 0;
-
-                    this.lastBlockedAction =
-                        action;
-
-                    onComplete?.();
-                    return;
-                }
-
-                window.setTimeout(
-                    next,
-                    this.actionDelay
-                );
-            };
-
-        next();
     }
 
 
@@ -3284,6 +4109,7 @@ class PytApplication {
             return false;
         }
 
+
         const type =
             Array.isArray(action)
                 ? action[0]
@@ -3294,27 +4120,33 @@ class PytApplication {
                 ? action[1]
                 : action.value;
 
-
         switch (type) {
+
             case "forward":
-                return this.game.moveForward();
+                return this.game
+                    .moveForward();
+
 
             case "backward":
-                return this.game.moveBackward();
+                return this.game
+                    .moveBackward();
+
 
             case "right":
-                this.robot.rotateRight(
-                    value || 90
+                return (
+                    this.robot.rotateRight(
+                        value ?? 90
+                    ) !== false
                 );
 
-                return true;
 
             case "left":
-                this.robot.rotateLeft(
-                    value || 90
+                return (
+                    this.robot.rotateLeft(
+                        value ?? 90
+                    ) !== false
                 );
 
-                return true;
 
             default:
                 return false;
@@ -3322,58 +4154,100 @@ class PytApplication {
     }
 
 
-    finishAttempt(
+    finishAttempt({
         code,
-        result,
-        requiredCheck
-    ) {
-        this.running = false;
+        runnerResult,
+        conceptValidation,
+        blockedAction
+    }) {
+        this.running =
+            false;
+
+        this.ui.render();
+
+
+        const levelId =
+            this.level.id ||
+            `${this.level.chapter}-${this.level.exercise}`;
 
         const attempt =
-            this.ui?.registerAttempt?.(
-                this.level.id
-            ) ?? 1;
+            this.ui.registerAttempt(
+                levelId
+            );
 
 
         /*
         1. Erreur Python.
         */
 
-        if (!result.success) {
-            this.handleFailure({
-                type: "python_error",
-                message:
-                    result.error ||
-                    "Le programme contient une erreur.",
-                line:
-                    result.errorLine,
-                attempt
-            });
+        if (
+            !runnerResult.success
+        ) {
+            this.ui.setStatus(
+                "Erreur dans le programme"
+            );
+
+
+            if (
+                attempt >= 2 &&
+                runnerResult.errorLine
+            ) {
+                this.ui.highlightErrorLine(
+                    runnerResult.errorLine
+                );
+            }
+
+
+            this.ui.showFailureGuide(
+                runnerResult.error ||
+                "Ton programme contient une erreur.",
+                {
+                    attempt,
+                    type: "python_error",
+                    line:
+                        runnerResult.errorLine
+                }
+            );
 
             return;
         }
 
 
         /*
-        2. Action bloquée.
+        2. Déplacement impossible.
         */
 
-        if (this.lastBlockedAction) {
-            const blocked =
-                this.lastBlockedAction;
+        if (blockedAction) {
+            this.ui.setStatus(
+                "Pyt est bloqué"
+            );
 
-            this.lastBlockedAction =
-                null;
 
-            this.handleFailure({
-                type: "blocked",
-                message:
-                    this.game?.message ||
-                    "Pyt ne peut pas continuer dans cette direction.",
-                line:
-                    blocked.line || null,
-                attempt
-            });
+            if (
+                attempt >= 2 &&
+                blockedAction.line
+            ) {
+                this.ui.highlightErrorLine(
+                    blockedAction.line
+                );
+            }
+
+
+            this.ui.showThoughtBubble(
+                "Ce n’est pas là que je voulais aller..."
+            );
+
+
+            this.ui.showFailureGuide(
+                this.game.message ||
+                "Pyt ne peut pas effectuer ce déplacement.",
+                {
+                    attempt,
+                    type: "blocked",
+                    line:
+                        blockedAction.line
+                }
+            );
 
             return;
         }
@@ -3383,324 +4257,305 @@ class PytApplication {
         3. Résultat du niveau.
         */
 
-        const success =
-            this.game.checkSuccess();
-
-
-        if (!success) {
-            this.handleFailure({
-                type: "semantic",
-                message:
-                    this.getFailureFeedback(),
-                line: null,
-                attempt
-            });
-
-            return;
-        }
-
-
-        /*
-        4. Vérification pédagogique.
-        Le joueur peut trouver plusieurs solutions,
-        mais doit réellement pratiquer la notion
-        demandée par le chapitre.
-        */
-
-        if (!requiredCheck.success) {
-            this.handleFailure({
-                type: "concept",
-                message:
-                    requiredCheck.message,
-                line: null,
-                attempt
-            });
-
-            return;
-        }
-
-
-        /*
-        Réussite.
-        */
-
-        this.ui?.setStatus?.(
-            "Mission réussie !"
-        );
-
-        this.ui?.clearErrorHighlight?.();
-
-        this.ui?.completeCurrentLevel?.();
-    }
-
-
-    handleFailure({
-        type,
-        message,
-        line,
-        attempt
-    }) {
-        this.ui?.setStatus?.(
-            message
-        );
-
-
-        /*
-        Mauvaise position finale :
-        pensée exacte demandée.
-        */
-
         if (
-            type === "semantic" &&
-            this.isWrongFinalPosition()
+            !this.game.checkSuccess()
         ) {
-            this.ui?.showThoughtBubble?.(
+            this.ui.setStatus(
+                "Mission non terminée"
+            );
+
+
+            this.ui.showThoughtBubble(
                 "Ce n’est pas là que je voulais aller..."
             );
-        }
 
 
-        /*
-        Première erreur :
-        pas de soulignement rouge immédiat.
-        */
-
-        if (
-            attempt <= 1
-        ) {
-            this.ui?.clearErrorHighlight?.();
-
-        } else if (
-            (
-                type === "python_error" ||
-                type === "blocked"
-            ) &&
-            Number.isInteger(line)
-        ) {
-            /*
-            À partir de la deuxième tentative,
-            on souligne seulement lorsqu'on connaît
-            réellement la ligne problématique.
-            */
-
-            this.ui?.highlightErrorLine?.(
-                line
-            );
-
-        } else {
-            /*
-            Une solution syntaxiquement correcte
-            qui produit le mauvais résultat ne reçoit
-            PAS de faux soulignement.
-            */
-
-            this.ui?.clearErrorHighlight?.();
-        }
-
-
-        /*
-        Pyt propose de revoir le cours.
-        */
-
-        if (
-            this.ui &&
-            typeof this.ui.showFailureGuide ===
-            "function"
-        ) {
             this.ui.showFailureGuide(
-                message,
+                this.getFailureMessage(),
                 {
                     attempt,
-                    type
+                    type:
+                        "semantic_failure"
                 }
             );
 
-        } else {
-            this.ui?.showGuide?.(
-                message
+            return;
+        }
+
+
+        /*
+        4. Le résultat est correct mais une notion
+        demandée par l'exercice n'a pas été utilisée.
+        */
+
+        if (
+            !conceptValidation.success
+        ) {
+            this.ui.setStatus(
+                "Presque !"
             );
-        }
-    }
 
 
-    getFailureFeedback() {
-        if (!this.game) {
-            return "La mission n'est pas terminée.";
-        }
-
-
-        if (
-            this.game.objects &&
-            this.game.objects.size > 0
-        ) {
-            const count =
-                this.game.objects.size;
-
-            return (
-                count === 1
-                    ? "Il reste encore un objet à récupérer."
-                    : `Il reste encore ${count} objets à récupérer.`
+            this.ui.showFailureGuide(
+                conceptValidation.message,
+                {
+                    attempt,
+                    type:
+                        "missing_concept"
+                }
             );
+
+            return;
         }
 
 
-        if (
-            this.game.dirt &&
-            this.game.dirt.size > 0
-        ) {
-            const count =
-                this.game.dirt.size;
+        /*
+        Succès.
+        */
 
-            return (
-                count === 1
-                    ? "Il reste encore une zone à nettoyer."
-                    : `Il reste encore ${count} zones à nettoyer.`
-            );
-        }
-
-
-        if (
-            this.game.buttons &&
-            this.game.activatedButtons
-        ) {
-            const inactive =
-                this.game.buttons.size -
-                this.game.activatedButtons.size;
-
-            if (
-                inactive > 0
-            ) {
-                return (
-                    inactive === 1
-                        ? "Il reste encore un bouton à activer."
-                        : `Il reste encore ${inactive} boutons à activer.`
-                );
-            }
-        }
-
-
-        if (
-            this.game.getInventoryCount?.() > 0 &&
-            this.game.deposits?.size > 0
-        ) {
-            return "Pyt transporte encore un objet. Il faut l'apporter à la zone de dépôt.";
-        }
-
-
-        if (
-            this.level?.objective ===
-            "boxes" ||
-            this.level?.objective?.type ===
-            "boxes"
-        ) {
-            return "Toutes les caisses ne sont pas encore à la bonne place.";
-        }
-
-
-        if (
-            this.game.message
-        ) {
-            return this.game.message;
-        }
-
-
-        if (
-            this.isWrongFinalPosition()
-        ) {
-            return "Ce n’est pas là que je voulais aller...";
-        }
-
-
-        return "La mission n'est pas encore terminée.";
-    }
-
-
-    isWrongFinalPosition() {
-        if (
-            !this.game ||
-            !this.game.goal
-        ) {
-            return false;
-        }
-
-        const position =
-            this.game.getRobotPosition?.();
-
-        if (!position) {
-            return false;
-        }
-
-        return (
-            position.row !==
-            this.game.goal.row ||
-            position.col !==
-            this.game.goal.col
+        this.ui.setStatus(
+            "Mission réussie !"
         );
+
+        this.ui.hideThoughtBubble();
+
+        this.ui.completeCurrentLevel();
     }
 
 
     /* =====================================================
-       CONCEPTS PÉDAGOGIQUES
+       FEEDBACK
     ===================================================== */
 
-    validateRequiredConcepts(code) {
-        const required =
-            Array.isArray(
-                this.level?.requiredConcepts
-            )
-                ? this.level.requiredConcepts
-                : [];
+    getFailureMessage() {
+        const objective =
+            this.level?.objective;
+
+
+        const containsObjective =
+            type => {
+                if (
+                    typeof objective ===
+                    "string"
+                ) {
+                    return (
+                        objective === type ||
+                        objective.includes(
+                            type
+                        )
+                    );
+                }
+
+
+                if (
+                    Array.isArray(objective)
+                ) {
+                    return objective.some(
+                        item =>
+                            typeof item ===
+                            "string"
+                                ? (
+                                    item === type ||
+                                    item.includes(
+                                        type
+                                    )
+                                )
+                                : (
+                                    item?.type ===
+                                    type
+                                )
+                    );
+                }
+
+
+                if (
+                    objective &&
+                    typeof objective ===
+                    "object"
+                ) {
+                    if (
+                        objective.type ===
+                        type
+                    ) {
+                        return true;
+                    }
+
+                    const requirements =
+                        objective.requirements ||
+                        objective.objectives;
+
+                    if (
+                        Array.isArray(
+                            requirements
+                        )
+                    ) {
+                        return requirements.some(
+                            item =>
+                                typeof item ===
+                                "string"
+                                    ? (
+                                        item === type ||
+                                        item.includes(
+                                            type
+                                        )
+                                    )
+                                    : (
+                                        item?.type ===
+                                        type
+                                    )
+                        );
+                    }
+                }
+
+                return false;
+            };
+
 
         if (
-            required.length === 0
+            this.game.objects.size > 0 &&
+            (
+                containsObjective(
+                    "collect"
+                ) ||
+                containsObjective(
+                    "combined"
+                )
+            )
+        ) {
+            return "Il reste encore un objet à récupérer.";
+        }
+
+
+        if (
+            this.game.dirt.size > 0 &&
+            (
+                containsObjective(
+                    "clean"
+                ) ||
+                containsObjective(
+                    "combined"
+                )
+            )
+        ) {
+            return "Il reste encore une zone à nettoyer.";
+        }
+
+
+        if (
+            this.game.initialButtonCount > 0 &&
+            this.game.activatedButtons.size <
+            this.game.initialButtonCount
+        ) {
+            return "Tous les boutons n'ont pas encore été activés.";
+        }
+
+
+        if (
+            containsObjective(
+                "deposit"
+            ) &&
+            !this.game.checkDeposit()
+        ) {
+            return "Les objets doivent encore être déposés au bon endroit.";
+        }
+
+
+        if (
+            containsObjective(
+                "boxes"
+            ) &&
+            !this.game.checkBoxes()
+        ) {
+            return "Toutes les caisses ne sont pas encore sur leur emplacement.";
+        }
+
+
+        if (
+            this.game.goal &&
+            !this.game.checkReachGoal()
+        ) {
+            return "Pyt n'est pas encore arrivé à la bonne case.";
+        }
+
+
+        return "La mission n'est pas encore terminée. Observe le résultat et essaie à nouveau.";
+    }
+
+
+    /* =====================================================
+       NOTIONS OBLIGATOIRES
+    ===================================================== */
+
+    validateRequiredConcepts(
+        code,
+        requiredConcepts
+    ) {
+        if (
+            !Array.isArray(
+                requiredConcepts
+            ) ||
+            requiredConcepts.length === 0
         ) {
             return {
-                success: true
+                success: true,
+                message: ""
             };
         }
 
-        const tests = {
+
+        const source =
+            String(code || "");
+
+
+        const checks = {
+
             forward:
                 /\bforward\s*\(/,
 
             backward:
                 /\bbackward\s*\(/,
 
-            right:
-                /\bright\s*\(/,
-
             left:
                 /\bleft\s*\(/,
 
+            right:
+                /\bright\s*\(/,
+
             movement:
-                /\b(?:forward|backward|right|left)\s*\(/,
+                /\b(?:forward|backward|left|right)\s*\(/,
 
             variable:
-                /^[ \t]*[A-Za-z_]\w*\s*=/m,
+                /^\s*[A-Za-z_]\w*\s*=/m,
 
             variables:
-                /^[ \t]*[A-Za-z_]\w*\s*=/m,
+                /^\s*[A-Za-z_]\w*\s*=/m,
 
-            arithmetic:
-                /[+*/%]|(?:\w|\d)\s*-\s*(?:\w|\d)/,
+            calculation:
+                /[+\-*\/%]/,
+
+            calculations:
+                /[+\-*\/%]/,
 
             conversion:
                 /\b(?:int|float|str)\s*\(/,
 
+            conversions:
+                /\b(?:int|float|str)\s*\(/,
+
             if:
-                /\bif\b/,
-
-            elif:
-                /\belif\b/,
-
-            else:
-                /\belse\s*:/,
+                /^\s*if\s+.+:/m,
 
             condition:
-                /\bif\b/,
+                /^\s*(?:if|elif)\s+.+:/m,
 
             conditions:
-                /\bif\b/,
+                /^\s*(?:if|elif)\s+.+:/m,
+
+            elif:
+                /^\s*elif\s+.+:/m,
+
+            else:
+                /^\s*else\s*:/m,
 
             and:
                 /\band\b/,
@@ -3712,16 +4567,16 @@ class PytApplication {
                 /\bnot\b/,
 
             for:
-                /\bfor\b/,
+                /^\s*for\s+.+\s+in\s+.+:/m,
 
             range:
                 /\brange\s*\(/,
 
             while:
-                /\bwhile\b/,
+                /^\s*while\s+.+:/m,
 
             break:
-                /\bbreak\b/,
+                /^\s*break\s*$/m,
 
             list:
                 /\[[^\]]*\]/,
@@ -3733,194 +4588,151 @@ class PytApplication {
                 /\.append\s*\(/,
 
             function:
-                /\bdef\s+[A-Za-z_]\w*\s*\(/,
+                /^\s*def\s+[A-Za-z_]\w*\s*\(/m,
 
             functions:
-                /\bdef\s+[A-Za-z_]\w*\s*\(/,
+                /^\s*def\s+[A-Za-z_]\w*\s*\(/m,
 
-            print:
-                /\bprint\s*\(/
+            def:
+                /^\s*def\s+[A-Za-z_]\w*\s*\(/m
+        };
+
+
+        const labels = {
+            forward:
+                "forward()",
+
+            backward:
+                "backward()",
+
+            left:
+                "left()",
+
+            right:
+                "right()",
+
+            movement:
+                "une instruction de déplacement",
+
+            variable:
+                "une variable",
+
+            variables:
+                "une variable",
+
+            calculation:
+                "un calcul",
+
+            calculations:
+                "un calcul",
+
+            conversion:
+                "une conversion",
+
+            conversions:
+                "une conversion",
+
+            if:
+                "if",
+
+            condition:
+                "une condition",
+
+            conditions:
+                "une condition",
+
+            elif:
+                "elif",
+
+            else:
+                "else",
+
+            and:
+                "and",
+
+            or:
+                "or",
+
+            not:
+                "not",
+
+            for:
+                "une boucle for",
+
+            range:
+                "range()",
+
+            while:
+                "une boucle while",
+
+            break:
+                "break",
+
+            list:
+                "une liste",
+
+            lists:
+                "une liste",
+
+            append:
+                "append()",
+
+            function:
+                "une fonction",
+
+            functions:
+                "une fonction",
+
+            def:
+                "def"
         };
 
 
         for (
             const concept
-            of required
+            of requiredConcepts
         ) {
+            const normalized =
+                String(concept)
+                    .trim()
+                    .toLowerCase();
+
+
+            /*
+            "revision" signifie simplement qu'on
+            réutilise des notions précédentes.
+            Aucun motif exact n'est imposé.
+            */
+
             if (
-                concept === "revision"
+                normalized ===
+                "revision"
             ) {
                 continue;
             }
 
-            const test =
-                tests[concept];
+
+            const pattern =
+                checks[normalized];
 
             if (
-                test &&
-                !test.test(code)
+                pattern &&
+                !pattern.test(source)
             ) {
                 return {
                     success: false,
+
                     message:
-                        this.getConceptMessage(
-                            concept
-                        )
+                        `La mission est correcte, mais essaie de la résoudre en utilisant ${labels[normalized] || concept}.`
                 };
             }
         }
 
 
         return {
-            success: true
+            success: true,
+            message: ""
         };
-    }
-
-
-    getConceptMessage(concept) {
-        const messages = {
-            forward:
-                "Essaie d'utiliser forward(...).",
-
-            backward:
-                "Essaie d'utiliser backward(...).",
-
-            right:
-                "Essaie d'utiliser right(...).",
-
-            left:
-                "Essaie d'utiliser left(...).",
-
-            movement:
-                "Utilise les instructions de déplacement de Pyt.",
-
-            variable:
-                "Cet exercice te demande d'utiliser une variable.",
-
-            variables:
-                "Cet exercice te demande d'utiliser des variables.",
-
-            arithmetic:
-                "Utilise un calcul dans ton programme.",
-
-            conversion:
-                "Utilise une conversion avec int(), float() ou str().",
-
-            if:
-                "Cet exercice te demande d'utiliser une condition avec if.",
-
-            elif:
-                "Essaie d'utiliser elif dans ta condition.",
-
-            else:
-                "Essaie d'utiliser else dans ta condition.",
-
-            condition:
-                "Cet exercice te demande d'utiliser une condition.",
-
-            conditions:
-                "Cet exercice te demande d'utiliser des conditions.",
-
-            and:
-                "Essaie d'utiliser and.",
-
-            or:
-                "Essaie d'utiliser or.",
-
-            not:
-                "Essaie d'utiliser not.",
-
-            for:
-                "Cet exercice te demande d'utiliser une boucle for.",
-
-            range:
-                "Utilise range(...) avec ta boucle.",
-
-            while:
-                "Cet exercice te demande d'utiliser une boucle while.",
-
-            break:
-                "Essaie d'utiliser break dans ta boucle.",
-
-            list:
-                "Cet exercice te demande d'utiliser une liste.",
-
-            lists:
-                "Cet exercice te demande d'utiliser une liste.",
-
-            append:
-                "Essaie d'ajouter un élément avec append(...).",
-
-            function:
-                "Cet exercice te demande de créer une fonction avec def.",
-
-            functions:
-                "Cet exercice te demande de créer une fonction avec def.",
-
-            print:
-                "Essaie d'utiliser print(...)."
-        };
-
-        return (
-            messages[concept] ||
-            `Utilise la notion « ${concept} » dans ta solution.`
-        );
-    }
-
-
-    /* =====================================================
-       CONSOLE
-    ===================================================== */
-
-    showConsoleOutput(result) {
-        const consoleOutput =
-            this.$("console-output");
-
-        if (!consoleOutput) {
-            return;
-        }
-
-        const lines = [
-            ...(result.output || [])
-        ];
-
-        if (
-            !result.success &&
-            result.error
-        ) {
-            lines.push(
-                `Erreur : ${result.error}`
-            );
-        }
-
-        consoleOutput.textContent =
-            lines.length
-                ? lines.join("\n")
-                : "Programme lancé.";
-    }
-
-
-    /* =====================================================
-       OUTILS
-    ===================================================== */
-
-    isMobileDevice() {
-        return (
-            window.matchMedia(
-                "(max-width: 760px)"
-            ).matches ||
-            (
-                "ontouchstart" in window &&
-                window.innerWidth <= 900
-            )
-        );
-    }
-
-
-    $(id) {
-        return document.getElementById(
-            id
-        );
     }
 }
 
