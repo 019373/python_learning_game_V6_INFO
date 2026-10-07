@@ -4,77 +4,51 @@
 ============================================================
 PYT - robot.js
 
-Ce fichier représente Pyt :
-- sa position ;
-- sa direction ;
-- son inventaire ;
-- son énergie ;
-- ses rotations ;
-- ses déplacements logiques.
+État et comportement du robot Pyt.
 
-Le moteur game.js décide si un déplacement est autorisé.
+Responsabilités :
+- position ;
+- direction ;
+- rotations ;
+- déplacements ;
+- inventaire ;
+- énergie ;
+- état du robot.
+
+Les collisions et interactions avec le monde
+restent gérées par game.js.
 ============================================================
 */
 
-
 class Robot {
 
-    // =====================================================
-    // DIRECTIONS
-    // =====================================================
+    static NORTH = "NORTH";
+    static EAST = "EAST";
+    static SOUTH = "SOUTH";
+    static WEST = "WEST";
 
-    static NORTH = "north";
-    static EAST = "east";
-    static SOUTH = "south";
-    static WEST = "west";
-
-    static DIRECTIONS = [
-        Robot.NORTH,
-        Robot.EAST,
-        Robot.SOUTH,
-        Robot.WEST
-    ];
-
-
-    // =====================================================
-    // CRÉATION
-    // =====================================================
 
     constructor(
-        row = 0,
-        col = 0,
+        row = 1,
+        col = 1,
         direction = Robot.EAST
     ) {
 
-        this.row = 0;
-        this.col = 0;
+        this.row =
+            Number(row);
+
+        this.col =
+            Number(col);
 
         this.direction =
-            Robot.EAST;
-
-
-        // Inventaire simple
-        this.inventory = 0;
-
-
-        // Énergie prévue pour les niveaux futurs
-        this.maxEnergy = 100;
-        this.energy = 100;
-
-
-        this.active = true;
-
-
-        this.setPosition(
-            row,
-            col
-        );
-
-
-        this.direction =
-            this.validateDirection(
+            this.normalizeDirection(
                 direction
             );
+
+        this.inventory = [];
+
+        this.maxEnergy = 100;
+        this.energy = 100;
     }
 
 
@@ -84,10 +58,13 @@ class Robot {
 
     getPosition() {
 
-        return [
-            this.row,
-            this.col
-        ];
+        return {
+            row:
+                this.row,
+
+            col:
+                this.col
+        };
     }
 
 
@@ -96,25 +73,31 @@ class Robot {
         col
     ) {
 
-        row = Number(row);
-        col = Number(col);
+        const nextRow =
+            Number(row);
+
+        const nextCol =
+            Number(col);
 
 
         if (
-            !Number.isInteger(row)
-            ||
-            !Number.isInteger(col)
+            !Number.isFinite(
+                nextRow
+            ) ||
+            !Number.isFinite(
+                nextCol
+            )
         ) {
 
-            throw new Error(
-                "La position de Pyt doit utiliser des coordonnées entières."
-            );
+            return false;
         }
 
 
-        this.row = row;
-        this.col = col;
+        this.row =
+            nextRow;
 
+        this.col =
+            nextCol;
 
         return true;
     }
@@ -124,26 +107,94 @@ class Robot {
     // DIRECTION
     // =====================================================
 
-    validateDirection(direction) {
+    normalizeDirection(direction) {
 
         const value =
-            String(direction)
-                .toLowerCase();
-
-
-        if (
-            !Robot.DIRECTIONS.includes(
-                value
+            String(
+                direction ||
+                Robot.NORTH
             )
-        ) {
+                .trim()
+                .toUpperCase();
 
-            throw new Error(
-                `Direction inconnue : ${direction}`
+
+        const aliases = {
+
+            N:
+                Robot.NORTH,
+
+            NORTH:
+                Robot.NORTH,
+
+            UP:
+                Robot.NORTH,
+
+
+            E:
+                Robot.EAST,
+
+            EAST:
+                Robot.EAST,
+
+            RIGHT:
+                Robot.EAST,
+
+
+            S:
+                Robot.SOUTH,
+
+            SOUTH:
+                Robot.SOUTH,
+
+            DOWN:
+                Robot.SOUTH,
+
+
+            W:
+                Robot.WEST,
+
+            WEST:
+                Robot.WEST,
+
+            LEFT:
+                Robot.WEST
+        };
+
+
+        return (
+            aliases[value] ||
+            Robot.NORTH
+        );
+    }
+
+
+    getDirection() {
+
+        return this.direction;
+    }
+
+
+    setDirection(direction) {
+
+        this.direction =
+            this.normalizeDirection(
+                direction
             );
-        }
+
+        return this.direction;
+    }
 
 
-        return value;
+    getDirectionIndex() {
+
+        return [
+            Robot.NORTH,
+            Robot.EAST,
+            Robot.SOUTH,
+            Robot.WEST
+        ].indexOf(
+            this.direction
+        );
     }
 
 
@@ -155,131 +206,129 @@ class Robot {
 
             case Robot.NORTH:
 
-                return [
-                    -1,
-                    0
-                ];
-
-
-            case Robot.SOUTH:
-
-                return [
-                    1,
-                    0
-                ];
-
-
-            case Robot.WEST:
-
-                return [
-                    0,
-                    -1
-                ];
+                return {
+                    row: -1,
+                    col: 0
+                };
 
 
             case Robot.EAST:
 
-                return [
-                    0,
-                    1
-                ];
+                return {
+                    row: 0,
+                    col: 1
+                };
+
+
+            case Robot.SOUTH:
+
+                return {
+                    row: 1,
+                    col: 0
+                };
+
+
+            case Robot.WEST:
+
+                return {
+                    row: 0,
+                    col: -1
+                };
 
 
             default:
 
-                return [
-                    0,
-                    0
-                ];
+                return {
+                    row: -1,
+                    col: 0
+                };
         }
     }
 
 
-    getBackwardVector() {
+    getForwardPosition(
+        steps = 1
+    ) {
 
-        const [
-            rowChange,
-            colChange
-        ] =
+        const amount =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(steps) || 0
+                )
+            );
+
+        const vector =
             this.getDirectionVector();
 
 
-        return [
-            -rowChange,
-            -colChange
-        ];
+        return {
+            row:
+                this.row +
+                vector.row *
+                amount,
+
+            col:
+                this.col +
+                vector.col *
+                amount
+        };
     }
 
 
-    // =====================================================
-    // POSITION DEVANT / DERRIÈRE
-    // =====================================================
+    getBackwardPosition(
+        steps = 1
+    ) {
 
-    getForwardPosition() {
+        const amount =
+            Math.max(
+                0,
+                Math.floor(
+                    Number(steps) || 0
+                )
+            );
 
-        const [
-            rowChange,
-            colChange
-        ] =
+        const vector =
             this.getDirectionVector();
 
 
-        return [
-            this.row
-            +
-            rowChange,
+        return {
+            row:
+                this.row -
+                vector.row *
+                amount,
 
-            this.col
-            +
-            colChange
-        ];
-    }
-
-
-    getBackwardPosition() {
-
-        const [
-            rowChange,
-            colChange
-        ] =
-            this.getBackwardVector();
-
-
-        return [
-            this.row
-            +
-            rowChange,
-
-            this.col
-            +
-            colChange
-        ];
+            col:
+                this.col -
+                vector.col *
+                amount
+        };
     }
 
 
     // =====================================================
-    // ROTATIONS SIMPLES
+    // ROTATIONS
     // =====================================================
 
     turnRight() {
 
-        const currentIndex =
-            Robot.DIRECTIONS.indexOf(
-                this.direction
-            );
+        const directions = [
+            Robot.NORTH,
+            Robot.EAST,
+            Robot.SOUTH,
+            Robot.WEST
+        ];
 
 
-        const nextIndex =
-            (
-                currentIndex + 1
-            )
-            %
-            Robot.DIRECTIONS.length;
+        const current =
+            this.getDirectionIndex();
 
 
         this.direction =
-            Robot.DIRECTIONS[
-                nextIndex
+            directions[
+                (
+                    current + 1
+                ) % 4
             ];
 
 
@@ -289,27 +338,23 @@ class Robot {
 
     turnLeft() {
 
-        const currentIndex =
-            Robot.DIRECTIONS.indexOf(
-                this.direction
-            );
+        const directions = [
+            Robot.NORTH,
+            Robot.EAST,
+            Robot.SOUTH,
+            Robot.WEST
+        ];
 
 
-        const nextIndex =
-            (
-                currentIndex
-                -
-                1
-                +
-                Robot.DIRECTIONS.length
-            )
-            %
-            Robot.DIRECTIONS.length;
+        const current =
+            this.getDirectionIndex();
 
 
         this.direction =
-            Robot.DIRECTIONS[
-                nextIndex
+            directions[
+                (
+                    current + 3
+                ) % 4
             ];
 
 
@@ -322,36 +367,17 @@ class Robot {
         this.turnRight();
         this.turnRight();
 
-
         return this.direction;
     }
 
-
-    // =====================================================
-    // ROTATIONS AVEC ANGLE
-    // =====================================================
 
     rotateRight(
         angle = 90
     ) {
 
-        const turns =
-            this.validateAngle(
-                angle
-            );
-
-
-        for (
-            let i = 0;
-            i < turns;
-            i++
-        ) {
-
-            this.turnRight();
-        }
-
-
-        return this.direction;
+        return this.rotate(
+            angle
+        );
     }
 
 
@@ -359,19 +385,58 @@ class Robot {
         angle = 90
     ) {
 
-        const turns =
-            this.validateAngle(
-                angle
-            );
+        return this.rotate(
+            -Number(angle)
+        );
+    }
 
 
-        for (
-            let i = 0;
-            i < turns;
-            i++
+    rotate(angle = 90) {
+
+        const numericAngle =
+            Number(angle);
+
+
+        if (
+            !Number.isFinite(
+                numericAngle
+            )
         ) {
 
-            this.turnLeft();
+            return false;
+        }
+
+
+        if (
+            numericAngle % 90 !== 0
+        ) {
+
+            return false;
+        }
+
+
+        let turns =
+            Math.abs(
+                numericAngle / 90
+            ) % 4;
+
+
+        while (
+            turns > 0
+        ) {
+
+            if (
+                numericAngle > 0
+            ) {
+
+                this.turnRight();
+
+            } else {
+
+                this.turnLeft();
+            }
+
+            turns--;
         }
 
 
@@ -379,42 +444,8 @@ class Robot {
     }
 
 
-    validateAngle(angle) {
-
-        angle =
-            Number(angle);
-
-
-        if (
-            !Number.isInteger(angle)
-            ||
-            angle < 0
-            ||
-            angle % 90 !== 0
-        ) {
-
-            throw new Error(
-                "L'angle doit être un multiple positif de 90."
-            );
-        }
-
-
-        if (
-            angle > 3600
-        ) {
-
-            throw new Error(
-                "La rotation demandée est trop grande."
-            );
-        }
-
-
-        return angle / 90;
-    }
-
-
     // =====================================================
-    // DÉPLACEMENT AVEC LE MOTEUR
+    // DÉPLACEMENTS
     // =====================================================
 
     forward(
@@ -422,33 +453,70 @@ class Robot {
         steps = 1
     ) {
 
-        steps =
-            this.validateSteps(
+        if (
+            !game
+        ) {
+
+            return false;
+        }
+
+
+        const amount =
+            this.normalizeSteps(
                 steps
             );
 
 
+        if (
+            amount === null
+        ) {
+
+            return false;
+        }
+
+
         for (
             let i = 0;
-            i < steps;
+            i < amount;
             i++
         ) {
 
-            const [
-                nextRow,
-                nextCol
-            ] =
-                this.getForwardPosition();
+            let moved = false;
 
 
-            const moved =
-                game.moveRobotTo(
-                    nextRow,
-                    nextCol
-                );
+            if (
+                typeof game.moveForward ===
+                "function"
+            ) {
+
+                moved =
+                    game.moveForward();
+
+            } else {
+
+                const position =
+                    this.getForwardPosition(
+                        1
+                    );
 
 
-            if (!moved) {
+                if (
+                    typeof game.moveRobotTo ===
+                    "function"
+                ) {
+
+                    moved =
+                        game.moveRobotTo(
+                            position.row,
+                            position.col
+                        );
+                }
+            }
+
+
+            if (
+                moved === false
+            ) {
 
                 return false;
             }
@@ -464,33 +532,70 @@ class Robot {
         steps = 1
     ) {
 
-        steps =
-            this.validateSteps(
+        if (
+            !game
+        ) {
+
+            return false;
+        }
+
+
+        const amount =
+            this.normalizeSteps(
                 steps
             );
 
 
+        if (
+            amount === null
+        ) {
+
+            return false;
+        }
+
+
         for (
             let i = 0;
-            i < steps;
+            i < amount;
             i++
         ) {
 
-            const [
-                nextRow,
-                nextCol
-            ] =
-                this.getBackwardPosition();
+            let moved = false;
 
 
-            const moved =
-                game.moveRobotTo(
-                    nextRow,
-                    nextCol
-                );
+            if (
+                typeof game.moveBackward ===
+                "function"
+            ) {
+
+                moved =
+                    game.moveBackward();
+
+            } else {
+
+                const position =
+                    this.getBackwardPosition(
+                        1
+                    );
 
 
-            if (!moved) {
+                if (
+                    typeof game.moveRobotTo ===
+                    "function"
+                ) {
+
+                    moved =
+                        game.moveRobotTo(
+                            position.row,
+                            position.col
+                        );
+                }
+            }
+
+
+            if (
+                moved === false
+            ) {
 
                 return false;
             }
@@ -501,35 +606,41 @@ class Robot {
     }
 
 
-    validateSteps(steps) {
+    normalizeSteps(steps) {
 
-        steps =
+        const amount =
             Number(steps);
 
 
         if (
-            !Number.isInteger(steps)
-            ||
-            steps < 0
+            !Number.isFinite(
+                amount
+            )
         ) {
 
-            throw new Error(
-                "La distance doit être un entier positif."
-            );
+            return null;
         }
 
 
         if (
-            steps > 100
+            amount < 0
         ) {
 
-            throw new Error(
-                "La distance demandée est trop grande."
-            );
+            return null;
         }
 
 
-        return steps;
+        if (
+            !Number.isInteger(
+                amount
+            )
+        ) {
+
+            return null;
+        }
+
+
+        return amount;
     }
 
 
@@ -537,79 +648,116 @@ class Robot {
     // INVENTAIRE
     // =====================================================
 
-    hasObject() {
+    addItem(
+        item = "object"
+    ) {
+
+        this.inventory.push(
+            item
+        );
+
+        return this.inventory.length;
+    }
+
+
+    removeItem(
+        item = null
+    ) {
+
+        if (
+            this.inventory.length === 0
+        ) {
+
+            return null;
+        }
+
+
+        if (
+            item === null ||
+            item === undefined
+        ) {
+
+            return this.inventory.pop();
+        }
+
+
+        const index =
+            this.inventory.indexOf(
+                item
+            );
+
+
+        if (
+            index === -1
+        ) {
+
+            return null;
+        }
+
+
+        const removed =
+            this.inventory.splice(
+                index,
+                1
+            );
+
 
         return (
-            this.inventory > 0
+            removed[0] ||
+            null
         );
     }
 
 
-    addObject(
-        amount = 1
+    hasItem(
+        item = null
     ) {
 
-        amount =
-            Number(amount);
-
-
         if (
-            !Number.isInteger(amount)
-            ||
-            amount < 0
+            item === null ||
+            item === undefined
         ) {
 
-            return false;
+            return (
+                this.inventory.length >
+                0
+            );
         }
 
 
-        this.inventory +=
-            amount;
-
-
-        return true;
+        return this.inventory.includes(
+            item
+        );
     }
 
 
-    removeObject(
-        amount = 1
-    ) {
+    getInventory() {
 
-        amount =
-            Number(amount);
-
-
-        if (
-            !Number.isInteger(amount)
-            ||
-            amount < 0
-        ) {
-
-            return false;
-        }
+        return [
+            ...this.inventory
+        ];
+    }
 
 
-        if (
-            this.inventory
-            <
-            amount
-        ) {
+    getInventoryCount() {
 
-            return false;
-        }
-
-
-        this.inventory -=
-            amount;
-
-
-        return true;
+        return this.inventory.length;
     }
 
 
     clearInventory() {
 
-        this.inventory = 0;
+        const oldInventory =
+            [
+                ...this.inventory
+            ];
+
+
+        this.inventory.length =
+            0;
+
+
+        return oldInventory;
     }
 
 
@@ -617,29 +765,22 @@ class Robot {
     // ÉNERGIE
     // =====================================================
 
-    recharge(
-        amount = null
-    ) {
+    getEnergy() {
 
-        if (
-            amount === null
-        ) {
-
-            this.energy =
-                this.maxEnergy;
-
-            return this.energy;
-        }
+        return this.energy;
+    }
 
 
-        amount =
-            Number(amount);
+    setEnergy(value) {
+
+        const numericValue =
+            Number(value);
 
 
         if (
-            Number.isNaN(amount)
-            ||
-            amount < 0
+            !Number.isFinite(
+                numericValue
+            )
         ) {
 
             return this.energy;
@@ -647,11 +788,12 @@ class Robot {
 
 
         this.energy =
-            Math.min(
-                this.maxEnergy,
-                this.energy
-                +
-                amount
+            Math.max(
+                0,
+                Math.min(
+                    this.maxEnergy,
+                    numericValue
+                )
             );
 
 
@@ -659,28 +801,20 @@ class Robot {
     }
 
 
-    consumeEnergy(
+    useEnergy(
         amount = 1
     ) {
 
-        amount =
-            Number(amount);
+        const cost =
+            Math.max(
+                0,
+                Number(amount) || 0
+            );
 
 
         if (
-            Number.isNaN(amount)
-            ||
-            amount < 0
-        ) {
-
-            return false;
-        }
-
-
-        if (
-            this.energy
-            <
-            amount
+            this.energy <
+            cost
         ) {
 
             return false;
@@ -688,10 +822,42 @@ class Robot {
 
 
         this.energy -=
-            amount;
+            cost;
 
 
         return true;
+    }
+
+
+    addEnergy(
+        amount = 1
+    ) {
+
+        return this.setEnergy(
+            this.energy +
+            Math.max(
+                0,
+                Number(amount) || 0
+            )
+        );
+    }
+
+
+    restoreEnergy() {
+
+        this.energy =
+            this.maxEnergy;
+
+        return this.energy;
+    }
+
+
+    isOutOfEnergy() {
+
+        return (
+            this.energy <=
+            0
+        );
     }
 
 
@@ -700,8 +866,8 @@ class Robot {
     // =====================================================
 
     reset(
-        row = 0,
-        col = 0,
+        row = 1,
+        col = 1,
         direction = Robot.EAST
     ) {
 
@@ -710,22 +876,15 @@ class Robot {
             col
         );
 
+        this.setDirection(
+            direction
+        );
 
-        this.direction =
-            this.validateDirection(
-                direction
-            );
+        this.clearInventory();
 
+        this.restoreEnergy();
 
-        this.inventory = 0;
-
-        this.energy =
-            this.maxEnergy;
-
-        this.active = true;
-
-
-        return true;
+        return this;
     }
 
 
@@ -743,26 +902,34 @@ class Robot {
             col:
                 this.col,
 
+            position: {
+                row:
+                    this.row,
+
+                col:
+                    this.col
+            },
+
             direction:
                 this.direction,
 
             inventory:
-                this.inventory,
+                this.getInventory(),
+
+            inventoryCount:
+                this.getInventoryCount(),
 
             energy:
                 this.energy,
 
             maxEnergy:
-                this.maxEnergy,
-
-            active:
-                this.active
+                this.maxEnergy
         };
     }
 
 
     // =====================================================
-    // OUTILS DE DEBUG
+    // AFFICHAGE / DEBUG
     // =====================================================
 
     getDirectionSymbol() {
@@ -789,20 +956,25 @@ class Robot {
     }
 
 
+    symbol() {
+
+        return this.getDirectionSymbol();
+    }
+
+
     toString() {
 
         return (
-            `Pyt (${this.row}, ${this.col}) `
-            +
+            `Pyt(${this.row}, ${this.col}) ` +
             `${this.getDirectionSymbol()}`
         );
     }
-
 }
 
 
 // =========================================================
-// ACCESSIBLE AUX AUTRES FICHIERS
+// EXPOSITION NAVIGATEUR
 // =========================================================
 
-window.Robot = Robot;
+window.Robot =
+    Robot;
