@@ -3,20 +3,20 @@
 /*
 ============================================================
 PYT - ui.js
-
-Interface graphique de la version navigateur.
+Interface complète de la version navigateur.
 
 Ce fichier gère :
-- les différents écrans
-- le cours
-- la carte
-- la fenêtre de code
-- le Canvas
-- l'affichage de Pyt
-- l'animation des actions
-- les messages
+- affichage du monde ;
+- cours ;
+- carte des exercices ;
+- progression visuelle ;
+- fenêtre de code ;
+- console ;
+- animation ;
+- messages ;
+- passage entre les chapitres.
 
-La logique du moteur reste dans game.js / robot.js.
+Les règles du jeu restent dans game.js.
 ============================================================
 */
 
@@ -25,9 +25,9 @@ class PytUI {
 
     constructor() {
 
-        // -------------------------------------------------
-        // ÉTAT GÉNÉRAL
-        // -------------------------------------------------
+        // =================================================
+        // ÉTAT
+        // =================================================
 
         this.game = null;
         this.level = null;
@@ -35,132 +35,252 @@ class PytUI {
         this.currentChapter = 1;
         this.currentExercise = 1;
 
-        this.completedLevels = new Set();
-        this.unlockedLevels = new Set(["1-1"]);
-        this.seenCourses = new Set();
+        this.completedLevels =
+            new Set();
 
-        this.attempts = new Map();
+        this.unlockedLevels =
+            new Set(["1-1"]);
 
-        // -------------------------------------------------
+        this.seenCourses =
+            new Set();
+
+        this.attempts =
+            new Map();
+
+
+        // =================================================
         // ANIMATION
-        // -------------------------------------------------
+        // =================================================
 
         this.actionDelay = 2000;
 
         this.animationRunning = false;
-        this.actionQueue = [];
-        this.actionIndex = 0;
         this.animationTimer = null;
 
-        // -------------------------------------------------
-        // CANVAS
-        // -------------------------------------------------
 
-        this.canvas = document.getElementById(
-            "game-canvas"
-        );
-
-        this.ctx = this.canvas.getContext(
-            "2d"
-        );
-
-        this.cellSize = 64;
-        this.gridX = 0;
-        this.gridY = 0;
-
-        // -------------------------------------------------
-        // ÉLÉMENTS HTML
-        // -------------------------------------------------
-
-        this.gameScreen = document.getElementById(
-            "game-screen"
-        );
-
-        this.chapterScreen = document.getElementById(
-            "chapter-screen"
-        );
-
-        this.mapScreen = document.getElementById(
-            "map-screen"
-        );
-
-        this.codeWindow = document.getElementById(
-            "code-window"
-        );
-
-        this.codeEditor = document.getElementById(
-            "code-editor"
-        );
-
-        this.consoleOutput = document.getElementById(
-            "console-output"
-        );
-
-        this.gameStatus = document.getElementById(
-            "game-status"
-        );
-
-        this.chapterBadge = document.getElementById(
-            "chapter-badge"
-        );
-
-        this.difficultyBadge = document.getElementById(
-            "difficulty-badge"
-        );
-
-        this.missionTitle = document.getElementById(
-            "mission-title"
-        );
-
-        this.missionInstruction = document.getElementById(
-            "mission-instruction"
-        );
-
-        // -------------------------------------------------
-        // MODALE
-        // -------------------------------------------------
-
-        this.modalBackground = document.getElementById(
-            "modal-background"
-        );
-
-        this.modalTitle = document.getElementById(
-            "modal-title"
-        );
-
-        this.modalMessage = document.getElementById(
-            "modal-message"
-        );
-
-        this.modalPrimaryButton = document.getElementById(
-            "modal-primary-button"
-        );
-
-        this.modalSecondaryButton = document.getElementById(
-            "modal-secondary-button"
-        );
-
-        // -------------------------------------------------
-        // CALLBACKS
-        //
-        // app.js pourra les remplacer.
-        // -------------------------------------------------
+        // =================================================
+        // CALLBACKS FOURNIS PAR APP.JS
+        // =================================================
 
         this.onRunCode = null;
         this.onRestart = null;
         this.onSelectLevel = null;
 
-        // -------------------------------------------------
-        // DÉMARRAGE INTERFACE
-        // -------------------------------------------------
+
+        // =================================================
+        // CANVAS
+        // =================================================
+
+        this.canvas =
+            document.getElementById(
+                "game-canvas"
+            );
+
+        if (!this.canvas) {
+
+            throw new Error(
+                "Canvas #game-canvas introuvable."
+            );
+        }
+
+        this.ctx =
+            this.canvas.getContext("2d");
+
+        this.cellSize = 64;
+        this.gridX = 0;
+        this.gridY = 0;
+
+
+        // =================================================
+        // ÉCRANS
+        // =================================================
+
+        this.gameScreen =
+            document.getElementById(
+                "game-screen"
+            );
+
+        this.chapterScreen =
+            document.getElementById(
+                "chapter-screen"
+            );
+
+        this.mapScreen =
+            document.getElementById(
+                "map-screen"
+            );
+
+
+        // =================================================
+        // INFORMATIONS DU NIVEAU
+        // =================================================
+
+        this.chapterBadge =
+            document.getElementById(
+                "chapter-badge"
+            );
+
+        this.difficultyBadge =
+            document.getElementById(
+                "difficulty-badge"
+            );
+
+        this.missionTitle =
+            document.getElementById(
+                "mission-title"
+            );
+
+        this.missionInstruction =
+            document.getElementById(
+                "mission-instruction"
+            );
+
+        this.gameStatus =
+            document.getElementById(
+                "game-status"
+            );
+
+
+        // =================================================
+        // COURS
+        // =================================================
+
+        this.courseChapterNumber =
+            document.getElementById(
+                "course-chapter-number"
+            );
+
+        this.courseTitle =
+            document.getElementById(
+                "course-title"
+            );
+
+        this.courseSubtitle =
+            document.getElementById(
+                "course-subtitle"
+            );
+
+        this.courseContent =
+            document.getElementById(
+                "course-content"
+            );
+
+
+        // =================================================
+        // CARTE
+        // =================================================
+
+        this.mapTitle =
+            document.getElementById(
+                "map-title"
+            );
+
+        this.mapSubtitle =
+            document.getElementById(
+                "map-subtitle"
+            );
+
+        this.levelNodes =
+            [
+                document.getElementById(
+                    "level-node-1"
+                ),
+
+                document.getElementById(
+                    "level-node-2"
+                ),
+
+                document.getElementById(
+                    "level-node-3"
+                )
+            ];
+
+
+        // =================================================
+        // FENÊTRE DE CODE
+        // =================================================
+
+        this.codeWindow =
+            document.getElementById(
+                "code-window"
+            );
+
+        this.codeWindowHeader =
+            document.getElementById(
+                "code-window-header"
+            );
+
+        this.codeEditor =
+            document.getElementById(
+                "code-editor"
+            );
+
+        this.consoleOutput =
+            document.getElementById(
+                "console-output"
+            );
+
+        this.runCodeButton =
+            document.getElementById(
+                "run-code-button"
+            );
+
+
+        // =================================================
+        // MODALE
+        // =================================================
+
+        this.modalBackground =
+            document.getElementById(
+                "modal-background"
+            );
+
+        this.messageModal =
+            document.getElementById(
+                "message-modal"
+            );
+
+        this.modalLabel =
+            document.getElementById(
+                "modal-label"
+            );
+
+        this.modalTitle =
+            document.getElementById(
+                "modal-title"
+            );
+
+        this.modalMessage =
+            document.getElementById(
+                "modal-message"
+            );
+
+        this.modalPrimaryButton =
+            document.getElementById(
+                "modal-primary-button"
+            );
+
+        this.modalSecondaryButton =
+            document.getElementById(
+                "modal-secondary-button"
+            );
+
+
+        // =================================================
+        // INSTALLATION
+        // =================================================
 
         this.installEvents();
+
         this.makeCodeWindowDraggable();
+
         this.resizeCanvas();
+
 
         window.addEventListener(
             "resize",
             () => {
+
                 this.resizeCanvas();
                 this.drawWorld();
             }
@@ -176,11 +296,18 @@ class PytUI {
 
         this.game = game;
 
-        if (game && game.level) {
+
+        if (
+            game
+            &&
+            game.level
+        ) {
+
             this.setLevel(
                 game.level
             );
         }
+
 
         this.drawWorld();
     }
@@ -192,13 +319,19 @@ class PytUI {
             return;
         }
 
+
         this.level = level;
 
         this.currentChapter =
-            Number(level.chapter) || 1;
+            Number(
+                level.chapter
+            );
 
         this.currentExercise =
-            Number(level.exercise) || 1;
+            Number(
+                level.exercise
+            );
+
 
         this.refreshLevelInformation();
     }
@@ -210,99 +343,198 @@ class PytUI {
 
     installEvents() {
 
-        document
-            .getElementById("open-code-button")
-            .addEventListener(
+        const courseButton =
+            document.getElementById(
+                "course-button"
+            );
+
+        const mapButton =
+            document.getElementById(
+                "map-button"
+            );
+
+        const openCodeButton =
+            document.getElementById(
+                "open-code-button"
+            );
+
+        const restartButton =
+            document.getElementById(
+                "restart-button"
+            );
+
+        const closeCodeButton =
+            document.getElementById(
+                "close-code-button"
+            );
+
+        const clearCodeButton =
+            document.getElementById(
+                "clear-code-button"
+            );
+
+        const codeRestartButton =
+            document.getElementById(
+                "code-restart-button"
+            );
+
+        const courseMapButton =
+            document.getElementById(
+                "course-map-button"
+            );
+
+        const mapCourseButton =
+            document.getElementById(
+                "map-course-button"
+            );
+
+
+        if (courseButton) {
+
+            courseButton.addEventListener(
                 "click",
-                () => this.openCodeWindow()
+                () => {
+
+                    this.showCourse(
+                        this.currentChapter
+                    );
+                }
             );
+        }
 
 
-        document
-            .getElementById("close-code-button")
-            .addEventListener(
+        if (mapButton) {
+
+            mapButton.addEventListener(
                 "click",
-                () => this.closeCodeWindow()
+                () => {
+
+                    this.showMap();
+                }
             );
+        }
 
 
-        document
-            .getElementById("clear-code-button")
-            .addEventListener(
+        if (openCodeButton) {
+
+            openCodeButton.addEventListener(
                 "click",
-                () => this.clearEditor()
+                () => {
+
+                    this.openCodeWindow();
+                }
             );
+        }
 
 
-        document
-            .getElementById("run-code-button")
-            .addEventListener(
+        if (restartButton) {
+
+            restartButton.addEventListener(
                 "click",
-                () => this.requestRunCode()
+                () => {
+
+                    this.requestRestart();
+                }
             );
+        }
 
 
-        document
-            .getElementById("restart-button")
-            .addEventListener(
+        if (closeCodeButton) {
+
+            closeCodeButton.addEventListener(
                 "click",
-                () => this.requestRestart()
+                () => {
+
+                    this.closeCodeWindow();
+                }
             );
+        }
 
 
-        document
-            .getElementById("code-restart-button")
-            .addEventListener(
+        if (clearCodeButton) {
+
+            clearCodeButton.addEventListener(
                 "click",
-                () => this.requestRestart()
+                () => {
+
+                    this.codeEditor.value = "";
+
+                    this.codeEditor.focus();
+                }
             );
+        }
 
 
-        document
-            .getElementById("map-button")
-            .addEventListener(
+        if (codeRestartButton) {
+
+            codeRestartButton.addEventListener(
                 "click",
-                () => this.showMap()
+                () => {
+
+                    this.requestRestart();
+                }
             );
+        }
 
 
-        document
-            .getElementById("course-button")
-            .addEventListener(
+        if (this.runCodeButton) {
+
+            this.runCodeButton.addEventListener(
                 "click",
-                () => this.showCourse(
-                    this.currentChapter
-                )
+                () => {
+
+                    this.requestRunCode();
+                }
             );
+        }
 
 
-        document
-            .getElementById("course-map-button")
-            .addEventListener(
+        if (courseMapButton) {
+
+            courseMapButton.addEventListener(
                 "click",
-                () => this.showMap()
+                () => {
+
+                    this.showMap();
+                }
             );
+        }
 
 
-        document
-            .getElementById("map-course-button")
-            .addEventListener(
+        if (mapCourseButton) {
+
+            mapCourseButton.addEventListener(
                 "click",
-                () => this.showCourse(
-                    this.currentChapter
-                )
+                () => {
+
+                    this.showCourse(
+                        this.currentChapter
+                    );
+                }
             );
+        }
 
 
-        for (let exercise = 1; exercise <= 3; exercise++) {
+        for (
+            const node
+            of this.levelNodes
+        ) {
 
-            const node = document.getElementById(
-                `level-node-${exercise}`
-            );
+            if (!node) {
+                continue;
+            }
+
 
             node.addEventListener(
                 "click",
                 () => {
+
+                    const exercise =
+                        Number(
+                            node.dataset.exercise
+                        );
+
+
                     this.selectExercise(
                         exercise
                     );
@@ -313,7 +545,7 @@ class PytUI {
 
 
     // =====================================================
-    // INFORMATIONS DU NIVEAU
+    // INFORMATIONS
     // =====================================================
 
     refreshLevelInformation() {
@@ -322,22 +554,53 @@ class PytUI {
             return;
         }
 
-        this.chapterBadge.textContent =
-            `CHAPITRE ${this.currentChapter} · ` +
-            `EXERCICE ${this.currentExercise}/3`;
 
-        this.difficultyBadge.textContent =
-            String(
-                this.level.difficulty || ""
-            ).toUpperCase();
+        if (this.chapterBadge) {
 
-        this.missionTitle.textContent =
-            this.level.title || "Mission";
+            this.chapterBadge.textContent =
+                `CHAPITRE ${this.currentChapter}`;
+        }
 
-        this.missionInstruction.textContent =
-            this.level.instruction || "";
 
-        this.refreshStatus();
+        if (this.difficultyBadge) {
+
+            this.difficultyBadge.textContent =
+                this.level.difficulty
+                || "";
+        }
+
+
+        if (this.missionTitle) {
+
+            this.missionTitle.textContent =
+                this.level.title
+                || "Mission";
+        }
+
+
+        if (this.missionInstruction) {
+
+            this.missionInstruction.textContent =
+                this.level.instruction
+                || "";
+        }
+
+
+        this.setStatus(
+            "Pyt attend ton programme."
+        );
+    }
+
+
+    setStatus(text) {
+
+        if (!this.gameStatus) {
+            return;
+        }
+
+
+        this.gameStatus.textContent =
+            text;
     }
 
 
@@ -347,13 +610,28 @@ class PytUI {
 
     hidePages() {
 
-        this.chapterScreen.classList.add(
-            "hidden"
-        );
+        if (this.gameScreen) {
 
-        this.mapScreen.classList.add(
-            "hidden"
-        );
+            this.gameScreen.classList.add(
+                "hidden"
+            );
+        }
+
+
+        if (this.chapterScreen) {
+
+            this.chapterScreen.classList.add(
+                "hidden"
+            );
+        }
+
+
+        if (this.mapScreen) {
+
+            this.mapScreen.classList.add(
+                "hidden"
+            );
+        }
     }
 
 
@@ -361,9 +639,14 @@ class PytUI {
 
         this.hidePages();
 
-        this.gameScreen.classList.remove(
-            "hidden"
-        );
+
+        if (this.gameScreen) {
+
+            this.gameScreen.classList.remove(
+                "hidden"
+            );
+        }
+
 
         this.resizeCanvas();
         this.drawWorld();
@@ -374,248 +657,287 @@ class PytUI {
     // COURS
     // =====================================================
 
-    showCourse(chapter, automatic = false) {
+    getCourseData(chapter) {
 
-        this.stopAnimation();
+        if (
+            typeof window.getCourse
+            === "function"
+        ) {
 
-        this.closeCodeWindow();
+            return window.getCourse(
+                chapter
+            );
+        }
 
-        const course = this.getCourseData(
-            chapter
-        );
+
+        if (
+            window.COURSES
+        ) {
+
+            return (
+                window.COURSES[
+                    chapter
+                ]
+                || null
+            );
+        }
+
+
+        return null;
+    }
+
+
+    showCourse(
+        chapter,
+        automatic = false
+    ) {
+
+        chapter =
+            Number(chapter);
+
+
+        const course =
+            this.getCourseData(
+                chapter
+            );
+
 
         if (!course) {
 
             this.showMessage(
-                "Cours indisponible",
+                "Cours introuvable",
                 "Le cours de ce chapitre n'est pas disponible."
             );
 
-            return;
+            return false;
         }
 
-        this.currentChapter = chapter;
 
-        this.gameScreen.classList.add(
-            "hidden"
-        );
+        this.stopAnimation();
+        this.closeCodeWindow();
+        this.hidePages();
 
-        this.mapScreen.classList.add(
-            "hidden"
-        );
 
-        this.chapterScreen.classList.remove(
-            "hidden"
-        );
+        this.currentChapter =
+            chapter;
 
-        document.getElementById(
-            "course-chapter-number"
-        ).textContent =
-            `CHAPITRE ${chapter}`;
 
-        document.getElementById(
-            "course-title"
-        ).textContent =
-            course.title || `Chapitre ${chapter}`;
+        if (this.chapterScreen) {
 
-        document.getElementById(
-            "course-subtitle"
-        ).textContent =
-            course.subtitle || "";
-
-        const container = document.getElementById(
-            "course-content"
-        );
-
-        container.innerHTML = "";
-
-        // -------------------------------------------------
-        // INTRODUCTION
-        // -------------------------------------------------
-
-        const introduction =
-            course.introduction ||
-            course.intro ||
-            "";
-
-        if (introduction) {
-
-            const intro = document.createElement(
-                "p"
-            );
-
-            intro.className =
-                "course-introduction";
-
-            intro.textContent =
-                introduction;
-
-            container.appendChild(
-                intro
+            this.chapterScreen.classList.remove(
+                "hidden"
             );
         }
 
-        // -------------------------------------------------
-        // SECTIONS
-        // -------------------------------------------------
 
-        const sections =
-            Array.isArray(course.sections)
-                ? course.sections
-                : [];
+        if (this.courseChapterNumber) {
 
-        for (const section of sections) {
-
-            const card = document.createElement(
-                "article"
-            );
-
-            card.className =
-                "course-card";
+            this.courseChapterNumber.textContent =
+                `CHAPITRE ${chapter}`;
+        }
 
 
-            const title = document.createElement(
-                "h3"
-            );
+        if (this.courseTitle) {
 
-            title.textContent =
-                section.title || "";
-
-            card.appendChild(
-                title
-            );
+            this.courseTitle.textContent =
+                course.title
+                || `Chapitre ${chapter}`;
+        }
 
 
-            if (section.text) {
+        if (this.courseSubtitle) {
 
-                const text = document.createElement(
-                    "p"
-                );
+            this.courseSubtitle.textContent =
+                course.subtitle
+                || "";
+        }
 
-                text.textContent =
-                    section.text;
 
-                card.appendChild(
-                    text
+        if (this.courseContent) {
+
+            this.courseContent.innerHTML = "";
+
+
+            const intro =
+                course.introduction
+                ||
+                course.intro;
+
+
+            if (intro) {
+
+                const introduction =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                introduction.className =
+                    "course-introduction";
+
+
+                introduction.textContent =
+                    intro;
+
+
+                this.courseContent.appendChild(
+                    introduction
                 );
             }
 
 
-            const exampleText =
-                section.example ||
-                section.code ||
-                "";
-
-            if (exampleText) {
-
-                const example = document.createElement(
-                    "pre"
-                );
-
-                example.className =
-                    "course-example";
-
-                example.textContent =
-                    exampleText;
-
-                card.appendChild(
-                    example
-                );
-            }
+            const sections =
+                Array.isArray(
+                    course.sections
+                )
+                    ? course.sections
+                    : [];
 
 
-            if (section.explanation) {
+            for (
+                const section
+                of sections
+            ) {
 
-                const explanation =
+                const card =
+                    document.createElement(
+                        "article"
+                    );
+
+
+                card.className =
+                    "course-card";
+
+
+                const title =
+                    document.createElement(
+                        "h3"
+                    );
+
+
+                title.textContent =
+                    section.title
+                    || "";
+
+
+                const text =
                     document.createElement(
                         "p"
                     );
 
-                explanation.className =
-                    "course-explanation";
 
-                explanation.textContent =
-                    section.explanation;
+                text.textContent =
+                    section.text
+                    || "";
+
 
                 card.appendChild(
-                    explanation
+                    title
+                );
+
+
+                card.appendChild(
+                    text
+                );
+
+
+                const example =
+                    section.example
+                    ||
+                    section.code;
+
+
+                if (example) {
+
+                    const pre =
+                        document.createElement(
+                            "pre"
+                        );
+
+
+                    const code =
+                        document.createElement(
+                            "code"
+                        );
+
+
+                    code.textContent =
+                        example;
+
+
+                    pre.appendChild(
+                        code
+                    );
+
+
+                    card.appendChild(
+                        pre
+                    );
+                }
+
+
+                if (
+                    section.explanation
+                ) {
+
+                    const explanation =
+                        document.createElement(
+                            "p"
+                        );
+
+
+                    explanation.className =
+                        "course-explanation";
+
+
+                    explanation.textContent =
+                        section.explanation;
+
+
+                    card.appendChild(
+                        explanation
+                    );
+                }
+
+
+                this.courseContent.appendChild(
+                    card
                 );
             }
-
-
-            container.appendChild(
-                card
-            );
         }
+
 
         this.seenCourses.add(
             chapter
         );
 
-        if (automatic) {
-
-            this.setStatus(
-                "Consulte le cours avant de continuer."
-            );
-        }
-    }
-
-
-    showCourseAtChapterStart(chapter) {
-
-        if (
-            this.seenCourses.has(chapter)
-        ) {
-            return false;
-        }
-
-        this.showCourse(
-            chapter,
-            true
-        );
 
         return true;
     }
 
 
-    getCourseData(chapter) {
+    showCourseAtChapterStart(
+        chapter
+    ) {
 
-        /*
-        levels.js pourra exposer soit :
+        chapter =
+            Number(chapter);
 
-        getCourse(chapter)
-
-        soit :
-
-        COURSES[chapter]
-
-        On accepte les deux formes afin que
-        l'interface reste simple à raccorder.
-        */
 
         if (
-            typeof getCourse === "function"
-        ) {
-
-            return getCourse(
+            this.seenCourses.has(
                 chapter
-            );
-        }
-
-        if (
-            typeof COURSES !== "undefined"
-            &&
-            COURSES
+            )
         ) {
 
-            return (
-                COURSES[chapter] ||
-                COURSES[String(chapter)] ||
-                null
-            );
+            return false;
         }
 
-        return null;
+
+        return this.showCourse(
+            chapter,
+            true
+        );
     }
 
 
@@ -627,18 +949,16 @@ class PytUI {
 
         this.stopAnimation();
         this.closeCodeWindow();
+        this.hidePages();
 
-        this.gameScreen.classList.add(
-            "hidden"
-        );
 
-        this.chapterScreen.classList.add(
-            "hidden"
-        );
+        if (this.mapScreen) {
 
-        this.mapScreen.classList.remove(
-            "hidden"
-        );
+            this.mapScreen.classList.remove(
+                "hidden"
+            );
+        }
+
 
         this.refreshMap();
     }
@@ -646,21 +966,26 @@ class PytUI {
 
     refreshMap() {
 
-        const course = this.getCourseData(
-            this.currentChapter
-        );
+        const course =
+            this.getCourseData(
+                this.currentChapter
+            );
 
-        document.getElementById(
-            "map-title"
-        ).textContent =
-            `CARTE DU CHAPITRE ${this.currentChapter}`;
 
-        document.getElementById(
-            "map-subtitle"
-        ).textContent =
-            course
-                ? course.title
-                : "";
+        if (this.mapTitle) {
+
+            this.mapTitle.textContent =
+                `CHAPITRE ${this.currentChapter}`;
+        }
+
+
+        if (this.mapSubtitle) {
+
+            this.mapSubtitle.textContent =
+                course
+                    ? course.title
+                    : "Choisis un exercice";
+        }
 
 
         for (
@@ -670,14 +995,15 @@ class PytUI {
         ) {
 
             const node =
-                document.getElementById(
-                    `level-node-${exercise}`
-                );
+                this.levelNodes[
+                    exercise - 1
+                ];
 
-            const circle =
-                node.querySelector(
-                    ".node-circle"
-                );
+
+            if (!node) {
+                continue;
+            }
+
 
             const key =
                 this.levelKey(
@@ -685,60 +1011,68 @@ class PytUI {
                     exercise
                 );
 
+
             const unlocked =
                 this.unlockedLevels.has(
                     key
                 );
+
 
             const completed =
                 this.completedLevels.has(
                     key
                 );
 
-            const current =
-                this.currentExercise === exercise;
+
+            node.disabled =
+                !unlocked;
 
 
-            node.classList.remove(
+            node.classList.toggle(
                 "locked",
-                "completed",
-                "current"
+                !unlocked
             );
 
 
-            if (completed) {
+            node.classList.toggle(
+                "completed",
+                completed
+            );
 
-                node.classList.add(
-                    "completed"
+
+            node.classList.toggle(
+                "current",
+                exercise
+                ===
+                this.currentExercise
+            );
+
+
+            const circle =
+                node.querySelector(
+                    ".level-circle"
                 );
 
-                circle.textContent = "✓";
 
-                node.disabled = false;
+            if (circle) {
 
-            } else if (unlocked) {
+                if (completed) {
 
-                circle.textContent =
-                    String(exercise);
+                    circle.textContent =
+                        "✓";
 
-                node.disabled = false;
+                } else if (
+                    !unlocked
+                ) {
 
-                if (current) {
+                    circle.textContent =
+                        "×";
 
-                    node.classList.add(
-                        "current"
-                    );
+                } else {
+
+                    circle.textContent =
+                        String(exercise);
                 }
-
-            } else {
-
-                node.classList.add(
-                    "locked"
-                );
-
-                circle.textContent = "×";
-
-                node.disabled = true;
             }
         }
     }
@@ -746,29 +1080,38 @@ class PytUI {
 
     selectExercise(exercise) {
 
+        exercise =
+            Number(exercise);
+
+
         const key =
             this.levelKey(
                 this.currentChapter,
                 exercise
             );
 
+
         if (
-            !this.unlockedLevels.has(key)
+            !this.unlockedLevels.has(
+                key
+            )
         ) {
+
             return;
         }
+
 
         this.currentExercise =
             exercise;
 
-        this.hidePages();
 
-        this.gameScreen.classList.remove(
-            "hidden"
-        );
+        this.showGame();
 
-        this.clearEditor();
+
+        this.codeEditor.value = "";
+
         this.clearConsole();
+
 
         if (
             typeof this.onSelectLevel
@@ -780,9 +1123,6 @@ class PytUI {
                 exercise
             );
         }
-
-        this.resizeCanvas();
-        this.drawWorld();
     }
 
 
@@ -790,9 +1130,14 @@ class PytUI {
     // PROGRESSION
     // =====================================================
 
-    levelKey(chapter, exercise) {
+    levelKey(
+        chapter,
+        exercise
+    ) {
 
-        return `${chapter}-${exercise}`;
+        return (
+            `${chapter}-${exercise}`
+        );
     }
 
 
@@ -810,79 +1155,231 @@ class PytUI {
                 exercise
             );
 
+
         const firstCompletion =
             !this.completedLevels.has(
                 key
             );
+
 
         this.completedLevels.add(
             key
         );
 
 
-        if (exercise < 3) {
+        // -------------------------------------------------
+        // EXERCICE 1 OU 2
+        // -------------------------------------------------
 
-            const nextKey =
+        if (
+            exercise < 3
+        ) {
+
+            const nextExercise =
+                exercise + 1;
+
+
+            this.unlockedLevels.add(
                 this.levelKey(
                     chapter,
-                    exercise + 1
-                );
-
-            this.unlockedLevels.add(
-                nextKey
+                    nextExercise
+                )
             );
 
-        } else if (chapter < 9) {
 
-            const nextKey =
+            this.refreshMap();
+
+
+            if (
+                firstCompletion
+            ) {
+
+                this.showMessage(
+                    "Mission réussie !",
+                    `L'exercice ${nextExercise} est maintenant débloqué.`,
+                    {
+                        label:
+                            "MISSION TERMINÉE",
+
+                        primaryText:
+                            "VOIR LA CARTE",
+
+                        primaryAction:
+                            () => {
+
+                                this.showMap();
+                            },
+
+                        secondaryText:
+                            "RESTER ICI",
+
+                        secondaryAction:
+                            () => {
+
+                                this.showGame();
+                            }
+                    }
+                );
+
+            } else {
+
+                this.showMessage(
+                    "Mission réussie !",
+                    "Tu avais déjà terminé cet exercice.",
+                    {
+                        primaryText:
+                            "VOIR LA CARTE",
+
+                        primaryAction:
+                            () => {
+
+                                this.showMap();
+                            }
+                    }
+                );
+            }
+
+
+            return;
+        }
+
+
+        // -------------------------------------------------
+        // FIN D'UN CHAPITRE 1 À 8
+        // -------------------------------------------------
+
+        if (
+            chapter < 9
+        ) {
+
+            const nextChapter =
+                chapter + 1;
+
+
+            this.unlockedLevels.add(
                 this.levelKey(
-                    chapter + 1,
+                    nextChapter,
                     1
-                );
-
-            this.unlockedLevels.add(
-                nextKey
-            );
-        }
-
-
-        this.refreshStatus();
-
-
-        if (!firstCompletion) {
-            return;
-        }
-
-
-        if (exercise < 3) {
-
-            this.showMessage(
-                "Mission réussie !",
-                `Bravo ! L'exercice ${exercise + 1} ` +
-                "est maintenant débloqué.\n\n" +
-                "Ouvre la carte quand tu veux continuer."
+                )
             );
 
-            return;
-        }
-
-
-        if (chapter < 9) {
 
             this.showMessage(
                 "Chapitre terminé !",
-                `Tu as terminé le chapitre ${chapter}.\n\n` +
-                `Le chapitre ${chapter + 1} est débloqué.`
+                `Bravo ! Tu as terminé le chapitre ${chapter}. Le chapitre ${nextChapter} est débloqué.`,
+                {
+                    label:
+                        "NOUVEAU CHAPITRE",
+
+                    primaryText:
+                        "CONTINUER",
+
+                    primaryAction:
+                        () => {
+
+                            this.goToNextChapter(
+                                nextChapter
+                            );
+                        },
+
+                    secondaryText:
+                        "RESTER ICI",
+
+                    secondaryAction:
+                        () => {
+
+                            this.showGame();
+                        }
+                }
             );
+
 
             return;
         }
 
 
+        // -------------------------------------------------
+        // FIN DU JEU
+        // -------------------------------------------------
+
         this.showMessage(
             "PYT terminé !",
-            "Félicitations ! Tu as terminé les 9 chapitres " +
-            "et les 27 exercices."
+            "Bravo ! Tu as réussi les 27 exercices et terminé l'épreuve finale.",
+            {
+                label:
+                    "MISSION ACCOMPLIE",
+
+                primaryText:
+                    "VOIR LA CARTE",
+
+                primaryAction:
+                    () => {
+
+                        this.showMap();
+                    },
+
+                secondaryText:
+                    "RESTER ICI",
+
+                secondaryAction:
+                    () => {
+
+                        this.showGame();
+                    }
+            }
+        );
+    }
+
+
+    goToNextChapter(
+        chapter
+    ) {
+
+        chapter =
+            Number(chapter);
+
+
+        if (
+            chapter < 1
+            ||
+            chapter > 9
+        ) {
+            return;
+        }
+
+
+        this.currentChapter =
+            chapter;
+
+        this.currentExercise = 1;
+
+
+        /*
+        On charge d'abord le niveau 1 du
+        nouveau chapitre pour synchroniser
+        app.js, game.js et ui.js.
+        */
+
+        if (
+            typeof this.onSelectLevel
+            === "function"
+        ) {
+
+            this.onSelectLevel(
+                chapter,
+                1
+            );
+        }
+
+
+        /*
+        Puis le joueur voit le cours avant
+        d'accéder à la carte.
+        */
+
+        this.showCourse(
+            chapter,
+            true
         );
     }
 
@@ -899,19 +1396,29 @@ class PytUI {
                 this.currentExercise
             );
 
-        const oldValue =
-            this.attempts.get(key) || 0;
+
+        const previous =
+            this.attempts.get(
+                key
+            )
+            || 0;
+
+
+        const next =
+            previous + 1;
+
 
         this.attempts.set(
             key,
-            oldValue + 1
+            next
         );
 
-        return oldValue + 1;
+
+        return next;
     }
 
 
-    handleFailedAttempt() {
+    getAttemptCount() {
 
         const key =
             this.levelKey(
@@ -919,37 +1426,61 @@ class PytUI {
                 this.currentExercise
             );
 
+
+        return (
+            this.attempts.get(
+                key
+            )
+            || 0
+        );
+    }
+
+
+    handleFailedAttempt() {
+
         const attempts =
-            this.attempts.get(key) || 0;
+            this.getAttemptCount();
+
 
         /*
-        Le cours ne revient automatiquement
-        qu'après le premier échec de l'exercice.
+        Proposition du cours uniquement
+        après le premier échec.
         */
 
-        if (attempts !== 1) {
+        if (
+            attempts !== 1
+        ) {
+
             return;
         }
 
 
         this.showMessage(
-            "Besoin d'aide ?",
-            "La mission n'est pas encore réussie.\n\n" +
-            "Tu peux revoir le cours avant de réessayer.",
+            "Besoin d'un rappel ?",
+            "Tu peux revoir le cours de ce chapitre avant de réessayer.",
             {
-                primaryText: "REVOIR LE COURS",
+                label:
+                    "PREMIER ESSAI",
 
-                secondaryText: "RÉESSAYER",
+                primaryText:
+                    "REVOIR LE COURS",
 
-                onPrimary: () => {
-                    this.showCourse(
-                        this.currentChapter
-                    );
-                },
+                primaryAction:
+                    () => {
 
-                onSecondary: () => {
-                    this.showGame();
-                }
+                        this.showCourse(
+                            this.currentChapter
+                        );
+                    },
+
+                secondaryText:
+                    "RÉESSAYER",
+
+                secondaryAction:
+                    () => {
+
+                        this.showGame();
+                    }
             }
         );
     }
@@ -961,26 +1492,33 @@ class PytUI {
 
     openCodeWindow() {
 
-        /*
-        Dans le navigateur il n'y a plus le bug
-        de la fenêtre Tkinter cachée dans la
-        barre des tâches.
+        if (!this.codeWindow) {
+            return;
+        }
 
-        L'éditeur est toujours dans la même page.
-        */
 
         this.codeWindow.classList.remove(
             "hidden"
         );
 
+
         this.codeWindow.style.zIndex =
             "60";
 
-        this.codeEditor.focus();
+
+        if (this.codeEditor) {
+
+            this.codeEditor.focus();
+        }
     }
 
 
     closeCodeWindow() {
+
+        if (!this.codeWindow) {
+            return;
+        }
+
 
         this.codeWindow.classList.add(
             "hidden"
@@ -988,16 +1526,17 @@ class PytUI {
     }
 
 
-    // =====================================================
-    // DÉPLACEMENT DE LA FENÊTRE DE CODE
-    // =====================================================
-
     makeCodeWindowDraggable() {
 
-        const header =
-            document.getElementById(
-                "code-window-header"
-            );
+        if (
+            !this.codeWindow
+            ||
+            !this.codeWindowHeader
+        ) {
+
+            return;
+        }
+
 
         let dragging = false;
 
@@ -1005,95 +1544,101 @@ class PytUI {
         let offsetY = 0;
 
 
-        header.addEventListener(
+        this.codeWindowHeader.addEventListener(
             "mousedown",
-            (event) => {
-
-                /*
-                Le bouton X doit rester cliquable.
-                */
+            event => {
 
                 if (
                     event.target.closest(
-                        ".window-control"
+                        "#close-code-button"
                     )
                 ) {
+
                     return;
                 }
+
+
+                dragging = true;
+
 
                 const rect =
                     this.codeWindow
                         .getBoundingClientRect();
 
-                dragging = true;
 
                 offsetX =
                     event.clientX
-                    - rect.left;
+                    -
+                    rect.left;
 
                 offsetY =
                     event.clientY
-                    - rect.top;
+                    -
+                    rect.top;
 
-                document.body.style.userSelect =
-                    "none";
+
+                this.codeWindow.style.left =
+                    `${rect.left}px`;
+
+                this.codeWindow.style.top =
+                    `${rect.top}px`;
+
+                this.codeWindow.style.right =
+                    "auto";
+
+
+                event.preventDefault();
             }
         );
 
 
         document.addEventListener(
             "mousemove",
-            (event) => {
+            event => {
 
                 if (!dragging) {
                     return;
                 }
 
-                const width =
-                    this.codeWindow.offsetWidth;
 
-                const height =
-                    this.codeWindow.offsetHeight;
+                const rect =
+                    this.codeWindow
+                        .getBoundingClientRect();
+
 
                 let left =
                     event.clientX
-                    - offsetX;
+                    -
+                    offsetX;
 
                 let top =
                     event.clientY
-                    - offsetY;
+                    -
+                    offsetY;
 
 
-                const maxLeft =
+                left =
                     Math.max(
                         0,
-                        window.innerWidth
-                        - width
+                        Math.min(
+                            left,
+                            window.innerWidth
+                            -
+                            rect.width
+                        )
                     );
 
-                const maxTop =
+
+                top =
                     Math.max(
                         0,
-                        window.innerHeight
-                        - 45
+                        Math.min(
+                            top,
+                            window.innerHeight
+                            -
+                            rect.height
+                        )
                     );
-
-
-                left = Math.max(
-                    0,
-                    Math.min(
-                        left,
-                        maxLeft
-                    )
-                );
-
-                top = Math.max(
-                    0,
-                    Math.min(
-                        top,
-                        maxTop
-                    )
-                );
 
 
                 this.codeWindow.style.left =
@@ -1101,9 +1646,6 @@ class PytUI {
 
                 this.codeWindow.style.top =
                     `${top}px`;
-
-                this.codeWindow.style.right =
-                    "auto";
             }
         );
 
@@ -1113,29 +1655,8 @@ class PytUI {
             () => {
 
                 dragging = false;
-
-                document.body.style.userSelect =
-                    "";
             }
         );
-    }
-
-
-    // =====================================================
-    // ÉDITEUR
-    // =====================================================
-
-    getCode() {
-
-        return this.codeEditor.value;
-    }
-
-
-    clearEditor() {
-
-        this.codeEditor.value = "";
-
-        this.codeEditor.focus();
     }
 
 
@@ -1145,8 +1666,13 @@ class PytUI {
 
     setConsole(text) {
 
+        if (!this.consoleOutput) {
+            return;
+        }
+
+
         this.consoleOutput.textContent =
-            text || "";
+            String(text);
     }
 
 
@@ -1159,15 +1685,17 @@ class PytUI {
 
 
     // =====================================================
-    // DEMANDE EXÉCUTION
+    // EXÉCUTER LE CODE
     // =====================================================
 
     requestRunCode() {
 
-        if (this.animationRunning) {
+        if (
+            this.animationRunning
+        ) {
 
             this.setConsole(
-                "Pyt est déjà en mouvement."
+                "Attends la fin de l'animation."
             );
 
             return;
@@ -1175,12 +1703,17 @@ class PytUI {
 
 
         const code =
-            this.getCode();
+            this.codeEditor
+                ? this.codeEditor.value
+                : "";
 
-        if (!code.trim()) {
+
+        if (
+            code.trim() === ""
+        ) {
 
             this.setConsole(
-                "Écris un programme avant de lancer Pyt."
+                "Écris un programme avant de l'exécuter."
             );
 
             return;
@@ -1204,18 +1737,19 @@ class PytUI {
 
 
         this.setConsole(
-            "Le moteur d'exécution n'est pas encore connecté."
+            "Le runner n'est pas connecté."
         );
     }
 
 
     // =====================================================
-    // RESET
+    // RECOMMENCER
     // =====================================================
 
     requestRestart() {
 
         this.stopAnimation();
+
 
         if (
             typeof this.onRestart
@@ -1225,13 +1759,15 @@ class PytUI {
             this.onRestart();
         }
 
+
         this.clearConsole();
+
         this.drawWorld();
     }
 
 
     // =====================================================
-    // ANIMATION
+    // ANIMATION DES ACTIONS
     // =====================================================
 
     playActions(
@@ -1250,7 +1786,8 @@ class PytUI {
                 typeof onFinished
                 === "function"
             ) {
-                onFinished();
+
+                onFinished(true);
             }
 
             return;
@@ -1259,10 +1796,6 @@ class PytUI {
 
         this.stopAnimation();
 
-        this.actionQueue =
-            actions.slice();
-
-        this.actionIndex = 0;
 
         this.animationRunning = true;
 
@@ -1270,114 +1803,125 @@ class PytUI {
             false
         );
 
+
         this.setStatus(
             "Pyt exécute ton programme..."
         );
 
 
-        const next = () => {
-
-            if (!this.animationRunning) {
-                return;
-            }
+        let index = 0;
 
 
-            if (
-                this.actionIndex
-                >=
-                this.actionQueue.length
-            ) {
+        const next =
+            () => {
 
-                this.animationRunning =
-                    false;
+                if (
+                    index >= actions.length
+                ) {
 
-                this.animationTimer =
-                    null;
+                    this.animationRunning =
+                        false;
 
-                this.setRunButtonEnabled(
-                    true
-                );
+                    this.animationTimer =
+                        null;
+
+                    this.setRunButtonEnabled(
+                        true
+                    );
+
+
+                    if (
+                        typeof onFinished
+                        === "function"
+                    ) {
+
+                        onFinished(true);
+                    }
+
+                    return;
+                }
+
+
+                const action =
+                    actions[index];
+
+
+                let success = false;
+
+
+                try {
+
+                    success =
+                        performAction(
+                            action
+                        )
+                        !== false;
+
+                } catch (error) {
+
+                    console.error(
+                        error
+                    );
+
+                    success = false;
+                }
+
 
                 this.drawWorld();
 
 
-                if (
-                    typeof onFinished
-                    === "function"
-                ) {
+                if (!success) {
 
-                    onFinished();
+                    this.animationRunning =
+                        false;
+
+                    this.animationTimer =
+                        null;
+
+                    this.setRunButtonEnabled(
+                        true
+                    );
+
+
+                    if (
+                        this.game
+                        &&
+                        this.game.message
+                    ) {
+
+                        this.setStatus(
+                            this.game.message
+                        );
+
+                    } else {
+
+                        this.setStatus(
+                            "Pyt est bloqué."
+                        );
+                    }
+
+
+                    if (
+                        typeof onFinished
+                        === "function"
+                    ) {
+
+                        onFinished(false);
+                    }
+
+                    return;
                 }
 
-                return;
-            }
 
+                index++;
 
-            const action =
-                this.actionQueue[
-                    this.actionIndex
-                ];
-
-            this.actionIndex += 1;
-
-
-            let result = true;
-
-            if (
-                typeof performAction
-                === "function"
-            ) {
-
-                result =
-                    performAction(
-                        action
-                    );
-            }
-
-
-            this.drawWorld();
-
-
-            if (result === false) {
-
-                this.animationRunning =
-                    false;
 
                 this.animationTimer =
-                    null;
-
-                this.setRunButtonEnabled(
-                    true
-                );
-
-
-                if (
-                    typeof onFinished
-                    === "function"
-                ) {
-
-                    onFinished(
-                        false
+                    window.setTimeout(
+                        next,
+                        this.actionDelay
                     );
-                }
-
-                return;
-            }
-
-
-            /*
-            Une action toutes les 2 secondes.
-
-            forward(3) doit être fourni par le runner
-            sous forme de trois actions distinctes.
-            */
-
-            this.animationTimer =
-                window.setTimeout(
-                    next,
-                    this.actionDelay
-                );
-        };
+            };
 
 
         next();
@@ -1387,7 +1931,8 @@ class PytUI {
     stopAnimation() {
 
         if (
-            this.animationTimer !== null
+            this.animationTimer
+            !== null
         ) {
 
             window.clearTimeout(
@@ -1395,11 +1940,13 @@ class PytUI {
             );
         }
 
-        this.animationTimer = null;
-        this.animationRunning = false;
 
-        this.actionQueue = [];
-        this.actionIndex = 0;
+        this.animationTimer =
+            null;
+
+        this.animationRunning =
+            false;
+
 
         this.setRunButtonEnabled(
             true
@@ -1407,20 +1954,17 @@ class PytUI {
     }
 
 
-    setRunButtonEnabled(enabled) {
+    setRunButtonEnabled(
+        enabled
+    ) {
 
-        const button =
-            document.getElementById(
-                "run-code-button"
-            );
+        if (!this.runCodeButton) {
+            return;
+        }
 
-        button.disabled =
+
+        this.runCodeButton.disabled =
             !enabled;
-
-        button.textContent =
-            enabled
-                ? "PYT ▶"
-                : "PYT...";
     }
 
 
@@ -1434,45 +1978,55 @@ class PytUI {
             return;
         }
 
+
         const container =
             document.getElementById(
                 "game-container"
             );
 
+
+        if (!container) {
+            return;
+        }
+
+
         const rect =
-            container.getBoundingClientRect();
+            container
+                .getBoundingClientRect();
 
 
         const width =
             Math.max(
-                300,
+                320,
                 Math.floor(
                     rect.width
                 )
             );
 
+
         const height =
             Math.max(
-                300,
+                320,
                 Math.floor(
                     rect.height
                 )
             );
 
 
-        /*
-        Le Canvas utilise sa vraie résolution
-        interne, pas seulement sa taille CSS.
-        */
-
         if (
-            this.canvas.width !== width
-            ||
-            this.canvas.height !== height
+            this.canvas.width
+            !== width
         ) {
 
             this.canvas.width =
                 width;
+        }
+
+
+        if (
+            this.canvas.height
+            !== height
+        ) {
 
             this.canvas.height =
                 height;
@@ -1481,7 +2035,7 @@ class PytUI {
 
 
     // =====================================================
-    // DESSIN DU MONDE
+    // DESSIN PRINCIPAL
     // =====================================================
 
     drawWorld() {
@@ -1489,27 +2043,15 @@ class PytUI {
         if (
             !this.ctx
             ||
-            !this.game
+            !this.canvas
         ) {
+
             return;
         }
 
 
-        this.resizeCanvas();
-
-
         const ctx =
             this.ctx;
-
-        const rows =
-            Number(
-                this.game.rows
-            ) || 8;
-
-        const cols =
-            Number(
-                this.game.cols
-            ) || 10;
 
 
         ctx.clearRect(
@@ -1520,8 +2062,9 @@ class PytUI {
         );
 
 
+        // Fond
         ctx.fillStyle =
-            "#08070d";
+            "#100d1c";
 
         ctx.fillRect(
             0,
@@ -1531,58 +2074,96 @@ class PytUI {
         );
 
 
+        if (
+            !this.game
+            ||
+            !this.game.rows
+            ||
+            !this.game.cols
+        ) {
+
+            return;
+        }
+
+
         const availableWidth =
-            this.canvas.width - 30;
+            this.canvas.width
+            - 32;
 
         const availableHeight =
-            this.canvas.height - 30;
+            this.canvas.height
+            - 32;
 
 
         this.cellSize =
-            Math.max(
-                18,
-                Math.floor(
-                    Math.min(
-                        availableWidth / cols,
-                        availableHeight / rows
-                    )
+            Math.floor(
+                Math.min(
+                    availableWidth
+                    /
+                    this.game.cols,
+
+                    availableHeight
+                    /
+                    this.game.rows
                 )
             );
 
 
-        const mapWidth =
-            this.cellSize * cols;
+        this.cellSize =
+            Math.max(
+                16,
+                this.cellSize
+            );
 
-        const mapHeight =
-            this.cellSize * rows;
+
+        const gridWidth =
+            this.cellSize
+            *
+            this.game.cols;
+
+        const gridHeight =
+            this.cellSize
+            *
+            this.game.rows;
 
 
         this.gridX =
             Math.floor(
                 (
                     this.canvas.width
-                    - mapWidth
-                ) / 2
+                    -
+                    gridWidth
+                )
+                /
+                2
             );
+
 
         this.gridY =
             Math.floor(
                 (
                     this.canvas.height
-                    - mapHeight
-                ) / 2
+                    -
+                    gridHeight
+                )
+                /
+                2
             );
 
 
+        // ---------------------------------------------
+        // CASES
+        // ---------------------------------------------
+
         for (
             let row = 0;
-            row < rows;
+            row < this.game.rows;
             row++
         ) {
 
             for (
                 let col = 0;
-                col < cols;
+                col < this.game.cols;
                 col++
             ) {
 
@@ -1594,16 +2175,22 @@ class PytUI {
         }
 
 
+        // ---------------------------------------------
+        // PYT
+        // ---------------------------------------------
+
         this.drawRobot();
-        this.refreshStatus();
     }
 
 
     // =====================================================
-    // DESSIN CASE
+    // CASE
     // =====================================================
 
-    drawTile(row, col) {
+    drawTile(
+        row,
+        col
+    ) {
 
         const ctx =
             this.ctx;
@@ -1613,20 +2200,24 @@ class PytUI {
 
         const x =
             this.gridX
-            + col * size;
+            +
+            col * size;
 
         const y =
             this.gridY
-            + row * size;
+            +
+            row * size;
 
 
-        // Sol en damier.
+        // Sol
         ctx.fillStyle =
             (
-                (row + col) % 2 === 0
+                row + col
             )
-                ? "#352c59"
-                : "#40356a";
+            % 2 === 0
+                ? "#211943"
+                : "#281f4d";
+
 
         ctx.fillRect(
             x,
@@ -1636,16 +2227,18 @@ class PytUI {
         );
 
 
+        // Bordure
         ctx.strokeStyle =
-            "#08070d";
+            "#382b65";
 
         ctx.lineWidth =
             Math.max(
                 1,
                 Math.floor(
-                    size * 0.04
+                    size * 0.03
                 )
             );
+
 
         ctx.strokeRect(
             x,
@@ -1655,95 +2248,120 @@ class PytUI {
         );
 
 
-        const tile =
+        const type =
             this.getTileType(
                 row,
                 col
             );
 
 
-        switch (tile) {
+        switch (type) {
 
             case "wall":
+
                 this.drawWall(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "goal":
+
                 this.drawGoal(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "object":
+
                 this.drawObject(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "deposit":
+
                 this.drawDeposit(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "button":
-                this.drawButtonTile(
+
+                this.drawButton(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "door":
+
                 this.drawDoor(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "dirt":
+
                 this.drawDirt(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "box":
+
                 this.drawBox(
                     x,
                     y,
                     size
                 );
+
                 break;
 
+
             case "charger":
+
                 this.drawCharger(
                     x,
                     y,
                     size
                 );
+
                 break;
         }
     }
 
 
-    // =====================================================
-    // TYPE DE CASE
-    // =====================================================
-
-    getTileType(row, col) {
+    getTileType(
+        row,
+        col
+    ) {
 
         if (
             this.game
@@ -1752,110 +2370,10 @@ class PytUI {
             === "function"
         ) {
 
-            return this.normalizeTileType(
-                this.game.getTileType(
-                    row,
-                    col
-                )
+            return this.game.getTileType(
+                row,
+                col
             );
-        }
-
-
-        /*
-        Solution de secours :
-        on lit directement les collections
-        du moteur si getTileType n'existe pas.
-        */
-
-        if (
-            this.hasPosition(
-                this.game.walls,
-                row,
-                col
-            )
-        ) {
-            return "wall";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.doors,
-                row,
-                col
-            )
-        ) {
-            return "door";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.boxes,
-                row,
-                col
-            )
-        ) {
-            return "box";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.objects,
-                row,
-                col
-            )
-        ) {
-            return "object";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.deposits,
-                row,
-                col
-            )
-        ) {
-            return "deposit";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.buttons,
-                row,
-                col
-            )
-        ) {
-            return "button";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.dirt,
-                row,
-                col
-            )
-        ) {
-            return "dirt";
-        }
-
-        if (
-            this.hasPosition(
-                this.game.chargers,
-                row,
-                col
-            )
-        ) {
-            return "charger";
-        }
-
-
-        if (
-            this.positionEquals(
-                this.game.goal,
-                row,
-                col
-            )
-        ) {
-            return "goal";
         }
 
 
@@ -1863,341 +2381,153 @@ class PytUI {
     }
 
 
-    normalizeTileType(tile) {
-
-        if (
-            tile === null
-            ||
-            tile === undefined
-        ) {
-            return "empty";
-        }
-
-
-        if (typeof tile === "string") {
-
-            return tile.toLowerCase();
-        }
-
-
-        /*
-        Compatibilité si game.js utilise les
-        mêmes numéros que l'ancien moteur Python.
-        */
-
-        const names = {
-            0: "empty",
-            1: "wall",
-            2: "goal",
-            3: "object",
-            4: "deposit",
-            5: "button",
-            6: "door",
-            7: "dirt",
-            8: "box",
-            9: "charger"
-        };
-
-
-        return names[tile] || "empty";
-    }
-
-
     // =====================================================
-    // OUTILS POSITIONS
+    // DÉCOR
     // =====================================================
 
-    hasPosition(collection, row, col) {
-
-        if (!collection) {
-            return false;
-        }
-
-
-        const key =
-            `${row},${col}`;
-
-
-        if (collection instanceof Set) {
-
-            if (
-                collection.has(key)
-            ) {
-                return true;
-            }
-
-
-            for (
-                const value
-                of collection
-            ) {
-
-                if (
-                    this.positionEquals(
-                        value,
-                        row,
-                        col
-                    )
-                ) {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
-
-        if (Array.isArray(collection)) {
-
-            return collection.some(
-                position =>
-                    this.positionEquals(
-                        position,
-                        row,
-                        col
-                    )
-            );
-        }
-
-
-        return false;
-    }
-
-
-    positionEquals(position, row, col) {
-
-        if (!position) {
-            return false;
-        }
-
-
-        if (Array.isArray(position)) {
-
-            return (
-                Number(position[0]) === row
-                &&
-                Number(position[1]) === col
-            );
-        }
-
-
-        if (
-            typeof position === "object"
-        ) {
-
-            const positionRow =
-                position.row
-                ?? position.r
-                ?? position[0];
-
-            const positionCol =
-                position.col
-                ?? position.column
-                ?? position.c
-                ?? position[1];
-
-
-            return (
-                Number(positionRow) === row
-                &&
-                Number(positionCol) === col
-            );
-        }
-
-
-        if (typeof position === "string") {
-
-            return (
-                position ===
-                `${row},${col}`
-            );
-        }
-
-
-        return false;
-    }
-
-
-    // =====================================================
-    // MUR
-    // =====================================================
-
-    drawWall(x, y, size) {
+    drawWall(
+        x,
+        y,
+        size
+    ) {
 
         const ctx =
             this.ctx;
-
-        const margin =
-            Math.max(
-                3,
-                Math.floor(
-                    size * 0.08
-                )
-            );
 
 
         ctx.fillStyle =
             "#08070d";
 
         ctx.fillRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
+            x + size * 0.08,
+            y + size * 0.08,
+            size * 0.84,
+            size * 0.84
         );
 
 
         ctx.fillStyle =
-            "#765081";
+            "#493878";
 
         ctx.fillRect(
-            x + margin + 3,
-            y + margin + 3,
-            size - margin * 2 - 6,
-            size - margin * 2 - 6
+            x + size * 0.14,
+            y + size * 0.14,
+            size * 0.72,
+            size * 0.25
         );
 
 
-        // Partie claire pseudo-3D.
         ctx.fillStyle =
-            "#9a6da1";
+            "#30245a";
 
         ctx.fillRect(
-            x + margin + 6,
-            y + margin + 6,
-            size - margin * 2 - 12,
-            Math.max(
-                4,
-                Math.floor(
-                    size * 0.13
-                )
-            )
+            x + size * 0.14,
+            y + size * 0.48,
+            size * 0.72,
+            size * 0.34
         );
     }
 
 
-    // =====================================================
-    // CRISTAL
-    // =====================================================
-
-    drawGoal(x, y, size) {
+    drawGoal(
+        x,
+        y,
+        size
+    ) {
 
         const ctx =
             this.ctx;
 
-        const cx =
-            x + size / 2;
 
-        const cy =
-            y + size / 2;
-
-        const radius =
-            size * 0.28;
+        ctx.save();
 
 
-        // Halo carré rétro.
+        ctx.shadowColor =
+            "#42d6d1";
+
+        ctx.shadowBlur =
+            size * 0.25;
+
+
         ctx.fillStyle =
-            "rgba(244, 215, 94, 0.18)";
-
-        ctx.fillRect(
-            cx - radius * 1.3,
-            cy - radius * 1.3,
-            radius * 2.6,
-            radius * 2.6
-        );
+            "#42d6d1";
 
 
         ctx.beginPath();
 
         ctx.moveTo(
-            cx,
-            cy - radius
+            x + size * 0.5,
+            y + size * 0.12
         );
 
         ctx.lineTo(
-            cx + radius * 0.72,
-            cy
+            x + size * 0.78,
+            y + size * 0.5
         );
 
         ctx.lineTo(
-            cx,
-            cy + radius
+            x + size * 0.5,
+            y + size * 0.88
         );
 
         ctx.lineTo(
-            cx - radius * 0.72,
-            cy
+            x + size * 0.22,
+            y + size * 0.5
         );
 
         ctx.closePath();
+
+        ctx.fill();
+
+
+        ctx.fillStyle =
+            "#d9ffff";
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + size * 0.5,
+            y + size * 0.22
+        );
+
+        ctx.lineTo(
+            x + size * 0.62,
+            y + size * 0.5
+        );
+
+        ctx.lineTo(
+            x + size * 0.5,
+            y + size * 0.64
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
+
+
+        ctx.restore();
+    }
+
+
+    drawObject(
+        x,
+        y,
+        size
+    ) {
+
+        const ctx =
+            this.ctx;
 
 
         ctx.fillStyle =
             "#f4d75e";
 
-        ctx.fill();
-
-
-        ctx.strokeStyle =
-            "#08070d";
-
-        ctx.lineWidth =
-            Math.max(
-                2,
-                size * 0.05
-            );
-
-        ctx.stroke();
-
-
-        // Reflet.
-        ctx.beginPath();
-
-        ctx.moveTo(
-            cx,
-            cy - radius * 0.65
-        );
-
-        ctx.lineTo(
-            cx + radius * 0.25,
-            cy - radius * 0.1
-        );
-
-        ctx.lineTo(
-            cx,
-            cy
-        );
-
-        ctx.closePath();
-
-        ctx.fillStyle =
-            "#fff3a6";
-
-        ctx.fill();
-    }
-
-
-    // =====================================================
-    // OBJET
-    // =====================================================
-
-    drawObject(x, y, size) {
-
-        const ctx =
-            this.ctx;
-
-        const margin =
-            size * 0.28;
-
-
-        ctx.fillStyle =
-            "#08070d";
-
         ctx.fillRect(
-            x + margin - 3,
-            y + margin - 3,
-            size - margin * 2 + 6,
-            size - margin * 2 + 6
+            x + size * 0.28,
+            y + size * 0.28,
+            size * 0.44,
+            size * 0.44
         );
 
 
@@ -2205,344 +2535,282 @@ class PytUI {
             "#ee9147";
 
         ctx.fillRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
-        );
-
-
-        ctx.fillStyle =
-            "#f4d75e";
-
-        ctx.fillRect(
-            x + margin + 4,
-            y + margin + 4,
-            Math.max(
-                3,
-                size * 0.1
-            ),
-            Math.max(
-                3,
-                size * 0.1
-            )
+            x + size * 0.38,
+            y + size * 0.18,
+            size * 0.24,
+            size * 0.12
         );
     }
 
 
-    // =====================================================
-    // DÉPÔT
-    // =====================================================
-
-    drawDeposit(x, y, size) {
+    drawDeposit(
+        x,
+        y,
+        size
+    ) {
 
         const ctx =
             this.ctx;
-
-        const margin =
-            size * 0.18;
-
-
-        ctx.strokeStyle =
-            "#08070d";
-
-        ctx.lineWidth =
-            Math.max(
-                6,
-                size * 0.10
-            );
-
-        ctx.strokeRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
-        );
 
 
         ctx.strokeStyle =
             "#f4d75e";
-
-        ctx.lineWidth =
-            Math.max(
-                3,
-                size * 0.05
-            );
-
-        ctx.strokeRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
-        );
-    }
-
-
-    // =====================================================
-    // BOUTON
-    // =====================================================
-
-    drawButtonTile(x, y, size) {
-
-        const ctx =
-            this.ctx;
-
-        const cx =
-            x + size / 2;
-
-        const cy =
-            y + size / 2;
-
-        const radius =
-            size * 0.20;
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-            cx,
-            cy + 3,
-            radius + 4,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fillStyle =
-            "#08070d";
-
-        ctx.fill();
-
-
-        ctx.beginPath();
-
-        ctx.arc(
-            cx,
-            cy,
-            radius,
-            0,
-            Math.PI * 2
-        );
-
-        ctx.fillStyle =
-            "#42d6d1";
-
-        ctx.fill();
-    }
-
-
-    // =====================================================
-    // PORTE
-    // =====================================================
-
-    drawDoor(x, y, size) {
-
-        const ctx =
-            this.ctx;
-
-        const margin =
-            size * 0.16;
-
-
-        ctx.fillStyle =
-            "#08070d";
-
-        ctx.fillRect(
-            x + margin - 3,
-            y + margin - 3,
-            size - margin * 2 + 6,
-            size - margin + 3
-        );
-
-
-        ctx.fillStyle =
-            "#b84f72";
-
-        ctx.fillRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin
-        );
-
-
-        ctx.fillStyle =
-            "#f4d75e";
-
-        ctx.fillRect(
-            x + size * 0.67,
-            y + size * 0.52,
-            Math.max(
-                3,
-                size * 0.07
-            ),
-            Math.max(
-                3,
-                size * 0.07
-            )
-        );
-    }
-
-
-    // =====================================================
-    // SALETÉ
-    // =====================================================
-
-    drawDirt(x, y, size) {
-
-        const ctx =
-            this.ctx;
-
-
-        ctx.fillStyle =
-            "#80573f";
-
-        ctx.fillRect(
-            x + size * 0.18,
-            y + size * 0.48,
-            size * 0.42,
-            size * 0.20
-        );
-
-        ctx.fillRect(
-            x + size * 0.46,
-            y + size * 0.35,
-            size * 0.30,
-            size * 0.22
-        );
-
-        ctx.fillStyle =
-            "#5d3c31";
-
-        ctx.fillRect(
-            x + size * 0.31,
-            y + size * 0.39,
-            size * 0.13,
-            size * 0.11
-        );
-    }
-
-
-    // =====================================================
-    // CAISSE
-    // =====================================================
-
-    drawBox(x, y, size) {
-
-        const ctx =
-            this.ctx;
-
-        const margin =
-            size * 0.14;
-
-
-        ctx.fillStyle =
-            "#08070d";
-
-        ctx.fillRect(
-            x + margin - 3,
-            y + margin - 3,
-            size - margin * 2 + 6,
-            size - margin * 2 + 6
-        );
-
-
-        ctx.fillStyle =
-            "#d28443";
-
-        ctx.fillRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
-        );
-
-
-        ctx.strokeStyle =
-            "#8c502f";
 
         ctx.lineWidth =
             Math.max(
                 2,
-                size * 0.05
+                size * 0.08
             );
 
-        ctx.beginPath();
 
-        ctx.moveTo(
-            x + margin,
-            y + margin
+        ctx.strokeRect(
+            x + size * 0.2,
+            y + size * 0.2,
+            size * 0.6,
+            size * 0.6
         );
 
-        ctx.lineTo(
-            x + size - margin,
-            y + size - margin
-        );
 
-        ctx.moveTo(
-            x + size - margin,
-            y + margin
-        );
+        ctx.fillStyle =
+            "#f4d75e";
 
-        ctx.lineTo(
-            x + margin,
-            y + size - margin
+        ctx.fillRect(
+            x + size * 0.4,
+            y + size * 0.4,
+            size * 0.2,
+            size * 0.2
         );
-
-        ctx.stroke();
     }
 
 
-    // =====================================================
-    // CHARGEUR
-    // =====================================================
-
-    drawCharger(x, y, size) {
+    drawButton(
+        x,
+        y,
+        size
+    ) {
 
         const ctx =
             this.ctx;
-
-        const margin =
-            size * 0.20;
 
 
         ctx.fillStyle =
             "#08070d";
 
         ctx.fillRect(
-            x + margin - 3,
-            y + margin - 3,
-            size - margin * 2 + 6,
-            size - margin * 2 + 6
+            x + size * 0.2,
+            y + size * 0.55,
+            size * 0.6,
+            size * 0.2
         );
 
 
         ctx.fillStyle =
-            "#243d43";
-
-        ctx.fillRect(
-            x + margin,
-            y + margin,
-            size - margin * 2,
-            size - margin * 2
-        );
-
-
-        ctx.fillStyle =
-            "#58d68d";
-
-        ctx.fillRect(
-            x + size * 0.44,
-            y + size * 0.28,
-            size * 0.12,
-            size * 0.44
-        );
+            "#dc4d9b";
 
         ctx.fillRect(
             x + size * 0.28,
-            y + size * 0.44,
+            y + size * 0.38,
             size * 0.44,
-            size * 0.12
+            size * 0.22
         );
+    }
+
+
+    drawDoor(
+        x,
+        y,
+        size
+    ) {
+
+        const ctx =
+            this.ctx;
+
+
+        ctx.fillStyle =
+            "#08070d";
+
+        ctx.fillRect(
+            x + size * 0.18,
+            y + size * 0.08,
+            size * 0.64,
+            size * 0.84
+        );
+
+
+        ctx.fillStyle =
+            "#dc4d9b";
+
+
+        for (
+            let i = 0;
+            i < 3;
+            i++
+        ) {
+
+            ctx.fillRect(
+                x
+                +
+                size
+                *
+                (
+                    0.27
+                    +
+                    i * 0.18
+                ),
+
+                y + size * 0.14,
+
+                size * 0.08,
+
+                size * 0.72
+            );
+        }
+    }
+
+
+    drawDirt(
+        x,
+        y,
+        size
+    ) {
+
+        const ctx =
+            this.ctx;
+
+
+        ctx.fillStyle =
+            "#8c6247";
+
+
+        ctx.fillRect(
+            x + size * 0.25,
+            y + size * 0.55,
+            size * 0.18,
+            size * 0.13
+        );
+
+
+        ctx.fillRect(
+            x + size * 0.48,
+            y + size * 0.34,
+            size * 0.22,
+            size * 0.16
+        );
+
+
+        ctx.fillRect(
+            x + size * 0.58,
+            y + size * 0.63,
+            size * 0.12,
+            size * 0.1
+        );
+    }
+
+
+    drawBox(
+        x,
+        y,
+        size
+    ) {
+
+        const ctx =
+            this.ctx;
+
+
+        ctx.fillStyle =
+            "#08070d";
+
+        ctx.fillRect(
+            x + size * 0.16,
+            y + size * 0.16,
+            size * 0.68,
+            size * 0.68
+        );
+
+
+        ctx.fillStyle =
+            "#ee9147";
+
+        ctx.fillRect(
+            x + size * 0.22,
+            y + size * 0.22,
+            size * 0.56,
+            size * 0.56
+        );
+
+
+        ctx.fillStyle =
+            "#f4d75e";
+
+        ctx.fillRect(
+            x + size * 0.45,
+            y + size * 0.22,
+            size * 0.1,
+            size * 0.56
+        );
+    }
+
+
+    drawCharger(
+        x,
+        y,
+        size
+    ) {
+
+        const ctx =
+            this.ctx;
+
+
+        ctx.fillStyle =
+            "#42d6d1";
+
+        ctx.fillRect(
+            x + size * 0.2,
+            y + size * 0.2,
+            size * 0.6,
+            size * 0.6
+        );
+
+
+        ctx.fillStyle =
+            "#100d1c";
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x + size * 0.56,
+            y + size * 0.25
+        );
+
+        ctx.lineTo(
+            x + size * 0.36,
+            y + size * 0.53
+        );
+
+        ctx.lineTo(
+            x + size * 0.5,
+            y + size * 0.53
+        );
+
+        ctx.lineTo(
+            x + size * 0.42,
+            y + size * 0.75
+        );
+
+        ctx.lineTo(
+            x + size * 0.68,
+            y + size * 0.43
+        );
+
+        ctx.lineTo(
+            x + size * 0.53,
+            y + size * 0.43
+        );
+
+        ctx.closePath();
+
+        ctx.fill();
     }
 
 
@@ -2557,6 +2825,7 @@ class PytUI {
             ||
             !this.game.robot
         ) {
+
             return;
         }
 
@@ -2564,289 +2833,213 @@ class PytUI {
         const robot =
             this.game.robot;
 
-        const row =
-            Number(robot.row);
-
-        const col =
-            Number(robot.col);
-
-
-        if (
-            Number.isNaN(row)
-            ||
-            Number.isNaN(col)
-        ) {
-            return;
-        }
-
-
         const size =
             this.cellSize;
 
+
         const x =
             this.gridX
-            + col * size;
+            +
+            robot.col * size;
 
         const y =
             this.gridY
-            + row * size;
-
-        const cx =
-            x + size / 2;
-
-        const cy =
-            y + size / 2;
+            +
+            robot.row * size;
 
 
         const ctx =
             this.ctx;
 
 
-        // -------------------------------------------------
-        // OMBRE PIXELISÉE
-        // -------------------------------------------------
-
+        // Ombre
         ctx.fillStyle =
-            "#15101d";
+            "rgba(0, 0, 0, 0.35)";
 
         ctx.fillRect(
-            cx - size * 0.24,
-            cy + size * 0.23,
-            size * 0.48,
-            size * 0.11
+            x + size * 0.25,
+            y + size * 0.75,
+            size * 0.5,
+            size * 0.1
         );
 
 
-        // -------------------------------------------------
-        // CORPS
-        // -------------------------------------------------
-
+        // Corps noir extérieur
         ctx.fillStyle =
             "#08070d";
 
         ctx.fillRect(
-            cx - size * 0.24 - 3,
-            cy - size * 0.09 - 3,
-            size * 0.48 + 6,
-            size * 0.34 + 6
+            x + size * 0.2,
+            y + size * 0.18,
+            size * 0.6,
+            size * 0.6
         );
 
 
+        // Corps blanc
         ctx.fillStyle =
-            "#e9e6ef";
+            "#f4f5f8";
 
         ctx.fillRect(
-            cx - size * 0.24,
-            cy - size * 0.09,
-            size * 0.48,
-            size * 0.34
+            x + size * 0.25,
+            y + size * 0.22,
+            size * 0.5,
+            size * 0.5
         );
 
 
-        // -------------------------------------------------
-        // TÊTE
-        // -------------------------------------------------
-
+        // Visage
         ctx.fillStyle =
-            "#08070d";
+            "#171329";
 
         ctx.fillRect(
-            cx - size * 0.31 - 3,
-            cy - size * 0.35 - 3,
-            size * 0.62 + 6,
-            size * 0.28 + 6
+            x + size * 0.3,
+            y + size * 0.32,
+            size * 0.4,
+            size * 0.22
         );
 
 
-        ctx.fillStyle =
-            "#f5f2f7";
-
-        ctx.fillRect(
-            cx - size * 0.31,
-            cy - size * 0.35,
-            size * 0.62,
-            size * 0.28
-        );
-
-
-        // -------------------------------------------------
-        // VISAGE
-        // -------------------------------------------------
-
-        ctx.fillStyle =
-            "#171326";
-
-        ctx.fillRect(
-            cx - size * 0.21,
-            cy - size * 0.29,
-            size * 0.42,
-            size * 0.14
-        );
-
-
-        // Yeux.
+        // Yeux
         ctx.fillStyle =
             "#42d6d1";
 
-        const eyeSize =
-            Math.max(
-                3,
-                Math.floor(
-                    size * 0.055
-                )
-            );
-
-
         ctx.fillRect(
-            cx - size * 0.12,
-            cy - size * 0.245,
-            eyeSize,
-            eyeSize
-        );
-
-        ctx.fillRect(
-            cx + size * 0.07,
-            cy - size * 0.245,
-            eyeSize,
-            eyeSize
+            x + size * 0.36,
+            y + size * 0.38,
+            size * 0.08,
+            size * 0.07
         );
 
 
-        // -------------------------------------------------
-        // INDICATEUR DE DIRECTION
-        // -------------------------------------------------
-
-        const direction =
-            String(
-                robot.direction || "east"
-            ).toLowerCase();
+        ctx.fillRect(
+            x + size * 0.56,
+            y + size * 0.38,
+            size * 0.08,
+            size * 0.07
+        );
 
 
-        const directionColors = {
-            north: "#f4d75e",
-            east: "#dc4d9b",
-            south: "#ee9147",
-            west: "#42d6d1"
-        };
+        // Indicateur de direction
+        this.drawDirectionIndicator(
+            x,
+            y,
+            size,
+            robot.direction
+        );
+    }
+
+
+    drawDirectionIndicator(
+        x,
+        y,
+        size,
+        direction
+    ) {
+
+        const ctx =
+            this.ctx;
 
 
         ctx.fillStyle =
-            directionColors[direction]
-            || "#dc4d9b";
+            "#f4d75e";
 
 
-        const indicator =
-            Math.max(
-                4,
-                size * 0.08
-            );
+        const centerX =
+            x + size * 0.5;
+
+        const centerY =
+            y + size * 0.5;
 
 
-        if (direction === "north") {
-
-            ctx.fillRect(
-                cx - indicator / 2,
-                cy - size * 0.43,
-                indicator,
-                indicator
-            );
-
-        } else if (direction === "south") {
-
-            ctx.fillRect(
-                cx - indicator / 2,
-                cy + size * 0.31,
-                indicator,
-                indicator
-            );
-
-        } else if (direction === "west") {
-
-            ctx.fillRect(
-                cx - size * 0.40,
-                cy - indicator / 2,
-                indicator,
-                indicator
-            );
-
-        } else {
-
-            ctx.fillRect(
-                cx + size * 0.32,
-                cy - indicator / 2,
-                indicator,
-                indicator
-            );
-        }
-    }
+        ctx.beginPath();
 
 
-    // =====================================================
-    // STATUT
-    // =====================================================
+        switch (direction) {
 
-    setStatus(text) {
+            case "north":
 
-        this.gameStatus.textContent =
-            text || "";
-    }
+                ctx.moveTo(
+                    centerX,
+                    y + size * 0.08
+                );
 
+                ctx.lineTo(
+                    centerX - size * 0.09,
+                    y + size * 0.18
+                );
 
-    refreshStatus() {
+                ctx.lineTo(
+                    centerX + size * 0.09,
+                    y + size * 0.18
+                );
 
-        if (!this.level) {
-            return;
-        }
-
-
-        const key =
-            this.levelKey(
-                this.currentChapter,
-                this.currentExercise
-            );
+                break;
 
 
-        if (this.animationRunning) {
+            case "south":
 
-            this.setStatus(
-                "Pyt exécute ton programme..."
-            );
+                ctx.moveTo(
+                    centerX,
+                    y + size * 0.92
+                );
 
-            return;
-        }
+                ctx.lineTo(
+                    centerX - size * 0.09,
+                    y + size * 0.82
+                );
+
+                ctx.lineTo(
+                    centerX + size * 0.09,
+                    y + size * 0.82
+                );
+
+                break;
 
 
-        if (
-            this.completedLevels.has(
-                key
-            )
-        ) {
+            case "west":
 
-            this.setStatus(
-                "✓ Exercice réussi."
-            );
+                ctx.moveTo(
+                    x + size * 0.08,
+                    centerY
+                );
 
-            return;
+                ctx.lineTo(
+                    x + size * 0.18,
+                    centerY - size * 0.09
+                );
+
+                ctx.lineTo(
+                    x + size * 0.18,
+                    centerY + size * 0.09
+                );
+
+                break;
+
+
+            default:
+
+                ctx.moveTo(
+                    x + size * 0.92,
+                    centerY
+                );
+
+                ctx.lineTo(
+                    x + size * 0.82,
+                    centerY - size * 0.09
+                );
+
+                ctx.lineTo(
+                    x + size * 0.82,
+                    centerY + size * 0.09
+                );
+
+                break;
         }
 
 
-        if (
-            this.game
-            &&
-            this.game.message
-        ) {
-
-            this.setStatus(
-                this.game.message
-            );
-
-            return;
-        }
-
-
-        this.setStatus(
-            "Pyt attend ton programme."
-        );
+        ctx.closePath();
+        ctx.fill();
     }
 
 
@@ -2860,76 +3053,115 @@ class PytUI {
         options = {}
     ) {
 
-        this.modalTitle.textContent =
-            title || "PYT";
+        if (
+            !this.modalBackground
+            ||
+            !this.messageModal
+        ) {
 
-        this.modalMessage.textContent =
-            message || "";
+            return;
+        }
+
+
+        if (this.modalLabel) {
+
+            this.modalLabel.textContent =
+                options.label
+                || "PYT";
+        }
+
+
+        if (this.modalTitle) {
+
+            this.modalTitle.textContent =
+                title;
+        }
+
+
+        if (this.modalMessage) {
+
+            this.modalMessage.textContent =
+                message;
+        }
 
 
         const primaryText =
             options.primaryText
             || "CONTINUER";
 
-        const secondaryText =
-            options.secondaryText
-            || null;
+
+        if (this.modalPrimaryButton) {
+
+            this.modalPrimaryButton.textContent =
+                primaryText;
 
 
-        this.modalPrimaryButton.textContent =
-            primaryText;
-
-
-        this.modalPrimaryButton.onclick =
-            () => {
-
-                this.closeMessage();
-
-                if (
-                    typeof options.onPrimary
-                    === "function"
-                ) {
-
-                    options.onPrimary();
-                }
-            };
-
-
-        if (secondaryText) {
-
-            this.modalSecondaryButton.classList.remove(
-                "hidden"
-            );
-
-            this.modalSecondaryButton.textContent =
-                secondaryText;
-
-            this.modalSecondaryButton.onclick =
+            this.modalPrimaryButton.onclick =
                 () => {
 
                     this.closeMessage();
 
+
                     if (
-                        typeof options.onSecondary
+                        typeof options.primaryAction
                         === "function"
                     ) {
 
-                        options.onSecondary();
+                        options.primaryAction();
                     }
                 };
+        }
 
-        } else {
 
-            this.modalSecondaryButton.classList.add(
-                "hidden"
-            );
+        if (this.modalSecondaryButton) {
 
-            this.modalSecondaryButton.onclick =
-                null;
+            if (
+                options.secondaryText
+            ) {
+
+                this.modalSecondaryButton.textContent =
+                    options.secondaryText;
+
+
+                this.modalSecondaryButton.classList.remove(
+                    "hidden"
+                );
+
+
+                this.modalSecondaryButton.onclick =
+                    () => {
+
+                        this.closeMessage();
+
+
+                        if (
+                            typeof options.secondaryAction
+                            === "function"
+                        ) {
+
+                            options.secondaryAction();
+                        }
+                    };
+
+            } else {
+
+                this.modalSecondaryButton.classList.add(
+                    "hidden"
+                );
+
+
+                this.modalSecondaryButton.onclick =
+                    null;
+            }
         }
 
 
         this.modalBackground.classList.remove(
+            "hidden"
+        );
+
+
+        this.messageModal.classList.remove(
             "hidden"
         );
     }
@@ -2937,9 +3169,20 @@ class PytUI {
 
     closeMessage() {
 
-        this.modalBackground.classList.add(
-            "hidden"
-        );
+        if (this.modalBackground) {
+
+            this.modalBackground.classList.add(
+                "hidden"
+            );
+        }
+
+
+        if (this.messageModal) {
+
+            this.messageModal.classList.add(
+                "hidden"
+            );
+        }
     }
 
 }

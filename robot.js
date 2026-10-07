@@ -4,16 +4,15 @@
 ============================================================
 PYT - robot.js
 
-Ce fichier gère uniquement Pyt :
-- position
-- orientation
-- déplacements logiques
-- inventaire
-- énergie
-- état
+Ce fichier représente Pyt :
+- sa position ;
+- sa direction ;
+- son inventaire ;
+- son énergie ;
+- ses rotations ;
+- ses déplacements logiques.
 
-Les collisions et les règles du niveau
-restent dans game.js.
+Le moteur game.js décide si un déplacement est autorisé.
 ============================================================
 */
 
@@ -38,7 +37,7 @@ class Robot {
 
 
     // =====================================================
-    // CONSTRUCTEUR
+    // CRÉATION
     // =====================================================
 
     constructor(
@@ -47,42 +46,35 @@ class Robot {
         direction = Robot.EAST
     ) {
 
-        this.row = Number(row);
-        this.col = Number(col);
+        this.row = 0;
+        this.col = 0;
 
         this.direction =
-            this.validateDirection(direction);
+            Robot.EAST;
 
+
+        // Inventaire simple
         this.inventory = 0;
 
+
+        // Énergie prévue pour les niveaux futurs
         this.maxEnergy = 100;
-        this.energy = this.maxEnergy;
+        this.energy = 100;
+
 
         this.active = true;
-    }
 
 
-    // =====================================================
-    // VALIDATION DIRECTION
-    // =====================================================
+        this.setPosition(
+            row,
+            col
+        );
 
-    validateDirection(direction) {
 
-        const normalized =
-            String(direction).toLowerCase();
-
-        if (
-            !Robot.DIRECTIONS.includes(
-                normalized
-            )
-        ) {
-
-            throw new Error(
-                `Direction invalide : ${direction}`
+        this.direction =
+            this.validateDirection(
+                direction
             );
-        }
-
-        return normalized;
     }
 
 
@@ -99,10 +91,14 @@ class Robot {
     }
 
 
-    setPosition(row, col) {
+    setPosition(
+        row,
+        col
+    ) {
 
         row = Number(row);
         col = Number(col);
+
 
         if (
             !Number.isInteger(row)
@@ -115,45 +111,148 @@ class Robot {
             );
         }
 
+
         this.row = row;
         this.col = col;
+
+
+        return true;
     }
 
 
     // =====================================================
-    // VECTEUR DE DIRECTION
+    // DIRECTION
     // =====================================================
+
+    validateDirection(direction) {
+
+        const value =
+            String(direction)
+                .toLowerCase();
+
+
+        if (
+            !Robot.DIRECTIONS.includes(
+                value
+            )
+        ) {
+
+            throw new Error(
+                `Direction inconnue : ${direction}`
+            );
+        }
+
+
+        return value;
+    }
+
 
     getDirectionVector() {
 
-        switch (this.direction) {
+        switch (
+            this.direction
+        ) {
 
             case Robot.NORTH:
-                return [-1, 0];
 
-            case Robot.EAST:
-                return [0, 1];
+                return [
+                    -1,
+                    0
+                ];
+
 
             case Robot.SOUTH:
-                return [1, 0];
+
+                return [
+                    1,
+                    0
+                ];
+
 
             case Robot.WEST:
-                return [0, -1];
+
+                return [
+                    0,
+                    -1
+                ];
+
+
+            case Robot.EAST:
+
+                return [
+                    0,
+                    1
+                ];
+
 
             default:
-                return [0, 0];
+
+                return [
+                    0,
+                    0
+                ];
         }
     }
 
 
     getBackwardVector() {
 
-        const [rowDelta, colDelta] =
+        const [
+            rowChange,
+            colChange
+        ] =
             this.getDirectionVector();
 
+
         return [
-            -rowDelta,
-            -colDelta
+            -rowChange,
+            -colChange
+        ];
+    }
+
+
+    // =====================================================
+    // POSITION DEVANT / DERRIÈRE
+    // =====================================================
+
+    getForwardPosition() {
+
+        const [
+            rowChange,
+            colChange
+        ] =
+            this.getDirectionVector();
+
+
+        return [
+            this.row
+            +
+            rowChange,
+
+            this.col
+            +
+            colChange
+        ];
+    }
+
+
+    getBackwardPosition() {
+
+        const [
+            rowChange,
+            colChange
+        ] =
+            this.getBackwardVector();
+
+
+        return [
+            this.row
+            +
+            rowChange,
+
+            this.col
+            +
+            colChange
         ];
     }
 
@@ -164,16 +263,25 @@ class Robot {
 
     turnRight() {
 
-        const index =
+        const currentIndex =
             Robot.DIRECTIONS.indexOf(
                 this.direction
             );
 
+
+        const nextIndex =
+            (
+                currentIndex + 1
+            )
+            %
+            Robot.DIRECTIONS.length;
+
+
         this.direction =
             Robot.DIRECTIONS[
-                (index + 1)
-                % Robot.DIRECTIONS.length
+                nextIndex
             ];
+
 
         return this.direction;
     }
@@ -181,20 +289,29 @@ class Robot {
 
     turnLeft() {
 
-        const index =
+        const currentIndex =
             Robot.DIRECTIONS.indexOf(
                 this.direction
             );
 
+
+        const nextIndex =
+            (
+                currentIndex
+                -
+                1
+                +
+                Robot.DIRECTIONS.length
+            )
+            %
+            Robot.DIRECTIONS.length;
+
+
         this.direction =
             Robot.DIRECTIONS[
-                (
-                    index
-                    - 1
-                    + Robot.DIRECTIONS.length
-                )
-                % Robot.DIRECTIONS.length
+                nextIndex
             ];
+
 
         return this.direction;
     }
@@ -205,6 +322,7 @@ class Robot {
         this.turnRight();
         this.turnRight();
 
+
         return this.direction;
     }
 
@@ -213,12 +331,15 @@ class Robot {
     // ROTATIONS AVEC ANGLE
     // =====================================================
 
-    rotateRight(angle = 90) {
-
-        this.validateAngle(angle);
+    rotateRight(
+        angle = 90
+    ) {
 
         const turns =
-            angle / 90;
+            this.validateAngle(
+                angle
+            );
+
 
         for (
             let i = 0;
@@ -229,16 +350,20 @@ class Robot {
             this.turnRight();
         }
 
+
         return this.direction;
     }
 
 
-    rotateLeft(angle = 90) {
-
-        this.validateAngle(angle);
+    rotateLeft(
+        angle = 90
+    ) {
 
         const turns =
-            angle / 90;
+            this.validateAngle(
+                angle
+            );
+
 
         for (
             let i = 0;
@@ -249,82 +374,59 @@ class Robot {
             this.turnLeft();
         }
 
+
         return this.direction;
     }
 
 
     validateAngle(angle) {
 
-        angle = Number(angle);
+        angle =
+            Number(angle);
+
 
         if (
             !Number.isInteger(angle)
             ||
             angle < 0
-        ) {
-
-            throw new Error(
-                "L'angle doit être un entier positif."
-            );
-        }
-
-        if (
+            ||
             angle % 90 !== 0
         ) {
 
             throw new Error(
-                "L'angle doit être un multiple de 90."
+                "L'angle doit être un multiple positif de 90."
             );
         }
+
 
         if (
             angle > 3600
         ) {
 
             throw new Error(
-                "L'angle demandé est trop grand."
+                "La rotation demandée est trop grande."
             );
         }
+
+
+        return angle / 90;
     }
 
 
     // =====================================================
-    // PROCHAINE POSITION
+    // DÉPLACEMENT AVEC LE MOTEUR
     // =====================================================
 
-    getForwardPosition() {
+    forward(
+        game,
+        steps = 1
+    ) {
 
-        const [rowDelta, colDelta] =
-            this.getDirectionVector();
+        steps =
+            this.validateSteps(
+                steps
+            );
 
-        return [
-            this.row + rowDelta,
-            this.col + colDelta
-        ];
-    }
-
-
-    getBackwardPosition() {
-
-        const [rowDelta, colDelta] =
-            this.getBackwardVector();
-
-        return [
-            this.row + rowDelta,
-            this.col + colDelta
-        ];
-    }
-
-
-    // =====================================================
-    // DÉPLACEMENTS VIA LE MOTEUR
-    // =====================================================
-
-    forward(game, steps = 1) {
-
-        this.validateSteps(
-            steps
-        );
 
         for (
             let i = 0;
@@ -332,29 +434,41 @@ class Robot {
             i++
         ) {
 
-            const position =
+            const [
+                nextRow,
+                nextCol
+            ] =
                 this.getForwardPosition();
+
 
             const moved =
                 game.moveRobotTo(
-                    position[0],
-                    position[1]
+                    nextRow,
+                    nextCol
                 );
 
+
             if (!moved) {
+
                 return false;
             }
         }
+
 
         return true;
     }
 
 
-    backward(game, steps = 1) {
+    backward(
+        game,
+        steps = 1
+    ) {
 
-        this.validateSteps(
-            steps
-        );
+        steps =
+            this.validateSteps(
+                steps
+            );
+
 
         for (
             let i = 0;
@@ -362,19 +476,26 @@ class Robot {
             i++
         ) {
 
-            const position =
+            const [
+                nextRow,
+                nextCol
+            ] =
                 this.getBackwardPosition();
+
 
             const moved =
                 game.moveRobotTo(
-                    position[0],
-                    position[1]
+                    nextRow,
+                    nextCol
                 );
 
+
             if (!moved) {
+
                 return false;
             }
         }
+
 
         return true;
     }
@@ -382,7 +503,9 @@ class Robot {
 
     validateSteps(steps) {
 
-        steps = Number(steps);
+        steps =
+            Number(steps);
+
 
         if (
             !Number.isInteger(steps)
@@ -391,18 +514,22 @@ class Robot {
         ) {
 
             throw new Error(
-                "Le nombre de cases doit être un entier positif."
+                "La distance doit être un entier positif."
             );
         }
+
 
         if (
             steps > 100
         ) {
 
             throw new Error(
-                "Le déplacement demandé est trop grand."
+                "La distance demandée est trop grande."
             );
         }
+
+
+        return steps;
     }
 
 
@@ -418,43 +545,63 @@ class Robot {
     }
 
 
-    addObject(amount = 1) {
+    addObject(
+        amount = 1
+    ) {
 
-        amount = Number(amount);
+        amount =
+            Number(amount);
+
 
         if (
             !Number.isInteger(amount)
             ||
             amount < 0
         ) {
+
             return false;
         }
 
-        this.inventory += amount;
+
+        this.inventory +=
+            amount;
+
 
         return true;
     }
 
 
-    removeObject(amount = 1) {
+    removeObject(
+        amount = 1
+    ) {
 
-        amount = Number(amount);
+        amount =
+            Number(amount);
+
 
         if (
             !Number.isInteger(amount)
             ||
             amount < 0
         ) {
+
             return false;
         }
+
 
         if (
-            this.inventory < amount
+            this.inventory
+            <
+            amount
         ) {
+
             return false;
         }
 
-        this.inventory -= amount;
+
+        this.inventory -=
+            amount;
+
 
         return true;
     }
@@ -470,12 +617,12 @@ class Robot {
     // ÉNERGIE
     // =====================================================
 
-    recharge(amount = null) {
+    recharge(
+        amount = null
+    ) {
 
         if (
             amount === null
-            ||
-            amount === undefined
         ) {
 
             this.energy =
@@ -484,10 +631,13 @@ class Robot {
             return this.energy;
         }
 
-        amount = Number(amount);
+
+        amount =
+            Number(amount);
+
 
         if (
-            !Number.isFinite(amount)
+            Number.isNaN(amount)
             ||
             amount < 0
         ) {
@@ -495,22 +645,30 @@ class Robot {
             return this.energy;
         }
 
+
         this.energy =
             Math.min(
                 this.maxEnergy,
-                this.energy + amount
+                this.energy
+                +
+                amount
             );
+
 
         return this.energy;
     }
 
 
-    consumeEnergy(amount = 1) {
+    consumeEnergy(
+        amount = 1
+    ) {
 
-        amount = Number(amount);
+        amount =
+            Number(amount);
+
 
         if (
-            !Number.isFinite(amount)
+            Number.isNaN(amount)
             ||
             amount < 0
         ) {
@@ -518,23 +676,20 @@ class Robot {
             return false;
         }
 
-        if (
-            this.energy < amount
-        ) {
 
-            this.energy = 0;
-            this.active = false;
+        if (
+            this.energy
+            <
+            amount
+        ) {
 
             return false;
         }
 
-        this.energy -= amount;
 
-        if (
-            this.energy <= 0
-        ) {
-            this.active = false;
-        }
+        this.energy -=
+            amount;
+
 
         return true;
     }
@@ -550,27 +705,17 @@ class Robot {
         direction = Robot.EAST
     ) {
 
-        row = Number(row);
-        col = Number(col);
+        this.setPosition(
+            row,
+            col
+        );
 
-        if (
-            !Number.isInteger(row)
-            ||
-            !Number.isInteger(col)
-        ) {
-
-            throw new Error(
-                "Position de départ invalide."
-            );
-        }
-
-        this.row = row;
-        this.col = col;
 
         this.direction =
             this.validateDirection(
                 direction
             );
+
 
         this.inventory = 0;
 
@@ -578,18 +723,25 @@ class Robot {
             this.maxEnergy;
 
         this.active = true;
+
+
+        return true;
     }
 
 
     // =====================================================
-    // ÉTAT COMPLET
+    // ÉTAT
     // =====================================================
 
     getState() {
 
         return {
-            row: this.row,
-            col: this.col,
+
+            row:
+                this.row,
+
+            col:
+                this.col,
 
             direction:
                 this.direction,
@@ -610,12 +762,14 @@ class Robot {
 
 
     // =====================================================
-    // SYMBOLE DIRECTION
+    // OUTILS DE DEBUG
     // =====================================================
 
     getDirectionSymbol() {
 
-        switch (this.direction) {
+        switch (
+            this.direction
+        ) {
 
             case Robot.NORTH:
                 return "↑";
@@ -638,8 +792,9 @@ class Robot {
     toString() {
 
         return (
-            `Pyt(${this.row}, ${this.col}, ` +
-            `${this.direction})`
+            `Pyt (${this.row}, ${this.col}) `
+            +
+            `${this.getDirectionSymbol()}`
         );
     }
 
@@ -647,7 +802,7 @@ class Robot {
 
 
 // =========================================================
-// EXPOSITION GLOBALE
+// ACCESSIBLE AUX AUTRES FICHIERS
 // =========================================================
 
 window.Robot = Robot;
