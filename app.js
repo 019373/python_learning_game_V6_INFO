@@ -1,66 +1,54 @@
 "use strict";
 
-/*
-============================================================
-PYT - app.js
+/* =========================================================
+   PYT - app.js
 
-Rôle :
-- démarrer le jeu ;
-- gérer l'intro ;
-- gérer le menu et les paramètres ;
-- gérer la musique ;
-- exécuter le sous-ensemble Python utilisé dans PYT ;
-- transformer le code en actions ;
-- animer les actions même si le programme échoue ensuite ;
-- vérifier les notions demandées par chaque exercice ;
-- donner un retour précis à l'élève.
-============================================================
-*/
+   Gestion générale :
+   - lancement du jeu ;
+   - intro interactive ;
+   - crédits ;
+   - paramètres audio ;
+   - navigation ;
+   - exécution du pseudo-Python ;
+   - animation des actions ;
+   - messages d'erreur ;
+   - progression.
+========================================================= */
 
 
-// =========================================================
-// RUNNER PYTHON SIMPLIFIÉ
-// =========================================================
+/* =========================================================
+   INTERPRÉTEUR PYTHON CONTRÔLÉ
+========================================================= */
 
 class BrowserPythonRunner {
 
     constructor() {
-
         this.maxActions = 250;
         this.maxIterations = 1000;
         this.maxFunctionCalls = 100;
 
-        this.reset();
-    }
-
-
-    reset() {
-
+        this.actions = [];
+        this.output = [];
         this.variables = {};
         this.functions = {};
 
-        this.actions = [];
-        this.output = [];
-
-        this.loopIterations = 0;
+        this.iterations = 0;
         this.functionCalls = 0;
     }
 
 
-    // =====================================================
-    // LANCEMENT
-    // =====================================================
-
     run(code) {
-
-        this.reset();
+        this.actions = [];
+        this.output = [];
+        this.variables = {};
+        this.functions = {};
+        this.iterations = 0;
+        this.functionCalls = 0;
 
         try {
-
             this.checkForbiddenCode(code);
 
-            const lines =
-                this.prepareLines(code);
+            const lines = this.prepareLines(code);
 
             this.executeBlock(
                 lines,
@@ -79,45 +67,28 @@ class BrowserPythonRunner {
 
         } catch (error) {
 
-            const message =
-                error instanceof Error
-                    ? error.message
-                    : String(error);
+            let errorLine = null;
 
             const match =
-                message.match(
-                    /Ligne\s+(\d+)/i
-                );
+                String(error.message)
+                    .match(/Ligne\s+(\d+)/i);
+
+            if (match) {
+                errorLine = Number(match[1]);
+            }
 
             return {
                 success: false,
-
-                /*
-                IMPORTANT :
-                on garde les actions valides exécutées
-                avant l'erreur.
-                */
                 actions: [...this.actions],
-
                 output: [...this.output],
-
-                error: message,
-
-                errorLine:
-                    match
-                        ? Number(match[1])
-                        : null
+                error: error.message,
+                errorLine
             };
         }
     }
 
 
-    // =====================================================
-    // SÉCURITÉ
-    // =====================================================
-
     checkForbiddenCode(code) {
-
         const forbidden = [
             /\bimport\b/,
             /\bfrom\b/,
@@ -135,74 +106,61 @@ class BrowserPythonRunner {
         ];
 
         for (const pattern of forbidden) {
-
             if (pattern.test(code)) {
-
                 throw new Error(
-                    "Cette commande n'est pas disponible dans PYT."
+                    "Cette instruction n'est pas autorisée dans PYT."
                 );
             }
         }
     }
 
 
-    // =====================================================
-    // PRÉPARATION DES LIGNES
-    // =====================================================
-
     prepareLines(code) {
-
         const rawLines =
             String(code || "")
-                .replace(/\t/g, "    ")
-                .split(/\r?\n/);
+                .replace(/\r/g, "")
+                .split("\n");
 
-        const lines = [];
+        const result = [];
 
         for (
             let index = 0;
             index < rawLines.length;
             index++
         ) {
-
-            const raw =
+            const original =
                 rawLines[index];
 
             const withoutComment =
-                this.removeComment(raw);
+                this.removeComment(original);
 
             if (
                 withoutComment.trim() === ""
             ) {
-
                 continue;
             }
 
             const spaces =
                 withoutComment.match(/^ */)[0].length;
 
-            if (
-                spaces % 4 !== 0
-            ) {
-
+            if (spaces % 4 !== 0) {
                 throw new Error(
-                    `Ligne ${index + 1} : utilise 4 espaces pour l'indentation.`
+                    `Ligne ${index + 1} : l'indentation doit utiliser des groupes de 4 espaces.`
                 );
             }
 
-            lines.push({
-                number: index + 1,
-                indent: spaces / 4,
-                text: withoutComment.trim()
+            result.push({
+                text: withoutComment.trim(),
+                indent: spaces,
+                lineNumber: index + 1
             });
         }
 
-        return lines;
+        return result;
     }
 
 
     removeComment(line) {
-
         let quote = null;
 
         for (
@@ -210,38 +168,24 @@ class BrowserPythonRunner {
             i < line.length;
             i++
         ) {
-
-            const char =
-                line[i];
+            const char = line[i];
 
             if (
-                char === "'" ||
-                char === '"'
+                (char === '"' || char === "'") &&
+                line[i - 1] !== "\\"
             ) {
-
-                if (
-                    quote === char
-                ) {
-
+                if (quote === char) {
                     quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
+                } else if (!quote) {
                     quote = char;
                 }
             }
 
             if (
                 char === "#" &&
-                quote === null
+                !quote
             ) {
-
-                return line.slice(
-                    0,
-                    i
-                );
+                return line.slice(0, i);
             }
         }
 
@@ -249,57 +193,34 @@ class BrowserPythonRunner {
     }
 
 
-    // =====================================================
-    // BLOCS
-    // =====================================================
-
     executeBlock(
         lines,
         start,
         end,
         indent
     ) {
+        let i = start;
 
-        let index = start;
+        while (i < end) {
+            const line = lines[i];
 
-        while (index < end) {
-
-            const line =
-                lines[index];
-
-            if (
-                line.indent < indent
-            ) {
-
+            if (line.indent < indent) {
                 break;
             }
 
-            if (
-                line.indent > indent
-            ) {
-
+            if (line.indent > indent) {
                 throw new Error(
-                    `Ligne ${line.number} : indentation inattendue.`
+                    `Ligne ${line.lineNumber} : indentation inattendue.`
                 );
             }
 
+            const text = line.text;
 
-            const text =
-                line.text;
-
-
-            // ---------------------------------------------
-            // IF
-            // ---------------------------------------------
-
-            if (
-                /^if\s+.+:$/.test(text)
-            ) {
-
-                index =
+            if (/^if\b/.test(text)) {
+                i =
                     this.executeIfChain(
                         lines,
-                        index,
+                        i,
                         end,
                         indent
                     );
@@ -307,34 +228,11 @@ class BrowserPythonRunner {
                 continue;
             }
 
-
-            // ---------------------------------------------
-            // ELIF / ELSE isolé
-            // ---------------------------------------------
-
-            if (
-                /^elif\s+/.test(text) ||
-                text === "else:"
-            ) {
-
-                throw new Error(
-                    `Ligne ${line.number} : ${text.startsWith("elif") ? "elif" : "else"} sans if correspondant.`
-                );
-            }
-
-
-            // ---------------------------------------------
-            // FOR
-            // ---------------------------------------------
-
-            if (
-                /^for\s+/.test(text)
-            ) {
-
-                index =
+            if (/^for\b/.test(text)) {
+                i =
                     this.executeFor(
                         lines,
-                        index,
+                        i,
                         end,
                         indent
                     );
@@ -342,19 +240,11 @@ class BrowserPythonRunner {
                 continue;
             }
 
-
-            // ---------------------------------------------
-            // WHILE
-            // ---------------------------------------------
-
-            if (
-                /^while\s+/.test(text)
-            ) {
-
-                index =
+            if (/^while\b/.test(text)) {
+                i =
                     this.executeWhile(
                         lines,
-                        index,
+                        i,
                         end,
                         indent
                     );
@@ -362,19 +252,11 @@ class BrowserPythonRunner {
                 continue;
             }
 
-
-            // ---------------------------------------------
-            // DEF
-            // ---------------------------------------------
-
-            if (
-                /^def\s+/.test(text)
-            ) {
-
-                index =
+            if (/^def\b/.test(text)) {
+                i =
                     this.registerFunction(
                         lines,
-                        index,
+                        i,
                         end,
                         indent
                     );
@@ -382,81 +264,47 @@ class BrowserPythonRunner {
                 continue;
             }
 
-
-            // ---------------------------------------------
-            // BREAK
-            // ---------------------------------------------
-
-            if (
-                text === "break"
-            ) {
-
+            if (text === "break") {
                 return {
                     type: "break",
-                    nextIndex: index + 1
+                    nextIndex: i + 1
                 };
             }
 
-
-            // ---------------------------------------------
-            // RETURN
-            // ---------------------------------------------
-
-            if (
-                text === "return"
-            ) {
-
-                return {
-                    type: "return",
-                    value: null,
-                    nextIndex: index + 1
-                };
-            }
-
-
-            if (
-                text.startsWith("return ")
-            ) {
-
+            if (/^return\b/.test(text)) {
                 const expression =
-                    text.slice(7).trim();
+                    text.replace(/^return\b/, "")
+                        .trim();
 
                 return {
                     type: "return",
                     value:
-                        this.evaluateExpression(
-                            expression,
-                            line.number
-                        ),
-                    nextIndex: index + 1
+                        expression
+                            ? this.evaluateExpression(
+                                expression,
+                                line.lineNumber
+                            )
+                            : null,
+                    nextIndex: i + 1
                 };
             }
 
-
-            // ---------------------------------------------
-            // PASS
-            // ---------------------------------------------
-
-            if (
-                text === "pass"
-            ) {
-
-                index++;
+            if (text === "pass") {
+                i++;
                 continue;
             }
 
-
             this.executeStatement(
                 text,
-                line.number
+                line.lineNumber
             );
 
-            index++;
+            i++;
         }
 
         return {
             type: "normal",
-            nextIndex: index
+            nextIndex: i
         };
     }
 
@@ -465,186 +313,129 @@ class BrowserPythonRunner {
         lines,
         start,
         end,
-        parentIndent
+        indent
     ) {
+        let i = start;
 
-        let index =
-            start + 1;
-
-        while (index < end) {
-
-            if (
-                lines[index].indent <=
-                parentIndent
-            ) {
-
-                break;
-            }
-
-            index++;
+        while (
+            i < end &&
+            lines[i].indent > indent
+        ) {
+            i++;
         }
 
-        return index;
+        return i;
     }
 
 
-    // =====================================================
-    // IF / ELIF / ELSE
-    // =====================================================
-
     executeIfChain(
         lines,
-        start,
+        index,
         end,
         indent
     ) {
+        let i = index;
+        let executed = false;
 
-        let index = start;
-        let branchExecuted = false;
+        while (i < end) {
+            const line = lines[i];
 
-        while (index < end) {
-
-            const line =
-                lines[index];
-
-            if (
-                line.indent !== indent
-            ) {
-
+            if (line.indent !== indent) {
                 break;
             }
 
-            const text =
-                line.text;
+            const text = line.text;
 
-            const isIf =
-                /^if\s+.+:$/.test(text);
+            let condition = null;
 
-            const isElif =
-                /^elif\s+.+:$/.test(text);
+            if (/^if\b/.test(text)) {
+                condition =
+                    text
+                        .replace(/^if\s+/, "")
+                        .replace(/:\s*$/, "");
 
-            const isElse =
-                text === "else:";
+            } else if (/^elif\b/.test(text)) {
+                condition =
+                    text
+                        .replace(/^elif\s+/, "")
+                        .replace(/:\s*$/, "");
 
-            if (
-                !isIf &&
-                !isElif &&
-                !isElse
-            ) {
+            } else if (/^else\s*:/.test(text)) {
+                condition = true;
 
+            } else {
                 break;
             }
 
-            if (
-                index !== start &&
-                isIf
-            ) {
-
-                break;
-            }
-
+            const blockStart = i + 1;
             const blockEnd =
                 this.findBlockEnd(
                     lines,
-                    index,
+                    blockStart,
                     end,
                     indent
                 );
 
-            let shouldRun = false;
+            let shouldExecute = false;
 
-            if (!branchExecuted) {
-
-                if (isElse) {
-
-                    shouldRun = true;
-
+            if (!executed) {
+                if (condition === true) {
+                    shouldExecute = true;
                 } else {
-
-                    const conditionText =
-                        text
-                            .replace(
-                                /^(if|elif)\s+/,
-                                ""
-                            )
-                            .replace(
-                                /:$/,
-                                ""
-                            );
-
-                    shouldRun =
+                    shouldExecute =
                         Boolean(
                             this.evaluateExpression(
-                                conditionText,
-                                line.number
+                                condition,
+                                line.lineNumber
                             )
                         );
                 }
             }
 
-            if (shouldRun) {
-
-                branchExecuted = true;
+            if (shouldExecute) {
+                executed = true;
 
                 const result =
                     this.executeBlock(
                         lines,
-                        index + 1,
+                        blockStart,
                         blockEnd,
-                        indent + 1
+                        indent + 4
                     );
 
                 if (
+                    result &&
                     result.type !== "normal"
                 ) {
-
-                    return result;
+                    return blockEnd;
                 }
             }
 
-            index = blockEnd;
+            i = blockEnd;
 
             if (
-                index >= end
-            ) {
-
-                break;
-            }
-
-            const next =
-                lines[index];
-
-            if (
-                next.indent !== indent ||
-                !(
-                    /^elif\s+.+:$/.test(
-                        next.text
-                    ) ||
-                    next.text === "else:"
+                i >= end ||
+                lines[i].indent !== indent ||
+                !/^(elif\b|else\s*:)/.test(
+                    lines[i].text
                 )
             ) {
-
                 break;
             }
         }
 
-        return index;
+        return i;
     }
 
 
-    // =====================================================
-    // FOR
-    // =====================================================
-
     executeFor(
         lines,
-        start,
+        index,
         end,
         indent
     ) {
-
         const line =
-            lines[start];
+            lines[index];
 
         const match =
             line.text.match(
@@ -652,82 +443,72 @@ class BrowserPythonRunner {
             );
 
         if (!match) {
-
             throw new Error(
-                `Ligne ${line.number} : boucle for incorrecte.`
+                `Ligne ${line.lineNumber} : boucle for invalide.`
             );
         }
 
         const variableName =
             match[1];
 
-        const iterableExpression =
-            match[2];
-
         const iterable =
             this.evaluateExpression(
-                iterableExpression,
-                line.number
+                match[2],
+                line.lineNumber
             );
 
-        if (
-            !Array.isArray(iterable)
-        ) {
-
+        if (!Array.isArray(iterable)) {
             throw new Error(
-                `Ligne ${line.number} : la boucle for attend une liste ou range().`
+                `Ligne ${line.lineNumber} : la boucle for attend une liste ou range(...).`
             );
         }
+
+        const blockStart =
+            index + 1;
 
         const blockEnd =
             this.findBlockEnd(
                 lines,
-                start,
+                blockStart,
                 end,
                 indent
             );
 
-        for (
-            const value
-            of iterable
-        ) {
-
-            this.loopIterations++;
+        for (const value of iterable) {
+            this.iterations++;
 
             if (
-                this.loopIterations >
+                this.iterations >
                 this.maxIterations
             ) {
-
                 throw new Error(
-                    `Ligne ${line.number} : trop d'itérations. Vérifie ta boucle.`
+                    `Ligne ${line.lineNumber} : trop d'itérations.`
                 );
             }
 
-            this.variables[
-                variableName
-            ] = value;
+            this.variables[variableName] =
+                value;
 
             const result =
                 this.executeBlock(
                     lines,
-                    start + 1,
+                    blockStart,
                     blockEnd,
-                    indent + 1
+                    indent + 4
                 );
 
             if (
+                result &&
                 result.type === "break"
             ) {
-
                 break;
             }
 
             if (
+                result &&
                 result.type === "return"
             ) {
-
-                return result;
+                return blockEnd;
             }
         }
 
@@ -735,39 +516,27 @@ class BrowserPythonRunner {
     }
 
 
-    // =====================================================
-    // WHILE
-    // =====================================================
-
     executeWhile(
         lines,
-        start,
+        index,
         end,
         indent
     ) {
-
         const line =
-            lines[start];
-
-        const match =
-            line.text.match(
-                /^while\s+(.+):$/
-            );
-
-        if (!match) {
-
-            throw new Error(
-                `Ligne ${line.number} : boucle while incorrecte.`
-            );
-        }
+            lines[index];
 
         const condition =
-            match[1];
+            line.text
+                .replace(/^while\s+/, "")
+                .replace(/:\s*$/, "");
+
+        const blockStart =
+            index + 1;
 
         const blockEnd =
             this.findBlockEnd(
                 lines,
-                start,
+                blockStart,
                 end,
                 indent
             );
@@ -776,43 +545,41 @@ class BrowserPythonRunner {
             Boolean(
                 this.evaluateExpression(
                     condition,
-                    line.number
+                    line.lineNumber
                 )
             )
         ) {
-
-            this.loopIterations++;
+            this.iterations++;
 
             if (
-                this.loopIterations >
+                this.iterations >
                 this.maxIterations
             ) {
-
                 throw new Error(
-                    `Ligne ${line.number} : la boucle while semble ne jamais s'arrêter.`
+                    `Ligne ${line.lineNumber} : la boucle while semble infinie.`
                 );
             }
 
             const result =
                 this.executeBlock(
                     lines,
-                    start + 1,
+                    blockStart,
                     blockEnd,
-                    indent + 1
+                    indent + 4
                 );
 
             if (
+                result &&
                 result.type === "break"
             ) {
-
                 break;
             }
 
             if (
+                result &&
                 result.type === "return"
             ) {
-
-                return result;
+                return blockEnd;
             }
         }
 
@@ -820,19 +587,14 @@ class BrowserPythonRunner {
     }
 
 
-    // =====================================================
-    // FONCTIONS
-    // =====================================================
-
     registerFunction(
         lines,
-        start,
+        index,
         end,
         indent
     ) {
-
         const line =
-            lines[start];
+            lines[index];
 
         const match =
             line.text.match(
@@ -840,184 +602,61 @@ class BrowserPythonRunner {
             );
 
         if (!match) {
-
             throw new Error(
-                `Ligne ${line.number} : définition de fonction incorrecte.`
+                `Ligne ${line.lineNumber} : définition de fonction invalide.`
             );
         }
 
         const name =
             match[1];
 
-        const parametersText =
-            match[2].trim();
-
-        const parameters =
-            parametersText === ""
-                ? []
-                : parametersText
+        const params =
+            match[2].trim()
+                ? match[2]
                     .split(",")
                     .map(
-                        item =>
-                            item.trim()
-                    );
+                        value =>
+                            value.trim()
+                    )
+                : [];
 
-        for (
-            const parameter
-            of parameters
-        ) {
-
-            if (
-                !/^[A-Za-z_]\w*$/.test(
-                    parameter
-                )
-            ) {
-
-                throw new Error(
-                    `Ligne ${line.number} : paramètre de fonction incorrect.`
-                );
-            }
-        }
+        const blockStart =
+            index + 1;
 
         const blockEnd =
             this.findBlockEnd(
                 lines,
-                start,
+                blockStart,
                 end,
                 indent
             );
 
         this.functions[name] = {
-            parameters,
+            params,
             lines,
-            start: start + 1,
+            start: blockStart,
             end: blockEnd,
-            indent: indent + 1,
-            lineNumber: line.number
+            indent: indent + 4,
+            lineNumber: line.lineNumber
         };
 
         return blockEnd;
     }
 
 
-    callUserFunction(
-        name,
-        args,
-        lineNumber
-    ) {
-
-        const fn =
-            this.functions[name];
-
-        if (!fn) {
-
-            throw new Error(
-                `Ligne ${lineNumber} : fonction inconnue "${name}".`
-            );
-        }
-
-        if (
-            args.length !==
-            fn.parameters.length
-        ) {
-
-            throw new Error(
-                `Ligne ${lineNumber} : "${name}" attend ${fn.parameters.length} argument(s).`
-            );
-        }
-
-        this.functionCalls++;
-
-        if (
-            this.functionCalls >
-            this.maxFunctionCalls
-        ) {
-
-            throw new Error(
-                `Ligne ${lineNumber} : trop d'appels de fonction.`
-            );
-        }
-
-        const oldVariables =
-            { ...this.variables };
-
-        for (
-            let i = 0;
-            i < fn.parameters.length;
-            i++
-        ) {
-
-            this.variables[
-                fn.parameters[i]
-            ] = args[i];
-        }
-
-        const result =
-            this.executeBlock(
-                fn.lines,
-                fn.start,
-                fn.end,
-                fn.indent
-            );
-
-        const changedVariables =
-            { ...this.variables };
-
-        this.variables =
-            oldVariables;
-
-        /*
-        On conserve les variables globales
-        qui existaient avant l'appel.
-        */
-        for (
-            const key
-            of Object.keys(oldVariables)
-        ) {
-
-            if (
-                Object.prototype.hasOwnProperty.call(
-                    changedVariables,
-                    key
-                )
-            ) {
-
-                this.variables[key] =
-                    changedVariables[key];
-            }
-        }
-
-        if (
-            result.type === "return"
-        ) {
-
-            return result.value;
-        }
-
-        return null;
-    }
-
-
-    // =====================================================
-    // INSTRUCTIONS SIMPLES
-    // =====================================================
-
     executeStatement(
         text,
         lineNumber
     ) {
+        let match;
 
-        // ---------------------------------------------
-        // += -= *=
-        // ---------------------------------------------
 
-        let match =
+        match =
             text.match(
                 /^([A-Za-z_]\w*)\s*(\+=|-=|\*=)\s*(.+)$/
             );
 
         if (match) {
-
             const name =
                 match[1];
 
@@ -1030,42 +669,27 @@ class BrowserPythonRunner {
                     lineNumber
                 );
 
-            if (
-                !Object.prototype.hasOwnProperty.call(
-                    this.variables,
-                    name
-                )
-            ) {
+            const current =
+                this.variables[name] ?? 0;
 
-                throw new Error(
-                    `Ligne ${lineNumber} : variable inconnue "${name}".`
-                );
+            if (operator === "+=") {
+                this.variables[name] =
+                    current + value;
             }
 
-            if (
-                operator === "+="
-            ) {
+            if (operator === "-=") {
+                this.variables[name] =
+                    current - value;
+            }
 
-                this.variables[name] += value;
-
-            } else if (
-                operator === "-="
-            ) {
-
-                this.variables[name] -= value;
-
-            } else {
-
-                this.variables[name] *= value;
+            if (operator === "*=") {
+                this.variables[name] =
+                    current * value;
             }
 
             return;
         }
 
-
-        // ---------------------------------------------
-        // AFFECTATION
-        // ---------------------------------------------
 
         match =
             text.match(
@@ -1073,16 +697,9 @@ class BrowserPythonRunner {
             );
 
         if (match) {
-
-            const name =
-                match[1];
-
-            const expression =
-                match[2];
-
-            this.variables[name] =
+            this.variables[match[1]] =
                 this.evaluateExpression(
-                    expression,
+                    match[2],
                     lineNumber
                 );
 
@@ -1090,69 +707,43 @@ class BrowserPythonRunner {
         }
 
 
-        // ---------------------------------------------
-        // APPEND
-        // ---------------------------------------------
-
         match =
             text.match(
-                /^([A-Za-z_]\w*)\.append\s*\((.*)\)$/
+                /^([A-Za-z_]\w*)\.append\((.*)\)$/
             );
 
         if (match) {
-
-            const listName =
+            const name =
                 match[1];
 
-            const list =
-                this.variables[
-                    listName
-                ];
-
             if (
-                !Array.isArray(list)
+                !Array.isArray(
+                    this.variables[name]
+                )
             ) {
-
                 throw new Error(
-                    `Ligne ${lineNumber} : "${listName}" n'est pas une liste.`
+                    `Ligne ${lineNumber} : ${name} n'est pas une liste.`
                 );
             }
 
-            const value =
+            this.variables[name].push(
                 this.evaluateExpression(
                     match[2],
                     lineNumber
-                );
-
-            list.push(value);
+                )
+            );
 
             return;
         }
 
 
-        // ---------------------------------------------
-        // APPEL DE FONCTION
-        // ---------------------------------------------
-
-        match =
-            text.match(
-                /^([A-Za-z_]\w*)\s*\((.*)\)$/
-            );
-
-        if (match) {
-
-            const name =
-                match[1];
-
-            const args =
-                this.parseArguments(
-                    match[2],
-                    lineNumber
-                );
-
-            this.executeCall(
-                name,
-                args,
+        if (
+            /^[A-Za-z_]\w*\s*\(.*\)$/.test(
+                text
+            )
+        ) {
+            this.evaluateExpression(
+                text,
                 lineNumber
             );
 
@@ -1166,297 +757,37 @@ class BrowserPythonRunner {
     }
 
 
-    // =====================================================
-    // APPELS
-    // =====================================================
-
-    executeCall(
-        name,
-        args,
-        lineNumber
-    ) {
-
-        if (
-            name === "forward"
-        ) {
-
-            const steps =
-                this.requireMovementNumber(
-                    args,
-                    lineNumber,
-                    "forward"
-                );
-
-            this.addAction(
-                "forward",
-                steps,
-                lineNumber
-            );
-
-            return null;
-        }
-
-
-        if (
-            name === "backward"
-        ) {
-
-            const steps =
-                this.requireMovementNumber(
-                    args,
-                    lineNumber,
-                    "backward"
-                );
-
-            this.addAction(
-                "backward",
-                steps,
-                lineNumber
-            );
-
-            return null;
-        }
-
-
-        if (
-            name === "right"
-        ) {
-
-            const angle =
-                args.length === 0
-                    ? 90
-                    : Number(args[0]);
-
-            if (
-                !Number.isFinite(angle) ||
-                angle % 90 !== 0
-            ) {
-
-                throw new Error(
-                    `Ligne ${lineNumber} : right() attend un angle multiple de 90.`
-                );
-            }
-
-            const turns =
-                Math.abs(angle / 90);
-
-            for (
-                let i = 0;
-                i < turns;
-                i++
-            ) {
-
-                this.addAction(
-                    angle >= 0
-                        ? "right"
-                        : "left",
-                    90,
-                    lineNumber
-                );
-            }
-
-            return null;
-        }
-
-
-        if (
-            name === "left"
-        ) {
-
-            const angle =
-                args.length === 0
-                    ? 90
-                    : Number(args[0]);
-
-            if (
-                !Number.isFinite(angle) ||
-                angle % 90 !== 0
-            ) {
-
-                throw new Error(
-                    `Ligne ${lineNumber} : left() attend un angle multiple de 90.`
-                );
-            }
-
-            const turns =
-                Math.abs(angle / 90);
-
-            for (
-                let i = 0;
-                i < turns;
-                i++
-            ) {
-
-                this.addAction(
-                    angle >= 0
-                        ? "left"
-                        : "right",
-                    90,
-                    lineNumber
-                );
-            }
-
-            return null;
-        }
-
-
-        if (
-            name === "print"
-        ) {
-
-            this.output.push(
-                args
-                    .map(
-                        value =>
-                            this.pythonString(
-                                value
-                            )
-                    )
-                    .join(" ")
-            );
-
-            return null;
-        }
-
-
-        if (
-            Object.prototype.hasOwnProperty.call(
-                this.functions,
-                name
-            )
-        ) {
-
-            return this.callUserFunction(
-                name,
-                args,
-                lineNumber
-            );
-        }
-
-
-        throw new Error(
-            `Ligne ${lineNumber} : fonction inconnue "${name}".`
-        );
-    }
-
-
-    requireMovementNumber(
-        args,
-        lineNumber,
-        name
-    ) {
-
-        if (
-            args.length > 1
-        ) {
-
-            throw new Error(
-                `Ligne ${lineNumber} : ${name}() attend un seul nombre.`
-            );
-        }
-
-        const value =
-            args.length === 0
-                ? 1
-                : Number(args[0]);
-
-        if (
-            !Number.isFinite(value) ||
-            value < 0 ||
-            !Number.isInteger(value)
-        ) {
-
-            throw new Error(
-                `Ligne ${lineNumber} : ${name}() attend un nombre entier positif.`
-            );
-        }
-
-        return value;
-    }
-
-
-    addAction(
-        type,
-        value,
-        line
-    ) {
-
-        if (
-            this.actions.length >=
-            this.maxActions
-        ) {
-
-            throw new Error(
-                `Ligne ${line} : trop d'actions dans le programme.`
-            );
-        }
-
-        /*
-        On garde maintenant le numéro de ligne.
-        Cela permet d'indiquer une ligne seulement
-        lorsqu'une action précise est réellement en cause.
-        */
-
-        this.actions.push({
-            type,
-            value,
-            line
-        });
-    }
-
-
-    // =====================================================
-    // EXPRESSIONS
-    // =====================================================
-
     evaluateExpression(
         expression,
         lineNumber
     ) {
-
         let expr =
             String(expression).trim();
 
-        if (
-            expr === ""
-        ) {
+        if (expr === "") {
+            return null;
+        }
 
-            throw new Error(
-                `Ligne ${lineNumber} : expression vide.`
+
+        if (
+            expr.startsWith("(") &&
+            expr.endsWith(")") &&
+            this.parenthesesWrapExpression(expr)
+        ) {
+            return this.evaluateExpression(
+                expr.slice(1, -1),
+                lineNumber
             );
         }
 
 
-        // ---------------------------------------------
-        // PARENTHÈSES EXTÉRIEURES
-        // ---------------------------------------------
-
-        while (
-            expr.startsWith("(") &&
-            expr.endsWith(")") &&
-            this.outerParenthesesMatch(expr)
-        ) {
-
-            expr =
-                expr.slice(
-                    1,
-                    -1
-                ).trim();
-        }
-
-
-        // ---------------------------------------------
-        // OR
-        // ---------------------------------------------
-
         let split =
-            this.splitTopLevelWord(
+            this.findTopLevelWord(
                 expr,
                 "or"
             );
 
         if (split) {
-
             return (
                 Boolean(
                     this.evaluateExpression(
@@ -1474,18 +805,13 @@ class BrowserPythonRunner {
         }
 
 
-        // ---------------------------------------------
-        // AND
-        // ---------------------------------------------
-
         split =
-            this.splitTopLevelWord(
+            this.findTopLevelWord(
                 expr,
                 "and"
             );
 
         if (split) {
-
             return (
                 Boolean(
                     this.evaluateExpression(
@@ -1503,240 +829,167 @@ class BrowserPythonRunner {
         }
 
 
-        // ---------------------------------------------
-        // NOT
-        // ---------------------------------------------
-
-        if (
-            expr.startsWith("not ")
-        ) {
-
+        if (/^not\s+/.test(expr)) {
             return !Boolean(
                 this.evaluateExpression(
-                    expr.slice(4),
+                    expr.replace(/^not\s+/, ""),
                     lineNumber
                 )
             );
         }
 
 
-        // ---------------------------------------------
-        // COMPARAISONS
-        // ---------------------------------------------
+        const comparisons = [
+            "==",
+            "!=",
+            ">=",
+            "<=",
+            ">",
+            "<"
+        ];
 
-        const comparison =
-            this.findTopLevelOperator(
-                expr,
-                [
-                    "==",
-                    "!=",
-                    ">=",
-                    "<=",
-                    ">",
-                    "<"
-                ]
-            );
-
-        if (comparison) {
-
-            const left =
-                this.evaluateExpression(
-                    expr.slice(
-                        0,
-                        comparison.index
-                    ),
-                    lineNumber
+        for (
+            const operator
+            of comparisons
+        ) {
+            const comparison =
+                this.findTopLevelOperator(
+                    expr,
+                    operator
                 );
 
-            const right =
-                this.evaluateExpression(
-                    expr.slice(
-                        comparison.index +
-                        comparison.operator.length
-                    ),
-                    lineNumber
-                );
-
-            switch (
-                comparison.operator
-            ) {
-
-                case "==":
-                    return left === right;
-
-                case "!=":
-                    return left !== right;
-
-                case ">=":
-                    return left >= right;
-
-                case "<=":
-                    return left <= right;
-
-                case ">":
-                    return left > right;
-
-                case "<":
-                    return left < right;
-            }
-        }
-
-
-        // ---------------------------------------------
-        // ADDITION / SOUSTRACTION
-        // ---------------------------------------------
-
-        const addSub =
-            this.findTopLevelOperatorFromRight(
-                expr,
-                [
-                    "+",
-                    "-"
-                ]
-            );
-
-        if (addSub) {
-
-            const left =
-                this.evaluateExpression(
-                    expr.slice(
-                        0,
-                        addSub.index
-                    ),
-                    lineNumber
-                );
-
-            const right =
-                this.evaluateExpression(
-                    expr.slice(
-                        addSub.index + 1
-                    ),
-                    lineNumber
-                );
-
-            if (
-                addSub.operator === "+"
-            ) {
-
-                return left + right;
-            }
-
-            return left - right;
-        }
-
-
-        // ---------------------------------------------
-        // MULTIPLICATION / DIVISION
-        // ---------------------------------------------
-
-        const mulDiv =
-            this.findTopLevelOperatorFromRight(
-                expr,
-                [
-                    "*",
-                    "/",
-                    "%"
-                ]
-            );
-
-        if (mulDiv) {
-
-            const left =
-                this.evaluateExpression(
-                    expr.slice(
-                        0,
-                        mulDiv.index
-                    ),
-                    lineNumber
-                );
-
-            const right =
-                this.evaluateExpression(
-                    expr.slice(
-                        mulDiv.index + 1
-                    ),
-                    lineNumber
-                );
-
-            if (
-                mulDiv.operator === "*"
-            ) {
-
-                return left * right;
-            }
-
-            if (
-                mulDiv.operator === "/"
-            ) {
-
-                if (right === 0) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : division par zéro.`
+            if (comparison) {
+                const left =
+                    this.evaluateExpression(
+                        comparison.left,
+                        lineNumber
                     );
+
+                const right =
+                    this.evaluateExpression(
+                        comparison.right,
+                        lineNumber
+                    );
+
+                switch (operator) {
+                    case "==":
+                        return left === right;
+
+                    case "!=":
+                        return left !== right;
+
+                    case ">=":
+                        return left >= right;
+
+                    case "<=":
+                        return left <= right;
+
+                    case ">":
+                        return left > right;
+
+                    case "<":
+                        return left < right;
+                }
+            }
+        }
+
+
+        for (
+            const operator
+            of ["+", "-"]
+        ) {
+            const operation =
+                this.findTopLevelOperatorFromRight(
+                    expr,
+                    operator
+                );
+
+            if (operation) {
+                const left =
+                    this.evaluateExpression(
+                        operation.left,
+                        lineNumber
+                    );
+
+                const right =
+                    this.evaluateExpression(
+                        operation.right,
+                        lineNumber
+                    );
+
+                if (operator === "+") {
+                    return left + right;
                 }
 
-                return left / right;
+                return left - right;
             }
-
-            return left % right;
         }
 
 
-        // ---------------------------------------------
-        // NOMBRE NÉGATIF
-        // ---------------------------------------------
-
-        if (
-            expr.startsWith("-") &&
-            /^-\d+(\.\d+)?$/.test(expr)
+        for (
+            const operator
+            of ["*", "/", "%"]
         ) {
+            const operation =
+                this.findTopLevelOperatorFromRight(
+                    expr,
+                    operator
+                );
 
+            if (operation) {
+                const left =
+                    this.evaluateExpression(
+                        operation.left,
+                        lineNumber
+                    );
+
+                const right =
+                    this.evaluateExpression(
+                        operation.right,
+                        lineNumber
+                    );
+
+                if (operator === "*") {
+                    return left * right;
+                }
+
+                if (operator === "/") {
+                    if (right === 0) {
+                        throw new Error(
+                            `Ligne ${lineNumber} : division par zéro.`
+                        );
+                    }
+
+                    return left / right;
+                }
+
+                return left % right;
+            }
+        }
+
+
+        if (/^-\d+(\.\d+)?$/.test(expr)) {
             return Number(expr);
         }
 
 
-        // ---------------------------------------------
-        // NOMBRES
-        // ---------------------------------------------
-
-        if (
-            /^\d+(\.\d+)?$/.test(expr)
-        ) {
-
+        if (/^\d+(\.\d+)?$/.test(expr)) {
             return Number(expr);
         }
 
 
-        // ---------------------------------------------
-        // BOOL / NONE
-        // ---------------------------------------------
-
-        if (
-            expr === "True"
-        ) {
-
+        if (expr === "True") {
             return true;
         }
 
-        if (
-            expr === "False"
-        ) {
-
+        if (expr === "False") {
             return false;
         }
 
-        if (
-            expr === "None"
-        ) {
-
+        if (expr === "None") {
             return null;
         }
 
-
-        // ---------------------------------------------
-        // CHAÎNES
-        // ---------------------------------------------
 
         if (
             (
@@ -1748,38 +1001,23 @@ class BrowserPythonRunner {
                 expr.endsWith("'")
             )
         ) {
-
-            return expr.slice(
-                1,
-                -1
-            );
+            return expr.slice(1, -1);
         }
 
-
-        // ---------------------------------------------
-        // LISTE
-        // ---------------------------------------------
 
         if (
             expr.startsWith("[") &&
             expr.endsWith("]")
         ) {
+            const content =
+                expr.slice(1, -1)
+                    .trim();
 
-            const inside =
-                expr.slice(
-                    1,
-                    -1
-                ).trim();
-
-            if (
-                inside === ""
-            ) {
-
+            if (!content) {
                 return [];
             }
 
-            return this
-                .splitArguments(inside)
+            return this.splitArguments(content)
                 .map(
                     item =>
                         this.evaluateExpression(
@@ -1790,32 +1028,23 @@ class BrowserPythonRunner {
         }
 
 
-        // ---------------------------------------------
-        // INDEX DE LISTE
-        // ---------------------------------------------
-
         const indexMatch =
             expr.match(
                 /^([A-Za-z_]\w*)\[(.+)\]$/
             );
 
         if (indexMatch) {
-
-            const listName =
-                indexMatch[1];
-
-            const list =
+            const value =
                 this.variables[
-                    listName
+                    indexMatch[1]
                 ];
 
             if (
-                !Array.isArray(list) &&
-                typeof list !== "string"
+                !Array.isArray(value) &&
+                typeof value !== "string"
             ) {
-
                 throw new Error(
-                    `Ligne ${lineNumber} : "${listName}" ne peut pas être indexé.`
+                    `Ligne ${lineNumber} : impossible d'utiliser un index ici.`
                 );
             }
 
@@ -1827,379 +1056,382 @@ class BrowserPythonRunner {
                     )
                 );
 
-            if (
-                !Number.isInteger(index)
-            ) {
-
-                throw new Error(
-                    `Ligne ${lineNumber} : l'indice doit être un entier.`
-                );
-            }
-
-            if (
-                index < 0 ||
-                index >= list.length
-            ) {
-
-                throw new Error(
-                    `Ligne ${lineNumber} : indice hors de la liste.`
-                );
-            }
-
-            return list[index];
+            return value[index];
         }
 
 
-        // ---------------------------------------------
-        // APPEL DANS UNE EXPRESSION
-        // ---------------------------------------------
-
-        const callMatch =
+        const call =
             expr.match(
                 /^([A-Za-z_]\w*)\s*\((.*)\)$/
             );
 
-        if (callMatch) {
-
+        if (call) {
             const name =
-                callMatch[1];
+                call[1];
 
             const args =
-                this.parseArguments(
-                    callMatch[2],
-                    lineNumber
-                );
+                call[2].trim()
+                    ? this.splitArguments(
+                        call[2]
+                    ).map(
+                        argument =>
+                            this.evaluateExpression(
+                                argument,
+                                lineNumber
+                            )
+                    )
+                    : [];
 
-
-            if (
-                name === "range"
-            ) {
-
-                return this.makeRange(
-                    args,
-                    lineNumber
-                );
-            }
-
-
-            if (
-                name === "len"
-            ) {
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : len() attend une valeur.`
-                    );
-                }
-
-                if (
-                    !Array.isArray(args[0]) &&
-                    typeof args[0] !== "string"
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : len() attend une liste ou un texte.`
-                    );
-                }
-
-                return args[0].length;
-            }
-
-
-            if (
-                name === "int"
-            ) {
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : int() attend une valeur.`
-                    );
-                }
-
-                const value =
-                    parseInt(
-                        args[0],
-                        10
-                    );
-
-                if (
-                    Number.isNaN(value)
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : conversion en int impossible.`
-                    );
-                }
-
-                return value;
-            }
-
-
-            if (
-                name === "float"
-            ) {
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : float() attend une valeur.`
-                    );
-                }
-
-                const value =
-                    Number(
-                        args[0]
-                    );
-
-                if (
-                    Number.isNaN(value)
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : conversion en float impossible.`
-                    );
-                }
-
-                return value;
-            }
-
-
-            if (
-                name === "str"
-            ) {
-
-                if (
-                    args.length !== 1
-                ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : str() attend une valeur.`
-                    );
-                }
-
-                return String(
-                    args[0]
-                );
-            }
-
-
-            if (
-                Object.prototype.hasOwnProperty.call(
-                    this.functions,
-                    name
-                )
-            ) {
-
-                return this.callUserFunction(
-                    name,
-                    args,
-                    lineNumber
-                );
-            }
-
-
-            throw new Error(
-                `Ligne ${lineNumber} : fonction inconnue "${name}".`
+            return this.callFunction(
+                name,
+                args,
+                lineNumber
             );
         }
 
 
-        // ---------------------------------------------
-        // VARIABLE
-        // ---------------------------------------------
-
         if (
-            /^[A-Za-z_]\w*$/.test(expr)
+            Object.prototype.hasOwnProperty.call(
+                this.variables,
+                expr
+            )
         ) {
+            return this.variables[expr];
+        }
+
+
+        throw new Error(
+            `Ligne ${lineNumber} : expression inconnue « ${expr} ».`
+        );
+    }
+
+
+    callFunction(
+        name,
+        args,
+        lineNumber
+    ) {
+        if (
+            name === "forward" ||
+            name === "backward"
+        ) {
+            const amount =
+                args.length
+                    ? Number(args[0])
+                    : 1;
 
             if (
-                Object.prototype.hasOwnProperty.call(
-                    this.variables,
-                    expr
-                )
+                !Number.isInteger(amount) ||
+                amount < 0
             ) {
-
-                return this.variables[
-                    expr
-                ];
+                throw new Error(
+                    `Ligne ${lineNumber} : ${name} attend un nombre entier positif.`
+                );
             }
 
-            throw new Error(
-                `Ligne ${lineNumber} : variable inconnue "${expr}".`
+            /*
+            Une action est créée PAR CASE.
+
+            Cela permet d'avoir réellement environ
+            0,5 seconde entre chaque déplacement.
+            */
+            for (
+                let step = 0;
+                step < amount;
+                step++
+            ) {
+                this.addAction(
+                    name,
+                    1,
+                    lineNumber
+                );
+            }
+
+            return null;
+        }
+
+
+        if (
+            name === "right" ||
+            name === "left"
+        ) {
+            const angle =
+                args.length
+                    ? Number(args[0])
+                    : 90;
+
+            if (
+                !Number.isFinite(angle) ||
+                angle % 90 !== 0
+            ) {
+                throw new Error(
+                    `Ligne ${lineNumber} : ${name} attend un angle multiple de 90.`
+                );
+            }
+
+            const turns =
+                Math.abs(angle / 90);
+
+            for (
+                let turn = 0;
+                turn < turns;
+                turn++
+            ) {
+                this.addAction(
+                    angle >= 0
+                        ? name
+                        : (
+                            name === "right"
+                                ? "left"
+                                : "right"
+                        ),
+                    90,
+                    lineNumber
+                );
+            }
+
+            return null;
+        }
+
+
+        if (name === "print") {
+            this.output.push(
+                args
+                    .map(String)
+                    .join(" ")
+            );
+
+            return null;
+        }
+
+
+        if (name === "range") {
+            return this.makeRange(args, lineNumber);
+        }
+
+
+        if (name === "len") {
+            if (args.length !== 1) {
+                throw new Error(
+                    `Ligne ${lineNumber} : len() attend une valeur.`
+                );
+            }
+
+            return args[0]?.length ?? 0;
+        }
+
+
+        if (name === "int") {
+            return parseInt(
+                args[0] ?? 0,
+                10
+            );
+        }
+
+
+        if (name === "float") {
+            return Number(
+                args[0] ?? 0
+            );
+        }
+
+
+        if (name === "str") {
+            return String(
+                args[0] ?? ""
+            );
+        }
+
+
+        if (this.functions[name]) {
+            return this.callUserFunction(
+                name,
+                args,
+                lineNumber
             );
         }
 
 
         throw new Error(
-            `Ligne ${lineNumber} : expression non reconnue "${expr}".`
+            `Ligne ${lineNumber} : fonction inconnue « ${name} ».`
         );
     }
 
 
-    // =====================================================
-    // RANGE
-    // =====================================================
+    addAction(
+        type,
+        value,
+        line
+    ) {
+        if (
+            this.actions.length >=
+            this.maxActions
+        ) {
+            throw new Error(
+                `Ligne ${line} : trop d'actions dans ce programme.`
+            );
+        }
+
+        this.actions.push({
+            type,
+            value,
+            line
+        });
+    }
+
 
     makeRange(
         args,
         lineNumber
     ) {
+        let start;
+        let stop;
+        let step;
 
-        if (
-            args.length < 1 ||
-            args.length > 3
-        ) {
+        if (args.length === 1) {
+            start = 0;
+            stop = Number(args[0]);
+            step = 1;
 
-            throw new Error(
-                `Ligne ${lineNumber} : range() attend 1 à 3 nombres.`
-            );
-        }
+        } else if (args.length === 2) {
+            start = Number(args[0]);
+            stop = Number(args[1]);
+            step = 1;
 
-        let start = 0;
-        let stop = 0;
-        let step = 1;
-
-        if (
-            args.length === 1
-        ) {
-
-            stop =
-                Number(args[0]);
-
-        } else if (
-            args.length === 2
-        ) {
-
-            start =
-                Number(args[0]);
-
-            stop =
-                Number(args[1]);
+        } else if (args.length === 3) {
+            start = Number(args[0]);
+            stop = Number(args[1]);
+            step = Number(args[2]);
 
         } else {
-
-            start =
-                Number(args[0]);
-
-            stop =
-                Number(args[1]);
-
-            step =
-                Number(args[2]);
-        }
-
-        if (
-            !Number.isInteger(start) ||
-            !Number.isInteger(stop) ||
-            !Number.isInteger(step)
-        ) {
-
             throw new Error(
-                `Ligne ${lineNumber} : range() utilise des nombres entiers.`
+                `Ligne ${lineNumber} : range() attend 1, 2 ou 3 valeurs.`
             );
         }
 
         if (
+            !Number.isFinite(start) ||
+            !Number.isFinite(stop) ||
+            !Number.isFinite(step) ||
             step === 0
         ) {
-
             throw new Error(
-                `Ligne ${lineNumber} : le pas de range() ne peut pas être 0.`
+                `Ligne ${lineNumber} : range() contient une valeur invalide.`
             );
         }
 
-        const result = [];
+        const values = [];
 
-        if (
-            step > 0
-        ) {
-
+        if (step > 0) {
             for (
                 let value = start;
                 value < stop;
                 value += step
             ) {
-
-                result.push(value);
+                values.push(value);
 
                 if (
-                    result.length >
+                    values.length >
                     this.maxIterations
                 ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : range() est trop grand.`
-                    );
+                    break;
                 }
             }
 
         } else {
-
             for (
                 let value = start;
                 value > stop;
                 value += step
             ) {
-
-                result.push(value);
+                values.push(value);
 
                 if (
-                    result.length >
+                    values.length >
                     this.maxIterations
                 ) {
-
-                    throw new Error(
-                        `Ligne ${lineNumber} : range() est trop grand.`
-                    );
+                    break;
                 }
             }
         }
 
-        return result;
+        return values;
     }
 
 
-    // =====================================================
-    // ARGUMENTS
-    // =====================================================
-
-    parseArguments(
-        text,
+    callUserFunction(
+        name,
+        args,
         lineNumber
     ) {
-
-        const trimmed =
-            String(text).trim();
+        this.functionCalls++;
 
         if (
-            trimmed === ""
+            this.functionCalls >
+            this.maxFunctionCalls
         ) {
-
-            return [];
+            throw new Error(
+                `Ligne ${lineNumber} : trop d'appels de fonction.`
+            );
         }
 
-        return this
-            .splitArguments(trimmed)
-            .map(
-                expression =>
-                    this.evaluateExpression(
-                        expression,
-                        lineNumber
-                    )
+        const definition =
+            this.functions[name];
+
+        const previousVariables = {
+            ...this.variables
+        };
+
+        for (
+            let i = 0;
+            i < definition.params.length;
+            i++
+        ) {
+            this.variables[
+                definition.params[i]
+            ] = args[i] ?? null;
+        }
+
+        const result =
+            this.executeBlock(
+                definition.lines,
+                definition.start,
+                definition.end,
+                definition.indent
             );
+
+        const changedExisting = {};
+
+        for (
+            const key
+            of Object.keys(previousVariables)
+        ) {
+            if (
+                this.variables[key] !==
+                previousVariables[key]
+            ) {
+                changedExisting[key] =
+                    this.variables[key];
+            }
+        }
+
+        this.variables = {
+            ...previousVariables,
+            ...changedExisting
+        };
+
+        if (
+            result &&
+            result.type === "return"
+        ) {
+            return result.value;
+        }
+
+        return null;
     }
 
 
     splitArguments(text) {
-
         const result = [];
 
         let current = "";
@@ -2211,61 +1443,43 @@ class BrowserPythonRunner {
             i < text.length;
             i++
         ) {
-
-            const char =
-                text[i];
+            const char = text[i];
 
             if (
-                char === "'" ||
-                char === '"'
+                (char === '"' || char === "'") &&
+                text[i - 1] !== "\\"
             ) {
-
-                if (
-                    quote === char
-                ) {
-
+                if (quote === char) {
                     quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
+                } else if (!quote) {
                     quote = char;
                 }
-
-                current += char;
-                continue;
             }
 
-            if (
-                quote === null
-            ) {
-
+            if (!quote) {
                 if (
                     char === "(" ||
                     char === "["
                 ) {
-
                     depth++;
+                }
 
-                } else if (
+                if (
                     char === ")" ||
                     char === "]"
                 ) {
-
                     depth--;
+                }
 
-                } else if (
+                if (
                     char === "," &&
                     depth === 0
                 ) {
-
                     result.push(
                         current.trim()
                     );
 
                     current = "";
-
                     continue;
                 }
             }
@@ -2273,10 +1487,7 @@ class BrowserPythonRunner {
             current += char;
         }
 
-        if (
-            current.trim() !== ""
-        ) {
-
+        if (current.trim()) {
             result.push(
                 current.trim()
             );
@@ -2286,12 +1497,7 @@ class BrowserPythonRunner {
     }
 
 
-    // =====================================================
-    // OUTILS EXPRESSIONS
-    // =====================================================
-
-    outerParenthesesMatch(expr) {
-
+    parenthesesWrapExpression(expr) {
         let depth = 0;
         let quote = null;
 
@@ -2300,57 +1506,37 @@ class BrowserPythonRunner {
             i < expr.length;
             i++
         ) {
-
-            const char =
-                expr[i];
+            const char = expr[i];
 
             if (
-                char === "'" ||
-                char === '"'
+                (char === '"' || char === "'") &&
+                expr[i - 1] !== "\\"
             ) {
-
-                if (
-                    quote === char
-                ) {
-
+                if (quote === char) {
                     quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
+                } else if (!quote) {
                     quote = char;
                 }
+            }
 
+            if (quote) {
                 continue;
             }
 
-            if (
-                quote !== null
-            ) {
-
-                continue;
-            }
-
-            if (
-                char === "("
-            ) {
-
+            if (char === "(") {
                 depth++;
+            }
 
-            } else if (
-                char === ")"
-            ) {
-
+            if (char === ")") {
                 depth--;
+            }
 
-                if (
-                    depth === 0 &&
-                    i !== expr.length - 1
-                ) {
-
-                    return false;
-                }
+            if (
+                depth === 0 &&
+                i <
+                expr.length - 1
+            ) {
+                return false;
             }
         }
 
@@ -2358,48 +1544,33 @@ class BrowserPythonRunner {
     }
 
 
-    splitTopLevelWord(
-        expression,
+    findTopLevelWord(
+        expr,
         word
     ) {
-
         let depth = 0;
         let quote = null;
 
         for (
             let i = 0;
-            i <= expression.length - word.length;
+            i <=
+            expr.length - word.length;
             i++
         ) {
-
-            const char =
-                expression[i];
+            const char = expr[i];
 
             if (
-                char === "'" ||
-                char === '"'
+                (char === '"' || char === "'") &&
+                expr[i - 1] !== "\\"
             ) {
-
-                if (
-                    quote === char
-                ) {
-
+                if (quote === char) {
                     quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
+                } else if (!quote) {
                     quote = char;
                 }
-
-                continue;
             }
 
-            if (
-                quote !== null
-            ) {
-
+            if (quote) {
                 continue;
             }
 
@@ -2407,68 +1578,113 @@ class BrowserPythonRunner {
                 char === "(" ||
                 char === "["
             ) {
-
                 depth++;
-                continue;
             }
 
             if (
                 char === ")" ||
                 char === "]"
             ) {
-
                 depth--;
-                continue;
             }
 
             if (
-                depth !== 0
-            ) {
-
-                continue;
-            }
-
-            const candidate =
-                expression.slice(
+                depth === 0 &&
+                expr.slice(
                     i,
                     i + word.length
-                );
+                ) === word
+            ) {
+                const before =
+                    expr[i - 1];
+
+                const after =
+                    expr[i + word.length];
+
+                if (
+                    (!before || /\s/.test(before)) &&
+                    (!after || /\s/.test(after))
+                ) {
+                    return {
+                        left:
+                            expr
+                                .slice(0, i)
+                                .trim(),
+
+                        right:
+                            expr
+                                .slice(
+                                    i + word.length
+                                )
+                                .trim()
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
+
+    findTopLevelOperator(
+        expr,
+        operator
+    ) {
+        let depth = 0;
+        let quote = null;
+
+        for (
+            let i = 0;
+            i <=
+            expr.length - operator.length;
+            i++
+        ) {
+            const char = expr[i];
 
             if (
-                candidate !== word
+                (char === '"' || char === "'") &&
+                expr[i - 1] !== "\\"
             ) {
+                if (quote === char) {
+                    quote = null;
+                } else if (!quote) {
+                    quote = char;
+                }
+            }
 
+            if (quote) {
                 continue;
             }
 
-            const before =
-                i === 0
-                    ? " "
-                    : expression[i - 1];
-
-            const after =
-                i + word.length >=
-                expression.length
-                    ? " "
-                    : expression[
-                        i + word.length
-                    ];
+            if (
+                char === "(" ||
+                char === "["
+            ) {
+                depth++;
+            }
 
             if (
-                /\s/.test(before) &&
-                /\s/.test(after)
+                char === ")" ||
+                char === "]"
             ) {
+                depth--;
+            }
 
+            if (
+                depth === 0 &&
+                expr.slice(
+                    i,
+                    i + operator.length
+                ) === operator
+            ) {
                 return {
                     left:
-                        expression
-                            .slice(0, i)
-                            .trim(),
+                        expr.slice(0, i).trim(),
 
                     right:
-                        expression
+                        expr
                             .slice(
-                                i + word.length
+                                i + operator.length
                             )
                             .trim()
                 };
@@ -2479,143 +1695,34 @@ class BrowserPythonRunner {
     }
 
 
-    findTopLevelOperator(
-        expression,
-        operators
-    ) {
-
-        let depth = 0;
-        let quote = null;
-
-        for (
-            let i = 0;
-            i < expression.length;
-            i++
-        ) {
-
-            const char =
-                expression[i];
-
-            if (
-                char === "'" ||
-                char === '"'
-            ) {
-
-                if (
-                    quote === char
-                ) {
-
-                    quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
-                    quote = char;
-                }
-
-                continue;
-            }
-
-            if (
-                quote !== null
-            ) {
-
-                continue;
-            }
-
-            if (
-                char === "(" ||
-                char === "["
-            ) {
-
-                depth++;
-                continue;
-            }
-
-            if (
-                char === ")" ||
-                char === "]"
-            ) {
-
-                depth--;
-                continue;
-            }
-
-            if (
-                depth !== 0
-            ) {
-
-                continue;
-            }
-
-            for (
-                const operator
-                of operators
-            ) {
-
-                if (
-                    expression.startsWith(
-                        operator,
-                        i
-                    )
-                ) {
-
-                    return {
-                        index: i,
-                        operator
-                    };
-                }
-            }
-        }
-
-        return null;
-    }
-
-
     findTopLevelOperatorFromRight(
-        expression,
-        operators
+        expr,
+        operator
     ) {
-
         let depth = 0;
         let quote = null;
 
         for (
-            let i =
-                expression.length - 1;
+            let i = expr.length - 1;
             i >= 0;
             i--
         ) {
-
-            const char =
-                expression[i];
+            const char = expr[i];
 
             if (
-                char === "'" ||
-                char === '"'
+                char === '"' ||
+                char === "'"
             ) {
-
-                if (
-                    quote === char
-                ) {
-
+                if (quote === char) {
                     quote = null;
-
-                } else if (
-                    quote === null
-                ) {
-
+                } else if (!quote) {
                     quote = char;
                 }
 
                 continue;
             }
 
-            if (
-                quote !== null
-            ) {
-
+            if (quote) {
                 continue;
             }
 
@@ -2623,7 +1730,6 @@ class BrowserPythonRunner {
                 char === ")" ||
                 char === "]"
             ) {
-
                 depth++;
                 continue;
             }
@@ -2632,107 +1738,48 @@ class BrowserPythonRunner {
                 char === "(" ||
                 char === "["
             ) {
-
                 depth--;
                 continue;
             }
 
             if (
-                depth !== 0
+                depth === 0 &&
+                char === operator
             ) {
-
-                continue;
-            }
-
-            if (
-                !operators.includes(char)
-            ) {
-
-                continue;
-            }
-
-            /*
-            Évite de prendre le signe -
-            d'un nombre négatif.
-            */
-
-            if (
-                char === "-" &&
-                (
-                    i === 0 ||
-                    "+-*/%(<>=,".includes(
-                        expression[i - 1]
+                if (
+                    operator === "-" &&
+                    (
+                        i === 0 ||
+                        /[+\-*/%(,<>=]/.test(
+                            expr[i - 1]
+                        )
                     )
-                )
-            ) {
+                ) {
+                    continue;
+                }
 
-                continue;
+                return {
+                    left:
+                        expr.slice(0, i).trim(),
+
+                    right:
+                        expr.slice(i + 1).trim()
+                };
             }
-
-            return {
-                index: i,
-                operator: char
-            };
         }
 
         return null;
-    }
-
-
-    pythonString(value) {
-
-        if (
-            value === true
-        ) {
-
-            return "True";
-        }
-
-        if (
-            value === false
-        ) {
-
-            return "False";
-        }
-
-        if (
-            value === null
-        ) {
-
-            return "None";
-        }
-
-        if (
-            Array.isArray(value)
-        ) {
-
-            return (
-                "[" +
-                value
-                    .map(
-                        item =>
-                            this.pythonString(
-                                item
-                            )
-                    )
-                    .join(", ") +
-                "]"
-            );
-        }
-
-        return String(value);
     }
 }
 
 
-// =========================================================
-// APPLICATION
-// =========================================================
+/* =========================================================
+   APPLICATION
+========================================================= */
 
 class PytApplication {
 
     constructor() {
-
         this.ui = null;
 
         this.robot = null;
@@ -2742,56 +1789,30 @@ class PytApplication {
         this.runner =
             new BrowserPythonRunner();
 
+        this.running = false;
 
-        // ---------------------------------------------
-        // AUDIO
-        // ---------------------------------------------
+        this.actionDelay = 500;
 
         this.musicEnabled = true;
-        this.musicVolume = 0.6;
-
+        this.volume = 0.6;
+        this.volumeBeforeMute = 0.6;
         this.currentMusic = null;
 
-
-        // ---------------------------------------------
-        // INTRO
-        // ---------------------------------------------
-
-        this.introTimers = [];
+        this.introReadyForInput = false;
         this.introFinished = false;
 
+        this.introTimers = [];
 
-        // ---------------------------------------------
-        // PARAMÈTRES
-        // ---------------------------------------------
-
-        this.settingsReturnTarget =
-            "menu";
-
-
-        // ---------------------------------------------
-        // ESSAI EN COURS
-        // ---------------------------------------------
-
-        this.lastRunResult = null;
-        this.lastConceptResult = null;
-
-        this.isRunning = false;
+        this.creditsTimer = null;
     }
 
 
-    // =====================================================
-    // DÉMARRAGE
-    // =====================================================
-
     start() {
-
         if (
             typeof PytUI === "undefined"
         ) {
-
             console.error(
-                "PytUI est introuvable."
+                "PytUI n'est pas chargé."
             );
 
             return;
@@ -2800,407 +1821,416 @@ class PytApplication {
         this.ui =
             new PytUI();
 
-        /*
-        Environ 0,5 seconde par action.
-        */
-        this.ui.actionDelay = 500;
-
+        this.ui.actionDelay =
+            this.actionDelay;
 
         this.connectUI();
         this.connectShell();
-
-        this.loadAudioSettings();
+        this.applyAudioSettings();
 
         this.loadLevel(
             1,
             1,
-            false
+            {
+                showGame: false
+            }
         );
 
-
-        this.hide(
-            "main-menu"
-        );
-
-        this.hide(
-            "settings-screen"
-        );
-
-        this.hide(
-            "game-interface"
-        );
-
-        this.show(
-            "intro-screen"
-        );
-
-
-        this.startIntro();
+        this.showIntro();
     }
 
 
-    // =====================================================
-    // CONNEXION UI
-    // =====================================================
+    /* =====================================================
+       CONNEXION UI
+    ===================================================== */
 
     connectUI() {
+        if (!this.ui) {
+            return;
+        }
 
         this.ui.onRunCode =
-            code => {
-
-                this.runStudentCode(
-                    code
-                );
-            };
-
+            code =>
+                this.runStudentCode(code);
 
         this.ui.onRestart =
-            () => {
-
+            () =>
                 this.restartCurrentLevel();
-            };
-
 
         this.ui.onSelectLevel =
             (
                 chapter,
                 exercise
-            ) => {
-
+            ) =>
                 this.loadLevel(
                     chapter,
-                    exercise,
-                    true
+                    exercise
                 );
-
-                this.playChapterMusic(
-                    chapter
-                );
-            };
     }
 
-
-    // =====================================================
-    // CONNEXION MENU / PARAMÈTRES
-    // =====================================================
 
     connectShell() {
-
         const playButton =
-            document.getElementById(
-                "play-button"
-            );
+            this.$("play-button");
 
         const settingsButton =
-            document.getElementById(
-                "settings-button"
-            );
+            this.$("settings-button");
 
         const settingsBackButton =
-            document.getElementById(
-                "settings-back-button"
-            );
+            this.$("settings-back-button");
 
         const gameSettingsButton =
-            document.getElementById(
-                "game-settings-button"
-            );
+            this.$("game-settings-button");
 
         const menuButton =
-            document.getElementById(
-                "menu-button"
-            );
+            this.$("menu-button");
 
         const skipIntroButton =
-            document.getElementById(
-                "skip-intro-button"
-            );
+            this.$("skip-intro-button");
 
         const musicEnabled =
-            document.getElementById(
-                "music-enabled"
-            );
+            this.$("music-enabled");
 
         const volumeSlider =
-            document.getElementById(
-                "volume-slider"
-            );
+            this.$("volume-slider");
 
         const clearCodeButton =
-            document.getElementById(
-                "clear-code-button"
+            this.$("clear-code-button");
+
+        const creditsButton =
+            this.$("credits-button");
+
+        const closeCreditsButton =
+            this.$("close-credits-button");
+
+
+        playButton?.addEventListener(
+            "click",
+            () =>
+                this.startGame()
+        );
+
+
+        settingsButton?.addEventListener(
+            "click",
+            () =>
+                this.openSettings(
+                    "menu"
+                )
+        );
+
+
+        gameSettingsButton?.addEventListener(
+            "click",
+            () =>
+                this.openSettings(
+                    "game"
+                )
+        );
+
+
+        settingsBackButton?.addEventListener(
+            "click",
+            () =>
+                this.closeSettings()
+        );
+
+
+        menuButton?.addEventListener(
+            "click",
+            () =>
+                this.showMainMenu()
+        );
+
+
+        skipIntroButton?.addEventListener(
+            "click",
+            event => {
+                event.stopPropagation();
+                this.finishIntro();
+            }
+        );
+
+
+        musicEnabled?.addEventListener(
+            "change",
+            () => {
+                this.setMusicEnabled(
+                    musicEnabled.checked
+                );
+            }
+        );
+
+
+        volumeSlider?.addEventListener(
+            "input",
+            () => {
+                this.setVolume(
+                    Number(
+                        volumeSlider.value
+                    ) / 100
+                );
+            }
+        );
+
+
+        clearCodeButton?.addEventListener(
+            "click",
+            () => {
+                const editor =
+                    this.$("code-editor");
+
+                if (editor) {
+                    editor.value = "";
+                    editor.focus();
+                }
+
+                this.ui?.clearErrorHighlight?.();
+            }
+        );
+
+
+        creditsButton?.addEventListener(
+            "click",
+            () =>
+                this.showCredits()
+        );
+
+
+        closeCreditsButton?.addEventListener(
+            "click",
+            () =>
+                this.closeCredits()
+        );
+
+
+        /*
+        Musique du cours.
+        */
+
+        this.$("course-button")
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.playMusic(
+                        "music-theory"
+                    )
             );
 
 
-        if (playButton) {
+        this.$("map-course-button")
+            ?.addEventListener(
+                "click",
+                () =>
+                    this.playMusic(
+                        "music-theory"
+                    )
+            );
 
-            playButton.addEventListener(
+
+        /*
+        Retour à la musique du chapitre
+        depuis la carte ou le cours.
+        */
+
+        this.$("course-map-button")
+            ?.addEventListener(
                 "click",
                 () => {
-
-                    this.startGame();
-                }
-            );
-        }
-
-
-        if (settingsButton) {
-
-            settingsButton.addEventListener(
-                "click",
-                () => {
-
-                    this.openSettings(
-                        "menu"
-                    );
-                }
-            );
-        }
-
-
-        if (gameSettingsButton) {
-
-            gameSettingsButton.addEventListener(
-                "click",
-                () => {
-
-                    this.openSettings(
-                        "game"
-                    );
-                }
-            );
-        }
-
-
-        if (settingsBackButton) {
-
-            settingsBackButton.addEventListener(
-                "click",
-                () => {
-
-                    this.closeSettings();
-                }
-            );
-        }
-
-
-        if (menuButton) {
-
-            menuButton.addEventListener(
-                "click",
-                () => {
-
-                    this.openMainMenu();
-                }
-            );
-        }
-
-
-        if (skipIntroButton) {
-
-            skipIntroButton.addEventListener(
-                "click",
-                () => {
-
-                    this.finishIntro();
-                }
-            );
-        }
-
-
-        if (musicEnabled) {
-
-            musicEnabled.addEventListener(
-                "change",
-                () => {
-
-                    this.musicEnabled =
-                        musicEnabled.checked;
-
-                    this.saveAudioSettings();
-
                     if (
-                        !this.musicEnabled
+                        this.level
                     ) {
-
-                        this.stopMusic();
-
-                    } else {
-
-                        this.resumeCorrectMusic();
+                        this.playChapterMusic(
+                            this.level.chapter
+                        );
                     }
                 }
             );
-        }
 
 
-        if (volumeSlider) {
+        /*
+        Croix du guide Pyt.
+        L'animation de sortie est gérée par ui.js
+        lorsqu'elle existe.
+        */
 
-            volumeSlider.addEventListener(
-                "input",
-                () => {
-
-                    this.musicVolume =
-                        Math.max(
-                            0,
-                            Math.min(
-                                1,
-                                Number(
-                                    volumeSlider.value
-                                ) / 100
-                            )
-                        );
-
-                    this.updateVolumeLabel();
-                    this.applyVolume();
-                    this.saveAudioSettings();
-                }
-            );
-        }
-
-
-        if (clearCodeButton) {
-
-            clearCodeButton.addEventListener(
+        this.$("close-pyt-guide-button")
+            ?.addEventListener(
                 "click",
                 () => {
-
                     if (
                         this.ui &&
-                        this.ui.codeEditor
+                        typeof this.ui.hideGuide ===
+                        "function"
                     ) {
+                        this.ui.hideGuide();
 
-                        this.ui.codeEditor.value =
-                            "";
+                    } else {
+                        const guide =
+                            this.$("pyt-guide");
 
-                        if (
-                            typeof this.ui.saveCurrentCode ===
-                            "function"
-                        ) {
-
-                            this.ui.saveCurrentCode();
+                        if (!guide) {
+                            return;
                         }
 
-                        if (
-                            typeof this.ui.clearCodeError ===
-                            "function"
-                        ) {
+                        guide.classList.add(
+                            "guide-leaving"
+                        );
 
-                            this.ui.clearCodeError();
-                        }
+                        window.setTimeout(
+                            () => {
+                                guide.classList.add(
+                                    "hidden"
+                                );
+
+                                guide.classList.remove(
+                                    "guide-leaving"
+                                );
+                            },
+                            320
+                        );
                     }
                 }
             );
-        }
-
-
-        /*
-        Quand l'élève ouvre volontairement
-        le cours, on utilise la musique théorie.
-        */
-
-        const courseButton =
-            document.getElementById(
-                "course-button"
-            );
-
-        const mapCourseButton =
-            document.getElementById(
-                "map-course-button"
-            );
-
-
-        if (courseButton) {
-
-            courseButton.addEventListener(
-                "click",
-                () => {
-
-                    this.playTheoryMusic();
-                }
-            );
-        }
-
-
-        if (mapCourseButton) {
-
-            mapCourseButton.addEventListener(
-                "click",
-                () => {
-
-                    this.playTheoryMusic();
-                }
-            );
-        }
-
-
-        /*
-        Lorsque le bouton du cours ramène
-        vers la carte ou l'exercice,
-        on reprend la musique du chapitre.
-        */
-
-        const courseMapButton =
-            document.getElementById(
-                "course-map-button"
-            );
-
-        if (courseMapButton) {
-
-            courseMapButton.addEventListener(
-                "click",
-                () => {
-
-                    setTimeout(
-                        () => {
-
-                            if (
-                                !this.isElementVisible(
-                                    "chapter-screen"
-                                )
-                            ) {
-
-                                this.playChapterMusic(
-                                    this.ui
-                                        ? this.ui.currentChapter
-                                        : 1
-                                );
-                            }
-                        },
-                        0
-                    );
-                }
-            );
-        }
     }
 
 
-    // =====================================================
-    // INTRO
-    // =====================================================
+    /* =====================================================
+       INTRO
+    ===================================================== */
 
-    startIntro() {
+    showIntro() {
+        const intro =
+            this.$("intro-screen");
 
-        this.clearIntroTimers();
+        const menu =
+            this.$("main-menu");
 
-        this.introFinished = false;
+        const game =
+            this.$("game-interface");
 
-        const screen =
-            document.getElementById(
-                "intro-screen"
-            );
+        const settings =
+            this.$("settings-screen");
 
-        if (!screen) {
+        const credits =
+            this.$("credits-screen");
 
-            this.finishIntro();
-            return;
-        }
 
-        screen.classList.remove(
+        menu?.classList.add(
+            "hidden"
+        );
+
+        game?.classList.add(
+            "hidden"
+        );
+
+        settings?.classList.add(
+            "hidden"
+        );
+
+        credits?.classList.add(
+            "hidden"
+        );
+
+        intro?.classList.remove(
+            "hidden",
+            "intro-hop-1",
+            "intro-hop-2",
+            "intro-hop-3",
+            "intro-hop-4",
+            "intro-hop-5",
             "intro-arrive",
             "intro-y",
             "intro-happy",
-            "intro-finished"
+            "intro-finished",
+            "intro-await-input"
+        );
+
+
+        this.introReadyForInput =
+            false;
+
+        this.introFinished =
+            false;
+
+
+        this.clearIntroTimers();
+
+
+        this.updateIntroContinueText();
+
+
+        /*
+        Aucun appui ne fait continuer l'intro avant
+        la fin réelle de l'animation.
+        */
+
+        this.introKeyHandler =
+            event => {
+                if (
+                    !this.introReadyForInput ||
+                    this.introFinished
+                ) {
+                    return;
+                }
+
+                /*
+                On évite quelques touches purement
+                modificatrices.
+                */
+
+                if (
+                    [
+                        "Shift",
+                        "Control",
+                        "Alt",
+                        "Meta",
+                        "CapsLock"
+                    ].includes(
+                        event.key
+                    )
+                ) {
+                    return;
+                }
+
+                this.finishIntro();
+            };
+
+
+        this.introTouchHandler =
+            event => {
+                if (
+                    !this.introReadyForInput ||
+                    this.introFinished
+                ) {
+                    return;
+                }
+
+                /*
+                Le bouton "Passer" possède déjà
+                son propre événement.
+                */
+
+                if (
+                    event.target?.closest?.(
+                        "#skip-intro-button"
+                    )
+                ) {
+                    return;
+                }
+
+                this.finishIntro();
+            };
+
+
+        window.addEventListener(
+            "keydown",
+            this.introKeyHandler
+        );
+
+        intro?.addEventListener(
+            "pointerdown",
+            this.introTouchHandler
         );
 
 
@@ -3209,447 +2239,648 @@ class PytApplication {
         );
 
 
-        this.introTimers.push(
+        /*
+        Arrivée volontairement lente et sautillante.
+        */
 
-            setTimeout(
-                () => {
+        this.scheduleIntroClass(
+            550,
+            "intro-hop-1"
+        );
 
-                    screen.classList.add(
-                        "intro-arrive"
-                    );
-                },
-                300
-            )
+        this.scheduleIntroClass(
+            1150,
+            "intro-hop-2"
+        );
+
+        this.scheduleIntroClass(
+            1750,
+            "intro-hop-3"
+        );
+
+        this.scheduleIntroClass(
+            2350,
+            "intro-hop-4"
+        );
+
+        this.scheduleIntroClass(
+            2950,
+            "intro-hop-5"
+        );
+
+        this.scheduleIntroClass(
+            3500,
+            "intro-arrive"
         );
 
 
+        /*
+        Une fois arrivé, Pyt forme le Y.
+        */
+
         this.introTimers.push(
-
-            setTimeout(
+            window.setTimeout(
                 () => {
-
-                    screen.classList.add(
+                    intro?.classList.add(
                         "intro-y"
                     );
                 },
-                1500
+                4150
             )
         );
 
 
+        /*
+        Puis il devient heureux uniquement
+        grâce à ses yeux.
+        */
+
         this.introTimers.push(
-
-            setTimeout(
+            window.setTimeout(
                 () => {
+                    intro?.classList.add(
+                        "intro-happy"
+                    );
+                },
+                4750
+            )
+        );
 
-                    screen.classList.add(
-                        "intro-happy",
+
+        /*
+        La scène finale apparaît.
+        */
+
+        this.introTimers.push(
+            window.setTimeout(
+                () => {
+                    intro?.classList.add(
                         "intro-finished"
                     );
                 },
-                2200
+                5200
             )
         );
 
 
+        /*
+        IMPORTANT :
+        À partir de ce moment, l'intro ne continue
+        PLUS automatiquement.
+
+        Elle reste figée jusqu'à une interaction.
+        */
+
         this.introTimers.push(
-
-            setTimeout(
+            window.setTimeout(
                 () => {
+                    this.introReadyForInput =
+                        true;
 
-                    this.finishIntro();
+                    intro?.classList.add(
+                        "intro-await-input"
+                    );
                 },
-                3800
+                5650
+            )
+        );
+    }
+
+
+    scheduleIntroClass(
+        delay,
+        className
+    ) {
+        const intro =
+            this.$("intro-screen");
+
+        this.introTimers.push(
+            window.setTimeout(
+                () => {
+                    intro?.classList.add(
+                        className
+                    );
+                },
+                delay
             )
         );
     }
 
 
     clearIntroTimers() {
-
         for (
             const timer
             of this.introTimers
         ) {
-
-            clearTimeout(timer);
+            window.clearTimeout(
+                timer
+            );
         }
 
         this.introTimers = [];
     }
 
 
-    finishIntro() {
+    updateIntroContinueText() {
+        const message =
+            this.$(
+                "intro-continue-message"
+            );
 
-        if (
-            this.introFinished
-        ) {
-
+        if (!message) {
             return;
         }
 
-        this.introFinished = true;
-
-        this.clearIntroTimers();
-
-        this.hide(
-            "intro-screen"
-        );
-
-        this.openMainMenu();
+        if (
+            this.isMobileDevice()
+        ) {
+            message.textContent =
+                "Touchez l’écran pour continuer";
+        } else {
+            message.textContent =
+                "Appuyez sur une touche pour continuer";
+        }
     }
 
 
-    // =====================================================
-    // MENU
-    // =====================================================
+    finishIntro() {
+        if (
+            this.introFinished
+        ) {
+            return;
+        }
 
-    openMainMenu() {
+        this.introFinished =
+            true;
 
-        this.hide(
-            "intro-screen"
+        this.clearIntroTimers();
+
+        const intro =
+            this.$("intro-screen");
+
+        /*
+        Si le bouton Passer est utilisé avant la fin,
+        on place brièvement l'intro dans son état final.
+        */
+
+        intro?.classList.add(
+            "intro-arrive",
+            "intro-y",
+            "intro-happy",
+            "intro-finished"
         );
 
-        this.hide(
-            "settings-screen"
+        intro?.classList.remove(
+            "intro-await-input"
         );
 
-        this.hide(
-            "game-interface"
+
+        window.removeEventListener(
+            "keydown",
+            this.introKeyHandler
         );
 
-        this.show(
-            "main-menu"
+        intro?.removeEventListener(
+            "pointerdown",
+            this.introTouchHandler
         );
+
+
+        window.setTimeout(
+            () => {
+                intro?.classList.add(
+                    "hidden"
+                );
+
+                this.showMainMenu();
+            },
+            180
+        );
+    }
+
+
+    /* =====================================================
+       MENU
+    ===================================================== */
+
+    showMainMenu() {
+        this.hideAllMainScreens();
+
+        this.$("main-menu")
+            ?.classList.remove(
+                "hidden"
+            );
 
         this.stopMusic();
     }
 
 
     startGame() {
+        this.hideAllMainScreens();
 
-        this.hide(
-            "main-menu"
-        );
+        this.$("game-interface")
+            ?.classList.remove(
+                "hidden"
+            );
 
-        this.hide(
-            "settings-screen"
-        );
+        if (
+            this.level
+        ) {
+            this.playChapterMusic(
+                this.level.chapter
+            );
+        }
 
-        this.show(
-            "game-interface"
-        );
-
+        /*
+        Au début du jeu, on présente d'abord le cours
+        du chapitre.
+        */
 
         if (
             this.ui &&
             typeof this.ui.showCourseAtChapterStart ===
             "function"
         ) {
+            this.ui.showCourseAtChapterStart();
 
-            const courseShown =
-                this.ui.showCourseAtChapterStart();
-
-            if (courseShown) {
-
-                this.playTheoryMusic();
-                return;
-            }
-        }
-
-
-        if (
+        } else if (
             this.ui &&
-            typeof this.ui.showMap ===
+            typeof this.ui.showCourse ===
             "function"
         ) {
-
-            this.ui.showMap();
+            this.ui.showCourse();
         }
-
-
-        this.playChapterMusic(
-            this.ui
-                ? this.ui.currentChapter
-                : 1
-        );
     }
 
 
-    // =====================================================
-    // PARAMÈTRES
-    // =====================================================
-
-    openSettings(
-        returnTarget = "menu"
-    ) {
-
-        this.settingsReturnTarget =
-            returnTarget;
-
-        this.hide(
-            "main-menu"
-        );
-
-        if (
-            returnTarget === "game"
-        ) {
-
-            this.hide(
-                "game-interface"
+    hideAllMainScreens() {
+        this.$("intro-screen")
+            ?.classList.add(
+                "hidden"
             );
+
+        this.$("main-menu")
+            ?.classList.add(
+                "hidden"
+            );
+
+        this.$("settings-screen")
+            ?.classList.add(
+                "hidden"
+            );
+
+        this.$("game-interface")
+            ?.classList.add(
+                "hidden"
+            );
+
+        this.$("credits-screen")
+            ?.classList.add(
+                "hidden"
+            );
+    }
+
+
+    /* =====================================================
+       PARAMÈTRES
+    ===================================================== */
+
+    openSettings(source = "menu") {
+        const settings =
+            this.$("settings-screen");
+
+        if (!settings) {
+            return;
         }
 
-        this.syncSettingsControls();
+        settings.dataset.returnTo =
+            source;
 
-        this.show(
-            "settings-screen"
+        this.$("main-menu")
+            ?.classList.add(
+                "hidden"
+            );
+
+        if (
+            source === "game"
+        ) {
+            this.$("game-interface")
+                ?.classList.add(
+                    "hidden"
+                );
+        }
+
+        settings.classList.remove(
+            "hidden"
         );
+
+        this.syncSettingsUI();
     }
 
 
     closeSettings() {
+        const settings =
+            this.$("settings-screen");
 
-        this.hide(
-            "settings-screen"
+        const returnTo =
+            settings?.dataset.returnTo ||
+            "menu";
+
+        settings?.classList.add(
+            "hidden"
         );
 
         if (
-            this.settingsReturnTarget ===
-            "game"
+            returnTo === "game"
         ) {
+            this.$("game-interface")
+                ?.classList.remove(
+                    "hidden"
+                );
 
-            this.show(
-                "game-interface"
-            );
-
-            this.resumeCorrectMusic();
+            if (
+                this.level
+            ) {
+                this.playChapterMusic(
+                    this.level.chapter
+                );
+            }
 
         } else {
-
-            this.show(
-                "main-menu"
-            );
-        }
-    }
-
-
-    // =====================================================
-    // AUDIO
-    // =====================================================
-
-    loadAudioSettings() {
-
-        try {
-
-            const enabled =
-                localStorage.getItem(
-                    "pyt-music-enabled"
-                );
-
-            const volume =
-                localStorage.getItem(
-                    "pyt-music-volume"
-                );
-
-
-            if (
-                enabled !== null
-            ) {
-
-                this.musicEnabled =
-                    enabled === "true";
-            }
-
-
-            if (
-                volume !== null
-            ) {
-
-                const parsed =
-                    Number(volume);
-
-                if (
-                    Number.isFinite(parsed)
-                ) {
-
-                    this.musicVolume =
-                        Math.max(
-                            0,
-                            Math.min(
-                                1,
-                                parsed
-                            )
-                        );
-                }
-            }
-
-        } catch (error) {
-
-            /*
-            localStorage peut être indisponible.
-            Le jeu continue normalement.
-            */
-        }
-
-
-        this.syncSettingsControls();
-        this.applyVolume();
-    }
-
-
-    saveAudioSettings() {
-
-        try {
-
-            localStorage.setItem(
-                "pyt-music-enabled",
-                String(
-                    this.musicEnabled
-                )
-            );
-
-            localStorage.setItem(
-                "pyt-music-volume",
-                String(
-                    this.musicVolume
-                )
-            );
-
-        } catch (error) {
-
-            /*
-            Pas bloquant.
-            */
-        }
-    }
-
-
-    syncSettingsControls() {
-
-        const enabled =
-            document.getElementById(
-                "music-enabled"
-            );
-
-        const slider =
-            document.getElementById(
-                "volume-slider"
-            );
-
-        if (enabled) {
-
-            enabled.checked =
-                this.musicEnabled;
-        }
-
-        if (slider) {
-
-            slider.value =
-                String(
-                    Math.round(
-                        this.musicVolume *
-                        100
-                    )
+            this.$("main-menu")
+                ?.classList.remove(
+                    "hidden"
                 );
         }
-
-        this.updateVolumeLabel();
     }
 
 
-    updateVolumeLabel() {
+    /* =====================================================
+       CRÉDITS
+    ===================================================== */
 
-        const label =
-            document.getElementById(
-                "volume-value"
-            );
+    showCredits() {
+        const credits =
+            this.$("credits-screen");
 
-        if (label) {
-
-            label.textContent =
-                `${Math.round(
-                    this.musicVolume *
-                    100
-                )}%`;
+        if (!credits) {
+            return;
         }
-    }
-
-
-    applyVolume() {
-
-        const audioElements =
-            document.querySelectorAll(
-                "#audio-container audio"
-            );
-
-        for (
-            const audio
-            of audioElements
-        ) {
-
-            audio.volume =
-                this.musicVolume;
-        }
-    }
-
-
-    audioHasSource(audio) {
-
-        if (!audio) {
-
-            return false;
-        }
-
-        const src =
-            audio.getAttribute(
-                "src"
-            );
 
         if (
-            src &&
-            src.trim() !== ""
+            this.creditsTimer
         ) {
-
-            return true;
-        }
-
-        const source =
-            audio.querySelector(
-                "source[src]"
+            window.clearTimeout(
+                this.creditsTimer
             );
 
-        return Boolean(
-            source &&
-            source.getAttribute("src")
+            this.creditsTimer = null;
+        }
+
+        this.$("settings-screen")
+            ?.classList.add(
+                "hidden"
+            );
+
+        credits.classList.remove(
+            "hidden",
+            "credits-running",
+            "credits-finished"
         );
+
+
+        /*
+        Force un nouveau cycle d'animation
+        à chaque ouverture.
+        */
+
+        void credits.offsetWidth;
+
+        credits.classList.add(
+            "credits-running"
+        );
+
+
+        /*
+        L'animation CSS dure 42 secondes.
+        Ensuite PYT reste figé au centre.
+        */
+
+        this.creditsTimer =
+            window.setTimeout(
+                () => {
+                    credits.classList.remove(
+                        "credits-running"
+                    );
+
+                    credits.classList.add(
+                        "credits-finished"
+                    );
+
+                    this.creditsTimer =
+                        null;
+                },
+                42000
+            );
     }
 
 
-    playMusic(id) {
+    closeCredits() {
+        const credits =
+            this.$("credits-screen");
+
+        if (
+            this.creditsTimer
+        ) {
+            window.clearTimeout(
+                this.creditsTimer
+            );
+
+            this.creditsTimer = null;
+        }
+
+        credits?.classList.add(
+            "hidden"
+        );
+
+        credits?.classList.remove(
+            "credits-running",
+            "credits-finished"
+        );
+
+        this.$("settings-screen")
+            ?.classList.remove(
+                "hidden"
+            );
+    }
+
+
+    /* =====================================================
+       AUDIO
+    ===================================================== */
+
+    setMusicEnabled(enabled) {
+        this.musicEnabled =
+            Boolean(enabled);
 
         if (
             !this.musicEnabled
         ) {
+            /*
+            Demande :
+            Musique = Non -> volume = 0 %.
+            */
 
+            if (
+                this.volume > 0
+            ) {
+                this.volumeBeforeMute =
+                    this.volume;
+            }
+
+            this.volume = 0;
+
+            this.stopMusic();
+
+        } else {
+            /*
+            Si l'utilisateur réactive la musique,
+            on restaure le volume précédent.
+            */
+
+            if (
+                this.volume <= 0
+            ) {
+                this.volume =
+                    this.volumeBeforeMute > 0
+                        ? this.volumeBeforeMute
+                        : 0.6;
+            }
+
+            this.resumeRelevantMusic();
+        }
+
+        this.applyAudioSettings();
+        this.syncSettingsUI();
+    }
+
+
+    setVolume(volume) {
+        const value =
+            Math.max(
+                0,
+                Math.min(
+                    1,
+                    Number(volume) || 0
+                )
+            );
+
+        this.volume =
+            value;
+
+        if (
+            value > 0
+        ) {
+            this.volumeBeforeMute =
+                value;
+
+            if (
+                !this.musicEnabled
+            ) {
+                this.musicEnabled =
+                    true;
+            }
+
+        } else {
+            this.musicEnabled =
+                false;
+
+            this.stopMusic();
+        }
+
+        this.applyAudioSettings();
+        this.syncSettingsUI();
+    }
+
+
+    applyAudioSettings() {
+        const audios =
+            document.querySelectorAll(
+                "#audio-container audio"
+            );
+
+        audios.forEach(
+            audio => {
+                audio.volume =
+                    this.volume;
+
+                audio.muted =
+                    !this.musicEnabled ||
+                    this.volume <= 0;
+            }
+        );
+
+        this.syncSettingsUI();
+    }
+
+
+    syncSettingsUI() {
+        const music =
+            this.$("music-enabled");
+
+        const slider =
+            this.$("volume-slider");
+
+        const value =
+            this.$("volume-value");
+
+
+        if (music) {
+            music.checked =
+                this.musicEnabled;
+        }
+
+        if (slider) {
+            slider.value =
+                String(
+                    Math.round(
+                        this.volume * 100
+                    )
+                );
+        }
+
+        if (value) {
+            value.textContent =
+                `${Math.round(
+                    this.volume * 100
+                )} %`;
+        }
+    }
+
+
+    playMusic(id) {
+        if (
+            !this.musicEnabled ||
+            this.volume <= 0
+        ) {
             return;
         }
 
         const audio =
-            document.getElementById(
-                id
-            );
+            this.$(id);
+
+        if (!audio) {
+            return;
+        }
 
         /*
-        Aucun fichier audio n'est obligatoire.
-        Une balise sans src est simplement ignorée.
+        Aucun src = aucun problème.
         */
 
         if (
-            !this.audioHasSource(audio)
+            !audio.getAttribute("src") &&
+            !audio.querySelector("source")
         ) {
-
-            this.stopMusic();
             return;
         }
 
@@ -3657,7 +2888,6 @@ class PytApplication {
             this.currentMusic === audio &&
             !audio.paused
         ) {
-
             return;
         }
 
@@ -3667,151 +2897,149 @@ class PytApplication {
             audio;
 
         audio.volume =
-            this.musicVolume;
+            this.volume;
 
-        audio.loop = true;
+        audio.muted =
+            false;
 
-        try {
+        const promise =
+            audio.play();
 
-            const promise =
-                audio.play();
-
-            if (
-                promise &&
-                typeof promise.catch ===
-                "function"
-            ) {
-
-                promise.catch(
-                    () => {
-                        /*
-                        Certains navigateurs bloquent
-                        l'audio avant une interaction.
-                        Ce n'est jamais une erreur du jeu.
-                        */
-                    }
-                );
-            }
-
-        } catch (error) {
-
-            /*
-            Audio non bloquant.
-            */
+        if (
+            promise &&
+            typeof promise.catch ===
+            "function"
+        ) {
+            promise.catch(
+                () => {
+                    /*
+                    Certains navigateurs bloquent
+                    l'audio avant interaction.
+                    Le jeu continue normalement.
+                    */
+                }
+            );
         }
+    }
+
+
+    playChapterMusic(chapter) {
+        this.playMusic(
+            `music-chapter-${chapter}`
+        );
     }
 
 
     stopMusic() {
-
-        const audioElements =
+        const audios =
             document.querySelectorAll(
                 "#audio-container audio"
             );
 
-        for (
-            const audio
-            of audioElements
+        audios.forEach(
+            audio => {
+                try {
+                    audio.pause();
+                } catch (_) {
+                    // Aucun blocage du jeu.
+                }
+            }
+        );
+
+        this.currentMusic =
+            null;
+    }
+
+
+    resumeRelevantMusic() {
+        if (
+            !this.musicEnabled ||
+            this.volume <= 0
         ) {
+            return;
+        }
 
-            try {
+        const intro =
+            this.$("intro-screen");
 
-                audio.pause();
+        const game =
+            this.$("game-interface");
 
-            } catch (error) {
+        const course =
+            this.$("chapter-screen");
 
-                /*
-                Rien à faire.
-                */
+
+        if (
+            intro &&
+            !intro.classList.contains(
+                "hidden"
+            )
+        ) {
+            this.playMusic(
+                "music-intro"
+            );
+
+            return;
+        }
+
+
+        if (
+            game &&
+            !game.classList.contains(
+                "hidden"
+            )
+        ) {
+            if (
+                course &&
+                !course.classList.contains(
+                    "hidden"
+                )
+            ) {
+                this.playMusic(
+                    "music-theory"
+                );
+
+                return;
+            }
+
+            if (
+                this.level
+            ) {
+                this.playChapterMusic(
+                    this.level.chapter
+                );
             }
         }
-
-        this.currentMusic = null;
     }
 
 
-    playTheoryMusic() {
-
-        this.playMusic(
-            "music-theory"
-        );
-    }
-
-
-    playChapterMusic(
-        chapter
-    ) {
-
-        const safeChapter =
-            Math.max(
-                1,
-                Math.min(
-                    9,
-                    Number(chapter) || 1
-                )
-            );
-
-        this.playMusic(
-            `music-chapter-${safeChapter}`
-        );
-    }
-
-
-    resumeCorrectMusic() {
-
-        if (
-            !this.musicEnabled
-        ) {
-
-            return;
-        }
-
-        if (
-            this.isElementVisible(
-                "chapter-screen"
-            )
-        ) {
-
-            this.playTheoryMusic();
-            return;
-        }
-
-        if (
-            this.isElementVisible(
-                "game-interface"
-            )
-        ) {
-
-            this.playChapterMusic(
-                this.ui
-                    ? this.ui.currentChapter
-                    : 1
-            );
-        }
-    }
-
-
-    // =====================================================
-    // NIVEAUX
-    // =====================================================
+    /* =====================================================
+       NIVEAUX
+    ===================================================== */
 
     loadLevel(
         chapter,
         exercise,
-        showGame = true
+        options = {}
     ) {
+        if (
+            typeof getLevel !==
+            "function"
+        ) {
+            console.error(
+                "getLevel() n'est pas disponible."
+            );
+
+            return false;
+        }
 
         const level =
-            typeof getLevel ===
-            "function"
-                ? getLevel(
-                    chapter,
-                    exercise
-                )
-                : null;
+            getLevel(
+                chapter,
+                exercise
+            );
 
         if (!level) {
-
             console.error(
                 `Niveau ${chapter}-${exercise} introuvable.`
             );
@@ -3822,10 +3050,8 @@ class PytApplication {
         this.level =
             level;
 
-
         this.robot =
             new Robot();
-
 
         this.game =
             new Game(
@@ -3833,545 +3059,295 @@ class PytApplication {
                 this.robot
             );
 
+        if (this.ui) {
+            this.ui.setGame(
+                this.game
+            );
 
-        if (
-            this.ui
-        ) {
-
-            this.ui.currentChapter =
-                Number(chapter);
-
-            this.ui.currentExercise =
-                Number(exercise);
-
+            this.ui.setLevel(
+                level
+            );
 
             if (
-                typeof this.ui.setGame ===
-                "function"
+                options.showGame !== false
             ) {
-
-                this.ui.setGame(
-                    this.game
-                );
-            }
-
-
-            if (
-                typeof this.ui.setLevel ===
-                "function"
-            ) {
-
-                this.ui.setLevel(
-                    level
-                );
-            }
-
-
-            if (
-                showGame &&
-                typeof this.ui.showGame ===
-                "function"
-            ) {
-
                 this.ui.showGame();
             }
         }
 
+        if (
+            options.showGame !== false
+        ) {
+            this.playChapterMusic(
+                chapter
+            );
+        }
 
         return true;
     }
 
 
     restartCurrentLevel() {
-
-        if (
-            this.isRunning
-        ) {
-
+        if (!this.level) {
             return;
         }
 
-        const chapter =
-            this.ui
-                ? this.ui.currentChapter
-                : this.level?.chapter;
+        const editor =
+            this.$("code-editor");
 
-        const exercise =
-            this.ui
-                ? this.ui.currentExercise
-                : this.level?.exercise;
+        const currentCode =
+            editor?.value ?? "";
 
+        this.robot =
+            new Robot();
 
-        this.loadLevel(
-            chapter,
-            exercise,
-            true
-        );
+        this.game =
+            new Game(
+                this.level,
+                this.robot
+            );
 
+        if (this.ui) {
+            this.ui.setGame(
+                this.game
+            );
 
-        if (
-            this.ui &&
-            typeof this.ui.clearCodeError ===
-            "function"
-        ) {
+            /*
+            On ne rappelle PAS setLevel ici.
+            Cela évite d'effacer le code de l'élève.
+            */
 
-            this.ui.clearCodeError();
-        }
+            this.ui.clearErrorHighlight?.();
 
+            this.ui.hideThoughtBubble?.();
 
-        if (
-            this.ui &&
-            typeof this.ui.hideThought ===
-            "function"
-        ) {
+            this.ui.render?.();
 
-            this.ui.hideThought();
-        }
-
-
-        if (
-            this.ui &&
-            typeof this.ui.setStatus ===
-            "function"
-        ) {
-
-            this.ui.setStatus(
-                "PRÊT"
+            this.ui.setStatus?.(
+                ""
             );
         }
 
-
-        this.playChapterMusic(
-            chapter
-        );
+        if (editor) {
+            editor.value =
+                currentCode;
+        }
     }
 
 
-    // =====================================================
-    // EXÉCUTION DU CODE
-    // =====================================================
-
-    runStudentCode(code) {
-
-        if (
-            this.isRunning ||
-            !this.level
-        ) {
-
+    resetWorldForExecution() {
+        if (!this.level) {
             return;
         }
 
+        this.robot =
+            new Robot();
 
-        this.isRunning = true;
+        this.game =
+            new Game(
+                this.level,
+                this.robot
+            );
+
+        if (this.ui) {
+            this.ui.setGame(
+                this.game
+            );
+
+            /*
+            Très important :
+            pas de setLevel() ici.
+            Sinon le starterCode remplace le code
+            que l'élève vient d'écrire.
+            */
+
+            this.ui.render?.();
+        }
+    }
 
 
-        /*
-        Chaque exécution repart de l'état
-        initial du niveau, mais le texte du code
-        reste dans l'éditeur.
-        */
+    /* =====================================================
+       EXÉCUTION DU CODE
+    ===================================================== */
 
-        const chapter =
-            this.ui.currentChapter;
+    runStudentCode(code) {
+        if (
+            this.running ||
+            !this.level
+        ) {
+            return;
+        }
 
-        const exercise =
-            this.ui.currentExercise;
+        this.running = true;
 
+        this.resetWorldForExecution();
 
-        this.loadLevel(
-            chapter,
-            exercise,
-            true
+        this.ui?.clearErrorHighlight?.();
+        this.ui?.hideThoughtBubble?.();
+        this.ui?.setStatus?.(
+            "Exécution..."
         );
-
-
-        if (
-            this.ui &&
-            typeof this.ui.clearCodeError ===
-            "function"
-        ) {
-
-            this.ui.clearCodeError();
-        }
-
-
-        if (
-            this.ui &&
-            typeof this.ui.hideThought ===
-            "function"
-        ) {
-
-            this.ui.hideThought();
-        }
-
-
-        if (
-            this.ui &&
-            typeof this.ui.setStatus ===
-            "function"
-        ) {
-
-            this.ui.setStatus(
-                "EXÉCUTION..."
-            );
-        }
-
-
-        if (
-            this.ui &&
-            typeof this.ui.setConsole ===
-            "function"
-        ) {
-
-            this.ui.setConsole(
-                "Exécution du programme..."
-            );
-        }
-
 
         const result =
             this.runner.run(
                 code
             );
 
+        this.showConsoleOutput(
+            result
+        );
 
-        this.lastRunResult =
-            result;
-
-
-        /*
-        Vérification pédagogique indépendante
-        du trajet.
-
-        On ne compare jamais le programme à
-        une solution exacte : plusieurs solutions
-        restent donc possibles.
-        */
-
-        this.lastConceptResult =
+        const requiredCheck =
             this.validateRequiredConcepts(
-                code,
-                this.level
+                code
             );
 
 
-        const actions =
-            Array.isArray(
-                result.actions
-            )
-                ? result.actions
-                : [];
+        /*
+        Même si une erreur arrive plus tard,
+        les actions valides déjà produites
+        sont exécutées visuellement.
+        */
 
-
-        const finish =
-            animationResult => {
-
+        this.playActions(
+            result.actions,
+            () => {
                 this.finishAttempt(
                     code,
                     result,
-                    animationResult
+                    requiredCheck
                 );
-            };
-
-
-        /*
-        Même si le programme contient ensuite
-        une erreur, toutes les actions valides
-        déjà produites sont animées.
-        */
-
-        if (
-            actions.length > 0 &&
-            this.ui &&
-            typeof this.ui.playActions ===
-            "function"
-        ) {
-
-            this.ui.playActions(
-                actions,
-
-                action =>
-                    this.performAction(
-                        action
-                    ),
-
-                (
-                    completed,
-                    details
-                ) => {
-
-                    finish({
-                        completed,
-                        details:
-                            details || null
-                    });
-                }
-            );
-
-        } else {
-
-            finish({
-                completed: true,
-                details: null
-            });
-        }
+            }
+        );
     }
 
 
-    // =====================================================
-    // ACTIONS DU ROBOT
-    // =====================================================
+    playActions(
+        actions,
+        onComplete
+    ) {
+        const queue =
+            Array.isArray(actions)
+                ? [...actions]
+                : [];
+
+        const next =
+            () => {
+                if (
+                    queue.length === 0
+                ) {
+                    onComplete?.();
+                    return;
+                }
+
+                const action =
+                    queue.shift();
+
+                const successful =
+                    this.performAction(
+                        action
+                    );
+
+                this.ui?.render?.();
+
+                if (!successful) {
+                    /*
+                    Le programme s'arrête lorsqu'une
+                    action physique est impossible.
+                    */
+
+                    queue.length = 0;
+
+                    this.lastBlockedAction =
+                        action;
+
+                    onComplete?.();
+                    return;
+                }
+
+                window.setTimeout(
+                    next,
+                    this.actionDelay
+                );
+            };
+
+        next();
+    }
+
 
     performAction(action) {
-
         if (
             !action ||
             !this.game ||
             !this.robot
         ) {
-
             return false;
         }
 
-
-        let type;
-        let value;
-
-
-        if (
+        const type =
             Array.isArray(action)
-        ) {
+                ? action[0]
+                : action.type;
 
-            type =
-                action[0];
-
-            value =
-                action[1];
-
-        } else {
-
-            type =
-                action.type;
-
-            value =
-                action.value;
-        }
+        const value =
+            Array.isArray(action)
+                ? action[1]
+                : action.value;
 
 
-        if (
-            type === "forward"
-        ) {
+        switch (type) {
+            case "forward":
+                return this.game.moveForward();
 
-            return this.performMovement(
-                "forward",
-                value
-            );
-        }
+            case "backward":
+                return this.game.moveBackward();
 
-
-        if (
-            type === "backward"
-        ) {
-
-            return this.performMovement(
-                "backward",
-                value
-            );
-        }
-
-
-        if (
-            type === "right"
-        ) {
-
-            if (
-                typeof this.robot.rotateRight ===
-                "function"
-            ) {
-
+            case "right":
                 this.robot.rotateRight(
                     value || 90
                 );
 
-            } else if (
-                typeof this.robot.turnRight ===
-                "function"
-            ) {
+                return true;
 
-                this.robot.turnRight();
-            }
-
-            return true;
-        }
-
-
-        if (
-            type === "left"
-        ) {
-
-            if (
-                typeof this.robot.rotateLeft ===
-                "function"
-            ) {
-
+            case "left":
                 this.robot.rotateLeft(
                     value || 90
                 );
 
-            } else if (
-                typeof this.robot.turnLeft ===
-                "function"
-            ) {
+                return true;
 
-                this.robot.turnLeft();
-            }
-
-            return true;
-        }
-
-
-        return false;
-    }
-
-
-    performMovement(
-        direction,
-        amount
-    ) {
-
-        const steps =
-            Math.max(
-                0,
-                Number(amount) || 0
-            );
-
-
-        for (
-            let i = 0;
-            i < steps;
-            i++
-        ) {
-
-            let success = false;
-
-
-            if (
-                direction === "forward"
-            ) {
-
-                if (
-                    typeof this.game.moveForward ===
-                    "function"
-                ) {
-
-                    success =
-                        this.game.moveForward();
-
-                } else if (
-                    typeof this.robot.forward ===
-                    "function"
-                ) {
-
-                    success =
-                        this.robot.forward(
-                            this.game,
-                            1
-                        );
-                }
-
-            } else {
-
-                if (
-                    typeof this.game.moveBackward ===
-                    "function"
-                ) {
-
-                    success =
-                        this.game.moveBackward();
-
-                } else if (
-                    typeof this.robot.backward ===
-                    "function"
-                ) {
-
-                    success =
-                        this.robot.backward(
-                            this.game,
-                            1
-                        );
-                }
-            }
-
-
-            if (
-                success === false
-            ) {
-
+            default:
                 return false;
-            }
         }
-
-
-        return true;
     }
 
-
-    // =====================================================
-    // FIN D'ESSAI
-    // =====================================================
 
     finishAttempt(
         code,
-        runnerResult,
-        animationResult
+        result,
+        requiredCheck
     ) {
+        this.running = false;
 
-        this.isRunning = false;
-
-
-        const output =
-            Array.isArray(
-                runnerResult.output
-            )
-                ? runnerResult.output
-                : [];
+        const attempt =
+            this.ui?.registerAttempt?.(
+                this.level.id
+            ) ?? 1;
 
 
         /*
-        1. Erreur Python / syntaxique.
+        1. Erreur Python.
         */
 
-        if (
-            !runnerResult.success
-        ) {
-
-            const consoleText = [
-                ...output,
-                "",
-                `Erreur : ${runnerResult.error}`
-            ]
-                .filter(
-                    line =>
-                        line !== undefined
-                )
-                .join("\n");
-
-
-            this.setConsole(
-                consoleText
-            );
-
-
-            this.failAttempt({
-
-                type:
-                    "python_error",
-
+        if (!result.success) {
+            this.handleFailure({
+                type: "python_error",
                 message:
-                    runnerResult.error,
-
+                    result.error ||
+                    "Le programme contient une erreur.",
                 line:
-                    runnerResult.errorLine
+                    result.errorLine,
+                attempt
             });
 
             return;
@@ -4379,45 +3355,24 @@ class PytApplication {
 
 
         /*
-        2. Action impossible :
-        mur, porte fermée, sortie de carte...
+        2. Action bloquée.
         */
 
-        if (
-            animationResult &&
-            animationResult.completed === false
-        ) {
+        if (this.lastBlockedAction) {
+            const blocked =
+                this.lastBlockedAction;
 
-            const action =
-                animationResult
-                    .details
-                    ?.action;
+            this.lastBlockedAction =
+                null;
 
-            const line =
-                action &&
-                !Array.isArray(action)
-                    ? action.line
-                    : null;
-
-
-            this.setConsole(
-                [
-                    ...output,
-                    "",
-                    "Pyt n'a pas pu terminer un déplacement."
-                ].join("\n")
-            );
-
-
-            this.failAttempt({
-
-                type:
-                    "blocked",
-
+            this.handleFailure({
+                type: "blocked",
                 message:
-                    "Mon trajet est bloqué. Regarde où je me suis arrêté et vérifie le déplacement correspondant.",
-
-                line
+                    this.game?.message ||
+                    "Pyt ne peut pas continuer dans cette direction.",
+                line:
+                    blocked.line || null,
+                attempt
             });
 
             return;
@@ -4425,918 +3380,571 @@ class PytApplication {
 
 
         /*
-        3. Objectif réel du niveau.
+        3. Résultat du niveau.
         */
 
         const success =
-            this.game &&
-            typeof this.game.checkSuccess ===
-            "function"
-                ? this.game.checkSuccess()
-                : false;
+            this.game.checkSuccess();
 
 
         if (!success) {
-
-            const feedback =
-                this.getFailureFeedback();
-
-
-            this.setConsole(
-                [
-                    ...output,
-                    "",
-                    feedback.message
-                ].join("\n")
-            );
-
-
-            if (
-                feedback.thought &&
-                this.ui &&
-                typeof this.ui.showThought ===
-                "function"
-            ) {
-
-                this.ui.showThought(
-                    feedback.thought
-                );
-            }
-
-
-            this.failAttempt(
-                feedback
-            );
-
-            return;
-        }
-
-
-        /*
-        4. Le trajet est correct, mais l'exercice
-        demande une notion du chapitre.
-
-        Exemple :
-        le niveau sur les boucles ne doit pas
-        être validé avec 10 forward() écrits à la main.
-
-        On vérifie seulement la présence des
-        structures demandées, jamais une solution
-        exacte.
-        */
-
-        if (
-            this.lastConceptResult &&
-            !this.lastConceptResult.success
-        ) {
-
-            const message =
-                this.lastConceptResult.message;
-
-
-            this.setConsole(
-                [
-                    ...output,
-                    "",
-                    message
-                ].join("\n")
-            );
-
-
-            this.failAttempt({
-
-                type:
-                    "missing_concept",
-
-                message,
-
-                line: null
+            this.handleFailure({
+                type: "semantic",
+                message:
+                    this.getFailureFeedback(),
+                line: null,
+                attempt
             });
 
             return;
         }
 
 
-        // ---------------------------------------------
-        // SUCCÈS
-        // ---------------------------------------------
+        /*
+        4. Vérification pédagogique.
+        Le joueur peut trouver plusieurs solutions,
+        mais doit réellement pratiquer la notion
+        demandée par le chapitre.
+        */
 
-        this.setConsole(
-            [
-                ...output,
-                "",
-                this.level.successMessage ||
-                "Mission réussie !"
-            ].join("\n")
+        if (!requiredCheck.success) {
+            this.handleFailure({
+                type: "concept",
+                message:
+                    requiredCheck.message,
+                line: null,
+                attempt
+            });
+
+            return;
+        }
+
+
+        /*
+        Réussite.
+        */
+
+        this.ui?.setStatus?.(
+            "Mission réussie !"
+        );
+
+        this.ui?.clearErrorHighlight?.();
+
+        this.ui?.completeCurrentLevel?.();
+    }
+
+
+    handleFailure({
+        type,
+        message,
+        line,
+        attempt
+    }) {
+        this.ui?.setStatus?.(
+            message
         );
 
 
-        if (
-            this.ui &&
-            typeof this.ui.setStatus ===
-            "function"
-        ) {
+        /*
+        Mauvaise position finale :
+        pensée exacte demandée.
+        */
 
-            this.ui.setStatus(
-                "RÉUSSI"
+        if (
+            type === "semantic" &&
+            this.isWrongFinalPosition()
+        ) {
+            this.ui?.showThoughtBubble?.(
+                "Ce n’est pas là que je voulais aller..."
             );
         }
 
 
-        if (
-            this.ui &&
-            typeof this.ui.showGuide ===
-            "function"
-        ) {
+        /*
+        Première erreur :
+        pas de soulignement rouge immédiat.
+        */
 
-            this.ui.showGuide(
-                this.level.successMessage ||
-                "Bravo ! Mission réussie."
+        if (
+            attempt <= 1
+        ) {
+            this.ui?.clearErrorHighlight?.();
+
+        } else if (
+            (
+                type === "python_error" ||
+                type === "blocked"
+            ) &&
+            Number.isInteger(line)
+        ) {
+            /*
+            À partir de la deuxième tentative,
+            on souligne seulement lorsqu'on connaît
+            réellement la ligne problématique.
+            */
+
+            this.ui?.highlightErrorLine?.(
+                line
             );
+
+        } else {
+            /*
+            Une solution syntaxiquement correcte
+            qui produit le mauvais résultat ne reçoit
+            PAS de faux soulignement.
+            */
+
+            this.ui?.clearErrorHighlight?.();
         }
 
 
+        /*
+        Pyt propose de revoir le cours.
+        */
+
         if (
             this.ui &&
-            typeof this.ui.completeCurrentLevel ===
+            typeof this.ui.showFailureGuide ===
             "function"
         ) {
+            this.ui.showFailureGuide(
+                message,
+                {
+                    attempt,
+                    type
+                }
+            );
 
-            this.ui.completeCurrentLevel();
+        } else {
+            this.ui?.showGuide?.(
+                message
+            );
         }
     }
 
-
-    failAttempt(details) {
-
-        if (
-            this.ui &&
-            typeof this.ui.setStatus ===
-            "function"
-        ) {
-
-            this.ui.setStatus(
-                "À CORRIGER"
-            );
-        }
-
-
-        if (
-            this.ui &&
-            typeof this.ui.handleFailedAttempt ===
-            "function"
-        ) {
-
-            this.ui.handleFailedAttempt(
-                details
-            );
-        }
-    }
-
-
-    // =====================================================
-    // RETOURS D'ERREUR DU MONDE
-    // =====================================================
 
     getFailureFeedback() {
-
-        const state =
-            this.game &&
-            typeof this.game.getState ===
-            "function"
-                ? this.game.getState()
-                : null;
-
-
-        // ---------------------------------------------
-        // OBJETS NON RAMASSÉS
-        // ---------------------------------------------
-
-        if (
-            this.collectionHasItems(
-                this.game?.objects
-            )
-        ) {
-
-            return {
-                type:
-                    "object_not_picked",
-
-                message:
-                    "Il reste un objet à récupérer. Regarde le trajet de Pyt et vérifie qu'il passe bien dessus.",
-
-                line:
-                    null
-            };
+        if (!this.game) {
+            return "La mission n'est pas terminée.";
         }
 
 
-        // ---------------------------------------------
-        // SALETÉS
-        // ---------------------------------------------
-
         if (
-            this.collectionHasItems(
-                this.game?.dirt
-            )
+            this.game.objects &&
+            this.game.objects.size > 0
         ) {
+            const count =
+                this.game.objects.size;
 
-            return {
-                type:
-                    "unfinished_cleaning",
-
-                message:
-                    "Il reste encore une zone à nettoyer. Pyt doit passer sur toutes les cases sales.",
-
-                line:
-                    null
-            };
+            return (
+                count === 1
+                    ? "Il reste encore un objet à récupérer."
+                    : `Il reste encore ${count} objets à récupérer.`
+            );
         }
 
 
-        // ---------------------------------------------
-        // BOUTONS
-        // ---------------------------------------------
+        if (
+            this.game.dirt &&
+            this.game.dirt.size > 0
+        ) {
+            const count =
+                this.game.dirt.size;
+
+            return (
+                count === 1
+                    ? "Il reste encore une zone à nettoyer."
+                    : `Il reste encore ${count} zones à nettoyer.`
+            );
+        }
+
 
         if (
-            this.collectionHasItems(
-                this.game?.buttons
-            )
+            this.game.buttons &&
+            this.game.activatedButtons
         ) {
-
             const inactive =
-                this.countInactiveButtons(
-                    this.game.buttons
-                );
+                this.game.buttons.size -
+                this.game.activatedButtons.size;
 
             if (
                 inactive > 0
             ) {
-
-                return {
-                    type:
-                        "button_not_activated",
-
-                    message:
-                        "Un bouton n'a pas encore été activé. Fais passer Pyt dessus avant de continuer.",
-
-                    line:
-                        null
-                };
-            }
-        }
-
-
-        // ---------------------------------------------
-        // DÉPÔT
-        // ---------------------------------------------
-
-        if (
-            this.objectiveContains(
-                "deposit"
-            )
-        ) {
-
-            return {
-                type:
-                    "object_misplaced",
-
-                message:
-                    "L'objet n'est pas encore au bon endroit. Vérifie la zone de dépôt.",
-
-                line:
-                    null
-            };
-        }
-
-
-        // ---------------------------------------------
-        // CAISSES
-        // ---------------------------------------------
-
-        if (
-            this.objectiveContains(
-                "boxes"
-            )
-        ) {
-
-            return {
-                type:
-                    "boxes_unfinished",
-
-                message:
-                    "Toutes les caisses ne sont pas encore à leur place.",
-
-                line:
-                    null
-            };
-        }
-
-
-        // ---------------------------------------------
-        // MAUVAISE CASE FINALE
-        // ---------------------------------------------
-
-        if (
-            this.objectiveContains(
-                "reach_goal"
-            )
-        ) {
-
-            return {
-                type:
-                    "wrong_destination",
-
-                message:
-                    "Pyt a exécuté le programme, mais il ne termine pas sur la bonne case.",
-
-                thought:
-                    "Ce n’est pas là que je voulais aller...",
-
-                line:
-                    null
-            };
-        }
-
-
-        // ---------------------------------------------
-        // MESSAGE DU MOTEUR
-        // ---------------------------------------------
-
-        if (
-            this.game &&
-            typeof this.game.message ===
-            "string" &&
-            this.game.message.trim() !== ""
-        ) {
-
-            return {
-                type:
-                    "unfinished_objective",
-
-                message:
-                    this.game.message,
-
-                line:
-                    null
-            };
-        }
-
-
-        // ---------------------------------------------
-        // GÉNÉRIQUE
-        // ---------------------------------------------
-
-        return {
-            type:
-                "unfinished_objective",
-
-            message:
-                "La mission n'est pas encore terminée. Observe le trajet de Pyt et compare-le à l'objectif.",
-
-            line:
-                null,
-
-            state
-        };
-    }
-
-
-    collectionHasItems(
-        collection
-    ) {
-
-        if (!collection) {
-
-            return false;
-        }
-
-        if (
-            typeof collection.size ===
-            "number"
-        ) {
-
-            return collection.size > 0;
-        }
-
-        if (
-            Array.isArray(collection)
-        ) {
-
-            return collection.length > 0;
-        }
-
-        return false;
-    }
-
-
-    countInactiveButtons(
-        buttons
-    ) {
-
-        if (!buttons) {
-
-            return 0;
-        }
-
-        if (
-            buttons instanceof Set
-        ) {
-
-            /*
-            Dans certains moteurs, les boutons
-            restants sont simplement ceux qui ne
-            sont pas encore activés.
-            */
-
-            return buttons.size;
-        }
-
-        if (
-            buttons instanceof Map
-        ) {
-
-            let count = 0;
-
-            for (
-                const value
-                of buttons.values()
-            ) {
-
-                if (
-                    value === false ||
-                    value?.active === false
-                ) {
-
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
-        if (
-            Array.isArray(buttons)
-        ) {
-
-            return buttons.filter(
-                value =>
-                    value === false ||
-                    value?.active === false
-            ).length;
-        }
-
-        return 0;
-    }
-
-
-    objectiveContains(type) {
-
-        const objective =
-            this.level?.objective;
-
-        if (!objective) {
-
-            return false;
-        }
-
-        if (
-            objective.type === type
-        ) {
-
-            return true;
-        }
-
-        if (
-            objective.type ===
-            "combined" &&
-            Array.isArray(
-                objective.requirements
-            )
-        ) {
-
-            return objective
-                .requirements
-                .some(
-                    requirement =>
-                        requirement &&
-                        requirement.type ===
-                        type
+                return (
+                    inactive === 1
+                        ? "Il reste encore un bouton à activer."
+                        : `Il reste encore ${inactive} boutons à activer.`
                 );
+            }
         }
 
-        return false;
+
+        if (
+            this.game.getInventoryCount?.() > 0 &&
+            this.game.deposits?.size > 0
+        ) {
+            return "Pyt transporte encore un objet. Il faut l'apporter à la zone de dépôt.";
+        }
+
+
+        if (
+            this.level?.objective ===
+            "boxes" ||
+            this.level?.objective?.type ===
+            "boxes"
+        ) {
+            return "Toutes les caisses ne sont pas encore à la bonne place.";
+        }
+
+
+        if (
+            this.game.message
+        ) {
+            return this.game.message;
+        }
+
+
+        if (
+            this.isWrongFinalPosition()
+        ) {
+            return "Ce n’est pas là que je voulais aller...";
+        }
+
+
+        return "La mission n'est pas encore terminée.";
     }
 
 
-    // =====================================================
-    // VALIDATION DES NOTIONS
-    // =====================================================
+    isWrongFinalPosition() {
+        if (
+            !this.game ||
+            !this.game.goal
+        ) {
+            return false;
+        }
 
-    validateRequiredConcepts(
-        code,
-        level
-    ) {
+        const position =
+            this.game.getRobotPosition?.();
 
+        if (!position) {
+            return false;
+        }
+
+        return (
+            position.row !==
+            this.game.goal.row ||
+            position.col !==
+            this.game.goal.col
+        );
+    }
+
+
+    /* =====================================================
+       CONCEPTS PÉDAGOGIQUES
+    ===================================================== */
+
+    validateRequiredConcepts(code) {
         const required =
             Array.isArray(
-                level?.requiredConcepts
+                this.level?.requiredConcepts
             )
-                ? level.requiredConcepts
+                ? this.level.requiredConcepts
                 : [];
-
 
         if (
             required.length === 0
         ) {
-
             return {
-                success: true,
-                missing: [],
-                message: ""
+                success: true
             };
         }
-
-
-        /*
-        "revision" signifie que l'élève choisit
-        lui-même les notions utiles.
-        */
-
-        const conceptsToCheck =
-            required.filter(
-                concept =>
-                    concept !== "revision"
-            );
-
-
-        if (
-            conceptsToCheck.length === 0
-        ) {
-
-            return {
-                success: true,
-                missing: [],
-                message: ""
-            };
-        }
-
-
-        const source =
-            String(code || "");
-
 
         const tests = {
-
             forward:
                 /\bforward\s*\(/,
 
             backward:
                 /\bbackward\s*\(/,
 
-            turn:
-                /\b(?:left|right)\s*\(/,
+            right:
+                /\bright\s*\(/,
+
+            left:
+                /\bleft\s*\(/,
 
             movement:
-                /\b(?:forward|backward|left|right)\s*\(/,
+                /\b(?:forward|backward|right|left)\s*\(/,
 
             variable:
-                /^[ \t]*[A-Za-z_]\w*[ \t]*=(?!=)/m,
+                /^[ \t]*[A-Za-z_]\w*\s*=/m,
+
+            variables:
+                /^[ \t]*[A-Za-z_]\w*\s*=/m,
 
             arithmetic:
-                /(?:\+|-|\*|\/|%)/,
+                /[+*/%]|(?:\w|\d)\s*-\s*(?:\w|\d)/,
 
             conversion:
                 /\b(?:int|float|str)\s*\(/,
 
             if:
-                /^[ \t]*if\s+.+:/m,
+                /\bif\b/,
 
             elif:
-                /^[ \t]*elif\s+.+:/m,
+                /\belif\b/,
 
             else:
-                /^[ \t]*else\s*:/m,
+                /\belse\s*:/,
 
             condition:
-                /^[ \t]*(?:if|elif)\s+.+:/m,
+                /\bif\b/,
 
-            boolean:
-                /\b(?:and|or|not)\b/,
+            conditions:
+                /\bif\b/,
+
+            and:
+                /\band\b/,
+
+            or:
+                /\bor\b/,
+
+            not:
+                /\bnot\b/,
 
             for:
-                /^[ \t]*for\s+[A-Za-z_]\w*\s+in\s+.+:/m,
+                /\bfor\b/,
 
             range:
                 /\brange\s*\(/,
 
             while:
-                /^[ \t]*while\s+.+:/m,
+                /\bwhile\b/,
 
             break:
-                /^[ \t]*break\b/m,
+                /\bbreak\b/,
 
             list:
-                /=\s*\[[\s\S]*?\]/m,
+                /\[[^\]]*\]/,
 
-            index:
-                /\b[A-Za-z_]\w*\s*\[[^\]]+\]/,
+            lists:
+                /\[[^\]]*\]/,
 
             append:
                 /\.append\s*\(/,
 
             function:
-                /^[ \t]*def\s+[A-Za-z_]\w*\s*\(/m,
+                /\bdef\s+[A-Za-z_]\w*\s*\(/,
 
-            parameter:
-                /^[ \t]*def\s+[A-Za-z_]\w*\s*\(\s*[A-Za-z_]\w+/m,
+            functions:
+                /\bdef\s+[A-Za-z_]\w*\s*\(/,
 
-            loop:
-                /^[ \t]*(?:for|while)\s+.+:/m
+            print:
+                /\bprint\s*\(/
         };
-
-
-        const labels = {
-
-            forward:
-                "forward()",
-
-            backward:
-                "backward()",
-
-            turn:
-                "un virage avec left() ou right()",
-
-            movement:
-                "les commandes de déplacement",
-
-            variable:
-                "une variable",
-
-            arithmetic:
-                "un calcul",
-
-            conversion:
-                "une conversion int(), float() ou str()",
-
-            if:
-                "une condition if",
-
-            elif:
-                "elif",
-
-            else:
-                "else",
-
-            condition:
-                "une condition",
-
-            boolean:
-                "and, or ou not",
-
-            for:
-                "une boucle for",
-
-            range:
-                "range()",
-
-            while:
-                "une boucle while",
-
-            break:
-                "break",
-
-            list:
-                "une liste",
-
-            index:
-                "l'accès à un élément de liste",
-
-            append:
-                "append()",
-
-            function:
-                "une fonction avec def",
-
-            parameter:
-                "un paramètre de fonction",
-
-            loop:
-                "une boucle"
-        };
-
-
-        const missing = [];
 
 
         for (
             const concept
-            of conceptsToCheck
+            of required
         ) {
+            if (
+                concept === "revision"
+            ) {
+                continue;
+            }
 
             const test =
                 tests[concept];
 
-            /*
-            Si une future notion n'a pas encore
-            de test, elle ne bloque pas le jeu.
-            */
-
-            if (!test) {
-
-                continue;
-            }
-
             if (
-                !test.test(source)
+                test &&
+                !test.test(code)
             ) {
-
-                missing.push(
-                    concept
-                );
+                return {
+                    success: false,
+                    message:
+                        this.getConceptMessage(
+                            concept
+                        )
+                };
             }
-        }
-
-
-        if (
-            missing.length === 0
-        ) {
-
-            return {
-                success: true,
-                missing: [],
-                message: ""
-            };
-        }
-
-
-        const missingLabels =
-            missing.map(
-                concept =>
-                    labels[concept] ||
-                    concept
-            );
-
-
-        let listText = "";
-
-        if (
-            missingLabels.length === 1
-        ) {
-
-            listText =
-                missingLabels[0];
-
-        } else {
-
-            listText =
-                missingLabels
-                    .slice(
-                        0,
-                        -1
-                    )
-                    .join(", ") +
-                " et " +
-                missingLabels[
-                    missingLabels.length - 1
-                ];
         }
 
 
         return {
-            success: false,
-            missing,
-
-            message:
-                `Ton trajet fonctionne peut-être, mais cet exercice te demande d'utiliser ${listText}. Il peut y avoir plusieurs solutions : modifie ton programme en utilisant la notion du chapitre.`
+            success: true
         };
     }
 
 
-    // =====================================================
-    // CONSOLE
-    // =====================================================
+    getConceptMessage(concept) {
+        const messages = {
+            forward:
+                "Essaie d'utiliser forward(...).",
 
-    setConsole(text) {
+            backward:
+                "Essaie d'utiliser backward(...).",
 
-        if (
-            this.ui &&
-            typeof this.ui.setConsole ===
-            "function"
-        ) {
+            right:
+                "Essaie d'utiliser right(...).",
 
-            this.ui.setConsole(
-                text
-            );
+            left:
+                "Essaie d'utiliser left(...).",
 
+            movement:
+                "Utilise les instructions de déplacement de Pyt.",
+
+            variable:
+                "Cet exercice te demande d'utiliser une variable.",
+
+            variables:
+                "Cet exercice te demande d'utiliser des variables.",
+
+            arithmetic:
+                "Utilise un calcul dans ton programme.",
+
+            conversion:
+                "Utilise une conversion avec int(), float() ou str().",
+
+            if:
+                "Cet exercice te demande d'utiliser une condition avec if.",
+
+            elif:
+                "Essaie d'utiliser elif dans ta condition.",
+
+            else:
+                "Essaie d'utiliser else dans ta condition.",
+
+            condition:
+                "Cet exercice te demande d'utiliser une condition.",
+
+            conditions:
+                "Cet exercice te demande d'utiliser des conditions.",
+
+            and:
+                "Essaie d'utiliser and.",
+
+            or:
+                "Essaie d'utiliser or.",
+
+            not:
+                "Essaie d'utiliser not.",
+
+            for:
+                "Cet exercice te demande d'utiliser une boucle for.",
+
+            range:
+                "Utilise range(...) avec ta boucle.",
+
+            while:
+                "Cet exercice te demande d'utiliser une boucle while.",
+
+            break:
+                "Essaie d'utiliser break dans ta boucle.",
+
+            list:
+                "Cet exercice te demande d'utiliser une liste.",
+
+            lists:
+                "Cet exercice te demande d'utiliser une liste.",
+
+            append:
+                "Essaie d'ajouter un élément avec append(...).",
+
+            function:
+                "Cet exercice te demande de créer une fonction avec def.",
+
+            functions:
+                "Cet exercice te demande de créer une fonction avec def.",
+
+            print:
+                "Essaie d'utiliser print(...)."
+        };
+
+        return (
+            messages[concept] ||
+            `Utilise la notion « ${concept} » dans ta solution.`
+        );
+    }
+
+
+    /* =====================================================
+       CONSOLE
+    ===================================================== */
+
+    showConsoleOutput(result) {
+        const consoleOutput =
+            this.$("console-output");
+
+        if (!consoleOutput) {
             return;
         }
 
-        const consoleOutput =
-            document.getElementById(
-                "console-output"
+        const lines = [
+            ...(result.output || [])
+        ];
+
+        if (
+            !result.success &&
+            result.error
+        ) {
+            lines.push(
+                `Erreur : ${result.error}`
             );
-
-        if (consoleOutput) {
-
-            consoleOutput.textContent =
-                text;
         }
+
+        consoleOutput.textContent =
+            lines.length
+                ? lines.join("\n")
+                : "Programme lancé.";
     }
 
 
-    // =====================================================
-    // OUTILS DOM
-    // =====================================================
+    /* =====================================================
+       OUTILS
+    ===================================================== */
 
-    show(id) {
-
-        const element =
-            document.getElementById(
-                id
-            );
-
-        if (element) {
-
-            element.classList.remove(
-                "hidden"
-            );
-        }
+    isMobileDevice() {
+        return (
+            window.matchMedia(
+                "(max-width: 760px)"
+            ).matches ||
+            (
+                "ontouchstart" in window &&
+                window.innerWidth <= 900
+            )
+        );
     }
 
 
-    hide(id) {
-
-        const element =
-            document.getElementById(
-                id
-            );
-
-        if (element) {
-
-            element.classList.add(
-                "hidden"
-            );
-        }
-    }
-
-
-    isElementVisible(id) {
-
-        const element =
-            document.getElementById(
-                id
-            );
-
-        if (!element) {
-
-            return false;
-        }
-
-        return !element.classList.contains(
-            "hidden"
+    $(id) {
+        return document.getElementById(
+            id
         );
     }
 }
 
 
-// =========================================================
-// DÉMARRAGE AUTOMATIQUE
-// =========================================================
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        const app =
-            new PytApplication();
-
-        window.pytApp =
-            app;
-
-        /*
-        Petit accès pratique depuis la console
-        du navigateur pendant le développement.
-        */
-
-        window.runPythonCode =
-            code =>
-                app.runner.run(
-                    code
-                );
-
-
-        app.start();
-    }
-);
-
-
-// =========================================================
-// EXPOSITION
-// =========================================================
+/* =========================================================
+   DÉMARRAGE
+========================================================= */
 
 window.BrowserPythonRunner =
     BrowserPythonRunner;
 
 window.PytApplication =
     PytApplication;
+
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+        const app =
+            new PytApplication();
+
+        window.pytApp =
+            app;
+
+        app.start();
+    }
+);
