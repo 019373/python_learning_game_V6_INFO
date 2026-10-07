@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>PYT - Apprendre Python</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+</head>
+
+<body>
+
+    <!-- ===================================================
+         APPLICATION PYT
+    ==================================================== -->
+
+    <div id="app">
+
+        <!-- ===============================================
+             BARRE DU HAUT
+        ================================================ -->
+
+        <header id="top-bar">
+
+            <div id="brand">
+
+                <div id="logo">
+                    PYT
+                </div>
+
+                <div id="brand-subtitle">
+                    APPRENDRE PYTHON
+                </div>
+
+            </div>
+
+
+            <div id="level-information">
+
+                <div id="chapter-badge">
+                    CHAPITRE 1 · EXERCICE 1/3
+                </div>
+
+                <div id="difficulty-badge">
+                    FACILE
+                </div>
+
+            </div>
+
+
+            <nav id="top-navigation">
+
+                <button
+                    id="course-button"
+                    class="top-button"
+                    type="button"
+                >
+                    COURS
+                </button>
+
+                <button
+                    id="map-button"
+                    class="top-button primary"
+                    type="button"
+                >
+                    CARTE
+                </button>
+
+            </nav>
+
+        </header>
+
+
+        <!-- ===============================================
+             ÉCRAN PRINCIPAL DU JEU
+        ================================================ -->
+
+        <main id="game-screen">
+
+            <!-- ===========================================
+                 MONDE DU JEU
+            ============================================ -->
+
+            <section id="world-section">
+
+                <div class="section-title">
+                    ZONE D'ENTRAÎNEMENT
+                </div>
+
+                <div id="game-container">
+
+                    <canvas
+                        id="game-canvas"
+                        width="800"
+                        height="600"
+                    >
+                        Ton navigateur ne permet pas
+                        d'afficher le jeu.
+                    </canvas>
+
+                </div>
+
+                <div id="game-status">
+                    Pyt attend ton programme.
+                </div>
+
+            </section>
+
+
+            <!-- ===========================================
+                 MISSION
+            ============================================ -->
+
+            <aside id="mission-panel">
+
+                <div class="panel-label">
+                    MISSION
+                </div>
+
+                <h1 id="mission-title">
+                    Première mission
+                </h1>
+
+                <div id="mission-instruction">
+                    Utilise Python pour guider Pyt
+                    jusqu'au cristal.
+                </div>
+
+
+                <div id="mission-actions">
+
+                    <button
+                        id="open-code-button"
+                        class="large-button cyan-button"
+                        type="button"
+                    >
+                        OUVRIR LE CODE
+                    </button>
+
+                    <button
+                        id="restart-button"
+                        class="large-button secondary-button"
+                        type="button"
+                    >
+                        ↻ RECOMMENCER
+                    </button>
+
+                </div>
+
+            </aside>
+
+        </main>
+
+
+        <!-- ===============================================
+             ÉCRAN D'ACCUEIL D'UN CHAPITRE
+        ================================================ -->
+
+        <section
+            id="chapter-screen"
+            class="overlay-screen hidden"
+        >
+
+            <div class="page-container">
+
+                <div class="page-header">
+
+                    <div
+                        id="course-chapter-number"
+                        class="small-label"
+                    >
+                        CHAPITRE 1
+                    </div>
+
+                    <h2 id="course-title">
+                        Déplacer Pyt
+                    </h2>
+
+                    <p id="course-subtitle">
+                        Apprends à déplacer Pyt avec Python.
+                    </p>
+
+                </div>
+
+
+                <div id="course-content">
+                    <!--
+                        ui.js ajoutera ici le contenu
+                        du cours provenant de levels.js.
+                    -->
+                </div>
+
+
+                <div class="page-actions">
+
+                    <button
+                        id="course-map-button"
+                        class="large-button pink-button"
+                        type="button"
+                    >
+                        VOIR LA CARTE
+                    </button>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ===============================================
+             CARTE DU CHAPITRE
+        ================================================ -->
+
+        <section
+            id="map-screen"
+            class="overlay-screen hidden"
+        >
+
+            <div class="page-container map-page">
+
+                <div class="page-header">
+
+                    <div class="small-label">
+                        PROGRESSION
+                    </div>
+
+                    <h2 id="map-title">
+                        CARTE DU CHAPITRE 1
+                    </h2>
+
+                    <p id="map-subtitle">
+                        Déplacer Pyt
+                    </p>
+
+                </div>
+
+
+                <div id="level-map">
+
+                    <!-- Ligne entre les exercices -->
+
+                    <div id="map-path"></div>
+
+
+                    <!-- EXERCICE 1 -->
+
+                    <button
+                        class="level-node"
+                        id="level-node-1"
+                        data-exercise="1"
+                        type="button"
+                    >
+
+                        <span class="node-circle">
+                            1
+                        </span>
+
+                        <span class="node-title">
+                            EXERCICE 1
+                        </span>
+
+                        <span class="node-difficulty">
+                            FACILE
+                        </span>
+
+                    </button>
+
+
+                    <!-- EXERCICE 2 -->
+
+                    <button
+                        class="level-node locked"
+                        id="level-node-2"
+                        data-exercise="2"
+                        type="button"
+                        disabled
+                    >
+
+                        <span class="node-circle">
+                            ×
+                        </span>
+
+                        <span class="node-title">
+                            EXERCICE 2
+                        </span>
+
+                        <span class="node-difficulty">
+                            MOYEN
+                        </span>
+
+                    </button>
+
+
+                    <!-- EXERCICE 3 -->
+
+                    <button
+                        class="level-node locked"
+                        id="level-node-3"
+                        data-exercise="3"
+                        type="button"
+                        disabled
+                    >
+
+                        <span class="node-circle">
+                            ×
+                        </span>
+
+                        <span class="node-title">
+                            EXERCICE 3
+                        </span>
+
+                        <span class="node-difficulty">
+                            DIFFICILE
+                        </span>
+
+                    </button>
+
+                </div>
+
+
+                <div class="page-actions map-actions">
+
+                    <button
+                        id="map-course-button"
+                        class="large-button secondary-button"
+                        type="button"
+                    >
+                        REVOIR LE COURS
+                    </button>
+
+                    <div class="map-help">
+                        Clique sur un exercice débloqué
+                        pour commencer.
+                    </div>
+
+                </div>
+
+            </div>
+
+        </section>
+
+
+        <!-- ===============================================
+             FENÊTRE / PANNEAU DE CODE
+        ================================================ -->
+
+        <section
+            id="code-window"
+            class="code-window hidden"
+        >
+
+            <!-- Barre permettant ensuite de déplacer
+                 la fenêtre avec JavaScript -->
+
+            <div id="code-window-header">
+
+                <div class="code-window-title">
+                    CODE PYTHON
+                </div>
+
+                <button
+                    id="close-code-button"
+                    class="window-control"
+                    type="button"
+                    aria-label="Fermer l'éditeur"
+                >
+                    ×
+                </button>
+
+            </div>
+
+
+            <!-- ÉDITEUR -->
+
+            <div id="editor-container">
+
+                <textarea
+                    id="code-editor"
+                    spellcheck="false"
+                    autocomplete="off"
+                    autocorrect="off"
+                    autocapitalize="off"
+                    aria-label="Éditeur de code Python"
+                    placeholder="# Écris ton programme Python ici..."
+                ></textarea>
+
+            </div>
+
+
+            <!-- CONSOLE -->
+
+            <div id="console-section">
+
+                <div class="console-title">
+                    CONSOLE
+                </div>
+
+                <pre id="console-output">Prêt.</pre>
+
+            </div>
+
+
+            <!-- BOUTONS -->
+
+            <div id="code-actions">
+
+                <button
+                    id="clear-code-button"
+                    class="editor-button secondary-button"
+                    type="button"
+                >
+                    EFFACER
+                </button>
+
+                <button
+                    id="code-restart-button"
+                    class="editor-button secondary-button"
+                    type="button"
+                >
+                    RECOMMENCER
+                </button>
+
+                <button
+                    id="run-code-button"
+                    class="editor-button run-button"
+                    type="button"
+                >
+                    PYT ▶
+                </button>
+
+            </div>
+
+        </section>
+
+
+        <!-- ===============================================
+             MESSAGE / MODALE
+        ================================================ -->
+
+        <div
+            id="modal-background"
+            class="modal-background hidden"
+        >
+
+            <div id="message-modal">
+
+                <div
+                    id="modal-label"
+                    class="small-label"
+                >
+                    PYT
+                </div>
+
+                <h2 id="modal-title">
+                    Mission
+                </h2>
+
+                <p id="modal-message">
+                    Message
+                </p>
+
+                <div id="modal-actions">
+
+                    <button
+                        id="modal-secondary-button"
+                        class="large-button secondary-button hidden"
+                        type="button"
+                    >
+                        ANNULER
+                    </button>
+
+                    <button
+                        id="modal-primary-button"
+                        class="large-button pink-button"
+                        type="button"
+                    >
+                        CONTINUER
+                    </button>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ===================================================
+         JAVASCRIPT
+    ==================================================== -->
+
+    <!--
+        Ordre important :
+
+        robot.js
+            ↓
+        game.js
+            ↓
+        levels.js
+            ↓
+        ui.js
+            ↓
+        app.js
+
+        app.js démarre l'application une fois
+        les autres fichiers disponibles.
+    -->
+
+    <script src="robot.js"></script>
+    <script src="game.js"></script>
+    <script src="levels.js"></script>
+    <script src="ui.js"></script>
+    <script src="app.js"></script>
+
+</body>
+
+</html>

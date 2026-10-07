@@ -958,3 +958,42 @@ clean()
 drop()
 open_door()
 Finalement, Z et A travaillent sur le moteur ; T et N travaillent eux sur l'interface
+# MISE À JOUR PRIORITAIRE — VERSION NAVIGATEUR
+
+Cette section est plus récente que les règles précédentes.
+
+Si une règle écrite plus haut contredit cette section, **cette section a priorité**.
+
+À partir de maintenant, le jeu doit être développé pour pouvoir être **joué directement dans un navigateur web**.
+
+L'objectif final est que l'élève puisse ouvrir une URL et jouer sans avoir à :
+
+- installer Python ;
+- installer Thonny ;
+- installer une bibliothèque ;
+- télécharger le projet ;
+- lancer un fichier `.py`.
+
+## Technologie
+
+La version finale du jeu doit utiliser principalement :
+
+```text
+HTML
+CSS
+JavaScript
+## dossier
+
+les dossiers maintenant disponible sont les suivants : 
+
+app.js
+game.js
+index.html
+levels.js
+robot.js
+runner.py
+style.css
+ui.js
+PROJECT_RULES.md
+README.md
+assets/
