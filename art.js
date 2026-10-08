@@ -12279,162 +12279,139 @@
              */
 
             const leftW =
-                houseW *
-                    0.38;
+    houseW * 0.38;
+
+const middleW =
+    houseW * 0.33;
+
+const rightW =
+    houseW - leftW - middleW;
+
+const upperH =
+    houseH * 0.48;
+
+const lowerH =
+    houseH - upperH;
 
 
-            const middleW =
-                houseW *
-                    0.33;
+/*
+ * BALCON
+ * Le balcon reste maintenant dans la maison.
+ */
+
+const balconyW =
+    leftW * 0.18;
+
+const salonW =
+    leftW - balconyW;
 
 
-            const rightW =
-                houseW -
-                    leftW -
-                    middleW;
+this.drawRoomScene(
+    ctx,
+    "balcon",
+    houseX,
+    houseY,
+    balconyW,
+    upperH
+);
 
 
-            const upperH =
-                houseH *
-                    0.48;
+/*
+ * SALON
+ */
+
+this.drawRoomScene(
+    ctx,
+    "salon",
+    houseX + balconyW,
+    houseY,
+    salonW,
+    upperH
+);
 
 
-            const lowerH =
-                houseH -
-                    upperH;
+/*
+ * CHAMBRE
+ */
+
+this.drawRoomScene(
+    ctx,
+    "chambre",
+    houseX + leftW,
+    houseY,
+    middleW,
+    upperH
+);
 
 
-            /*
-             * BALCON
-             */
+/*
+ * CAVE
+ */
 
-            this.drawRoomScene(
-                ctx,
-                "balcon",
-                houseX -
-                    width *
-                    0.07,
-                houseY +
-                    houseH *
-                    0.08,
-                width *
-                    0.075,
-                houseH *
-                    0.50
-            );
+this.drawRoomScene(
+    ctx,
+    "cave_a_vin",
+    houseX + leftW + middleW,
+    houseY,
+    rightW,
+    upperH
+);
 
 
-            /*
-             * SALON
-             */
+/*
+ * CUISINE
+ */
 
-            this.drawRoomScene(
-                ctx,
-                "salon",
-                houseX,
-                houseY,
-                leftW,
-                upperH
-            );
-
-
-            /*
-             * CHAMBRE
-             */
-
-            this.drawRoomScene(
-                ctx,
-                "chambre",
-                houseX +
-                    leftW,
-                houseY,
-                middleW,
-                upperH
-            );
+this.drawRoomScene(
+    ctx,
+    "cuisine",
+    houseX,
+    houseY + upperH,
+    leftW,
+    lowerH
+);
 
 
-            /*
-             * CAVE
-             */
+/*
+ * ENTREE
+ */
 
-            this.drawRoomScene(
-                ctx,
-                "cave_a_vin",
-                houseX +
-                    leftW +
-                    middleW,
-                houseY,
-                rightW,
-                upperH
-            );
+this.drawRoomScene(
+    ctx,
+    "entree",
+    houseX + leftW,
+    houseY + upperH,
+    middleW * 0.62,
+    lowerH
+);
 
 
-            /*
-             * CUISINE
-             */
+/*
+ * TOILETTE
+ */
 
-            this.drawRoomScene(
-                ctx,
-                "cuisine",
-                houseX,
-                houseY +
-                    upperH,
-                leftW,
-                lowerH
-            );
-
-
-            /*
-             * ENTREE
-             */
-
-            this.drawRoomScene(
-                ctx,
-                "entree",
-                houseX +
-                    leftW,
-                houseY +
-                    upperH,
-                middleW *
-                    0.62,
-                lowerH
-            );
+this.drawRoomScene(
+    ctx,
+    "toilette",
+    houseX + leftW + middleW * 0.62,
+    houseY + upperH,
+    middleW * 0.38,
+    lowerH
+);
 
 
-            /*
-             * TOILETTE
-             */
+/*
+ * GARAGE
+ */
 
-            this.drawRoomScene(
-                ctx,
-                "toilette",
-                houseX +
-                    leftW +
-                    middleW *
-                    0.62,
-                houseY +
-                    upperH,
-                middleW *
-                    0.38,
-                lowerH
-            );
-
-
-            /*
-             * GARAGE
-             */
-
-            this.drawRoomScene(
-                ctx,
-                "garage",
-                houseX +
-                    leftW +
-                    middleW,
-                houseY +
-                    upperH,
-                rightW,
-                lowerH
-            );
+this.drawRoomScene(
+    ctx,
+    "garage",
+    houseX + leftW + middleW,
+    houseY + upperH,
+    rightW,
+    lowerH
+);
 
 
             /*

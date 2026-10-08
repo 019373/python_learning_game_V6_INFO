@@ -6,28 +6,32 @@
 
         constructor() {
 
+            /* =====================================================
+               STOCKAGE
+            ===================================================== */
+
             this.progressKey =
                 "pyt-progress";
 
-            this.attemptsKey =
-                "pyt-attempts";
+            this.startedKey =
+                "pyt-started-levels";
 
 
             this.completed =
-                this.loadObject(
+                this.loadStorageObject(
                     this.progressKey
                 );
 
 
-            this.attempts =
-                this.loadObject(
-                    this.attemptsKey
+            this.started =
+                this.loadStorageObject(
+                    this.startedKey
                 );
 
 
-            this.failureCounts =
-                {};
-
+            /* =====================================================
+               ÉTAT
+            ===================================================== */
 
             this.mapMode =
                 "house";
@@ -41,323 +45,256 @@
                 null;
 
 
-            this.loadedLevelKey =
+            this.currentChapterData =
                 null;
 
 
-            this.theoryReturnToGame =
-                false;
+            this.currentLevelKey =
+                null;
+
+
+            this.theoryReturnMode =
+                "chapter";
 
 
             this.savedEditorCode =
                 "";
 
 
+            this.failureCounts =
+                {};
+
+
             this.houseBadges =
                 [];
-
-
-            this.houseAnimationTimer =
-                null;
 
 
             this.resizeObserver =
                 null;
 
 
+            this.redrawFrame =
+                null;
+
+
             this.cacheDom();
 
-            this.repairArtCompatibility();
+            this.ensureArtCompatibility();
 
             this.ensureHouseCanvas();
 
-            this.bindEvents();
-
             this.prepareStaticUi();
 
-            this.startResizeObserver();
+            this.bindEvents();
 
-            this.startMapAnimation();
+            this.prepareResizeHandling();
 
 
-            setTimeout(
+            requestAnimationFrame(
                 () => {
 
                     this.resizeHouseCanvas();
 
                     this.refresh();
-
-                },
-                0
+                }
             );
         }
 
 
 
-        /* =====================================================
+        /* =========================================================
            DOM
-        ===================================================== */
+        ========================================================= */
 
         cacheDom() {
 
-            const byId =
+            const get =
                 id =>
                     document.getElementById(
                         id
                     );
 
 
+            /* TOPBAR */
+
+            this.chapterBadge =
+                get(
+                    "chapter-badge"
+                );
+
+            this.difficultyBadge =
+                get(
+                    "difficulty-badge"
+                );
+
+            this.roomName =
+                get(
+                    "room-name"
+                );
+
+            this.courseButton =
+                get(
+                    "course-button"
+                );
+
+            this.mapButton =
+                get(
+                    "map-button"
+                );
+
+
+            /* THÉORIE */
+
             this.chapterScreen =
-                byId(
+                get(
                     "chapter-screen"
                 );
 
-
             this.courseChapterNumber =
-                byId(
+                get(
                     "course-chapter-number"
                 );
 
-
             this.courseTitle =
-                byId(
+                get(
                     "course-title"
                 );
 
-
             this.courseSubtitle =
-                byId(
+                get(
                     "course-subtitle"
                 );
 
-
             this.courseContent =
-                byId(
+                get(
                     "course-content"
                 );
 
-
             this.courseMapButton =
-                byId(
+                get(
                     "course-map-button"
                 );
 
 
+            /* CARTE */
+
             this.mapScreen =
-                byId(
+                get(
                     "map-screen"
                 );
 
-
-            this.mapBackground =
-                byId(
-                    "map-background"
+            this.mapDecoration =
+                get(
+                    "map-decoration"
                 );
 
-
             this.mapTitle =
-                byId(
+                get(
                     "map-title"
                 );
 
-
             this.mapSubtitle =
-                byId(
+                get(
                     "map-subtitle"
                 );
 
-
             this.mapCourseButton =
-                byId(
+                get(
                     "map-course-button"
-                );
-
-
-            this.mapDecoration =
-                byId(
-                    "map-decoration"
                 );
 
 
             this.levelNodes = [
 
-                byId(
+                get(
                     "level-node-1"
                 ),
 
-                byId(
+                get(
                     "level-node-2"
                 ),
 
-                byId(
+                get(
                     "level-node-3"
                 )
             ];
 
 
             this.previousChapterButton =
-                byId(
+                get(
                     "previous-chapter-button"
                 );
 
-
             this.mapChapterIndicator =
-                byId(
+                get(
                     "map-chapter-indicator"
                 );
 
-
             this.nextChapterButton =
-                byId(
+                get(
                     "next-chapter-button"
                 );
 
 
+            /* JEU */
+
             this.gameScreen =
-                byId(
+                get(
                     "game-screen"
                 );
 
-
             this.gameCanvas =
-                byId(
+                get(
                     "game-canvas"
                 );
 
-
             this.gameStatus =
-                byId(
+                get(
                     "game-status"
                 );
 
-
             this.missionTitle =
-                byId(
+                get(
                     "mission-title"
                 );
 
-
             this.missionInstruction =
-                byId(
+                get(
                     "mission-instruction"
                 );
 
 
-            this.chapterBadge =
-                byId(
-                    "chapter-badge"
-                );
-
-
-            this.difficultyBadge =
-                byId(
-                    "difficulty-badge"
-                );
-
-
-            this.roomName =
-                byId(
-                    "room-name"
-                );
-
-
-            this.courseButton =
-                byId(
-                    "course-button"
-                );
-
-
-            this.mapButton =
-                byId(
-                    "map-button"
-                );
-
+            /* CODE */
 
             this.editor =
-                byId(
+                get(
                     "code-editor"
                 );
 
-
             this.consoleOutput =
-                byId(
+                get(
                     "console-output"
                 );
 
-
             this.codeErrorHighlights =
-                byId(
+                get(
                     "code-error-highlights"
-                );
-
-
-            this.guide =
-                byId(
-                    "pyt-guide"
-                );
-
-
-            this.guideMessage =
-                byId(
-                    "pyt-guide-message"
-                );
-
-
-            this.guideActions =
-                byId(
-                    "pyt-guide-actions"
-                );
-
-
-            this.modalBackground =
-                byId(
-                    "modal-background"
-                );
-
-
-            this.modalLabel =
-                byId(
-                    "modal-label"
-                );
-
-
-            this.modalTitle =
-                byId(
-                    "modal-title"
-                );
-
-
-            this.modalMessage =
-                byId(
-                    "modal-message"
-                );
-
-
-            this.modalPrimaryButton =
-                byId(
-                    "modal-primary-button"
-                );
-
-
-            this.modalSecondaryButton =
-                byId(
-                    "modal-secondary-button"
                 );
         }
 
 
 
-        /* =====================================================
-           SAUVEGARDE
-        ===================================================== */
+        /* =========================================================
+           STORAGE
+        ========================================================= */
 
-        loadObject(
+        loadStorageObject(
             key
         ) {
 
             try {
 
-                const parsed =
+                const value =
                     JSON.parse(
                         localStorage.getItem(
                             key
@@ -366,23 +303,27 @@
                     );
 
 
-                return (
-                    parsed &&
-                    typeof parsed ===
-                    "object" &&
-                    !Array.isArray(
-                        parsed
+                if (
+                    !value ||
+                    typeof value !==
+                        "object" ||
+                    Array.isArray(
+                        value
                     )
-                )
-                    ? parsed
-                    : {};
+                ) {
+
+                    return {};
+                }
+
+
+                return value;
 
             } catch (
                 error
             ) {
 
                 console.warn(
-                    `[PYT] Impossible de lire ${key}.`,
+                    `[PYT] Lecture impossible : ${key}`,
                     error
                 );
 
@@ -393,7 +334,7 @@
 
 
 
-        saveObject(
+        saveStorageObject(
             key,
             value
         ) {
@@ -412,7 +353,7 @@
             ) {
 
                 console.warn(
-                    `[PYT] Impossible de sauvegarder ${key}.`,
+                    `[PYT] Sauvegarde impossible : ${key}`,
                     error
                 );
             }
@@ -420,968 +361,19 @@
 
 
 
-        /* =====================================================
-           COMPATIBILITÉ ART.JS
-           ON NE MODIFIE PAS ART.JS
-        ===================================================== */
-
-        repairArtCompatibility() {
-
-            const art =
-                window.PYTArt;
-
-
-            if (
-                !art ||
-                !art.palette
-            ) {
-
-                return;
-            }
-
-
-            /*
-             * L'ancien art.js appelle parfois :
-             *
-             * palette.glassBlue()
-             * palette.glassSteel()
-             *
-             * On ajoute donc la compatibilité depuis ici
-             * sans toucher au fichier art.js.
-             */
-
-            if (
-                typeof
-                art.palette
-                    .glassBlue !==
-                "function"
-            ) {
-
-                const value =
-                    art.palette
-                        .glassBlue ||
-                    "#74c9dd";
-
-
-                art.palette
-                    .glassBlue =
-                    () =>
-                        value;
-            }
-
-
-            if (
-                typeof
-                art.palette
-                    .glassSteel !==
-                "function"
-            ) {
-
-                const value =
-                    art.palette
-                        .glassSteel ||
-                    "#9dc3c8";
-
-
-                art.palette
-                    .glassSteel =
-                    () =>
-                        value;
-            }
-        }
-
-
-
-        /* =====================================================
-           CANVAS CARTE
-        ===================================================== */
-
-        ensureHouseCanvas() {
-
-            if (
-                !this.mapDecoration
-            ) {
-
-                return;
-            }
-
-
-            let canvas =
-                document.getElementById(
-                    "house-map-canvas"
-                );
-
-
-            if (
-                !canvas
-            ) {
-
-                canvas =
-                    document.createElement(
-                        "canvas"
-                    );
-
-
-                canvas.id =
-                    "house-map-canvas";
-
-
-                canvas.setAttribute(
-                    "aria-label",
-                    "Plan de la maison PYT"
-                );
-
-
-                canvas.style.position =
-                    "absolute";
-
-
-                canvas.style.inset =
-                    "0";
-
-
-                canvas.style.width =
-                    "100%";
-
-
-                canvas.style.height =
-                    "100%";
-
-
-                canvas.style.display =
-                    "block";
-
-
-                canvas.style.imageRendering =
-                    "pixelated";
-
-
-                canvas.style.touchAction =
-                    "manipulation";
-
-
-                canvas.style.pointerEvents =
-                    "auto";
-
-
-                this.mapDecoration
-                    .appendChild(
-                        canvas
-                    );
-            }
-
-
-            this.houseCanvas =
-                canvas;
-
-
-            this.houseContext =
-                canvas.getContext(
-                    "2d"
-                );
-
-
-            this.mapDecoration
-                .style.position =
-                "relative";
-
-
-            this.mapDecoration
-                .style.overflow =
-                "hidden";
-
-
-            this.mapDecoration
-                .style.pointerEvents =
-                "auto";
-        }
-
-
-
-        resizeHouseCanvas() {
-
-            if (
-                !this.houseCanvas ||
-                !this.mapDecoration ||
-                !this.houseContext
-            ) {
-
-                return;
-            }
-
-
-            const rect =
-                this.mapDecoration
-                    .getBoundingClientRect();
-
-
-            if (
-                rect.width <
-                    10 ||
-                rect.height <
-                    10
-            ) {
-
-                return;
-            }
-
-
-            const dpr =
-                Math.min(
-                    window.devicePixelRatio ||
-                    1,
-                    2
-                );
-
-
-            const targetWidth =
-                Math.max(
-                    1,
-                    Math.round(
-                        rect.width *
-                        dpr
-                    )
-                );
-
-
-            const targetHeight =
-                Math.max(
-                    1,
-                    Math.round(
-                        rect.height *
-                        dpr
-                    )
-                );
-
-
-            if (
-                this.houseCanvas.width !==
-                    targetWidth ||
-                this.houseCanvas.height !==
-                    targetHeight
-            ) {
-
-                this.houseCanvas.width =
-                    targetWidth;
-
-
-                this.houseCanvas.height =
-                    targetHeight;
-            }
-
-
-            this.houseCanvas
-                .dataset.logicalWidth =
-                String(
-                    rect.width
-                );
-
-
-            this.houseCanvas
-                .dataset.logicalHeight =
-                String(
-                    rect.height
-                );
-
-
-            this.houseContext
-                .setTransform(
-                    dpr,
-                    0,
-                    0,
-                    dpr,
-                    0,
-                    0
-                );
-
-
-            this.houseContext
-                .imageSmoothingEnabled =
-                false;
-        }
-
-
-
-        getCanvasLogicalSize() {
-
-            if (
-                !this.houseCanvas ||
-                !this.mapDecoration
-            ) {
-
-                return {
-                    width: 0,
-                    height: 0
-                };
-            }
-
-
-            const rect =
-                this.mapDecoration
-                    .getBoundingClientRect();
-
-
-            return {
-
-                width:
-                    Math.max(
-                        0,
-                        rect.width
-                    ),
-
-                height:
-                    Math.max(
-                        0,
-                        rect.height
-                    )
-            };
-        }
-
-
-
-        startResizeObserver() {
-
-            if (
-                !this.mapDecoration ||
-                typeof
-                ResizeObserver ===
-                "undefined"
-            ) {
-
-                return;
-            }
-
-
-            this.resizeObserver =
-                new ResizeObserver(
-                    () => {
-
-                        this.resizeHouseCanvas();
-
-                        this.refresh();
-                    }
-                );
-
-
-            this.resizeObserver
-                .observe(
-                    this.mapDecoration
-                );
-        }
-
-
-
-        startMapAnimation() {
-
-            if (
-                this.houseAnimationTimer
-            ) {
-
-                clearInterval(
-                    this.houseAnimationTimer
-                );
-            }
-
-
-            this.houseAnimationTimer =
-                setInterval(
-                    () => {
-
-                        if (
-                            !this.mapScreen ||
-                            this.mapScreen
-                                .classList
-                                .contains(
-                                    "hidden"
-                                )
-                        ) {
-
-                            return;
-                        }
-
-
-                        this.refresh();
-
-                    },
-                    220
-                );
-        }
-
-
-
-        /* =====================================================
-           EVENTS
-        ===================================================== */
-
-        bindEvents() {
-
-            /*
-             * Carte.
-             */
-
-            this.bindCapture(
-                this.mapButton,
-                () =>
-                    this.openHouseMap()
-            );
-
-
-            /*
-             * Théorie.
-             */
-
-            this.bindCapture(
-                this.courseButton,
-                () => {
-
-                    if (
-                        !this.currentLevelData
-                    ) {
-
-                        this.showGuideMessage(
-                            "La théorie se débloque après ton premier essai dans un exercice."
-                        );
-
-
-                        return;
-                    }
-
-
-                    if (
-                        !this
-                            .isTheoryUnlockedForCurrentLevel()
-                    ) {
-
-                        this.showGuideMessage(
-                            "Essaie d'abord l'exercice une fois. La théorie sera ensuite disponible ici."
-                        );
-
-
-                        return;
-                    }
-
-
-                    this.openTheoryReview();
-                }
-            );
-
-
-            /*
-             * Retour depuis théorie.
-             */
-
-            this.bindCapture(
-                this.courseMapButton,
-                () => {
-
-                    if (
-                        this.theoryReturnToGame &&
-                        this.currentLevelData
-                    ) {
-
-                        this.returnFromTheoryToGame();
-
-                        return;
-                    }
-
-
-                    if (
-                        this.selectedChapter
-                    ) {
-
-                        this.openChapterRoom(
-                            this.selectedChapter
-                        );
-
-                    } else {
-
-                        this.openHouseMap();
-                    }
-                }
-            );
-
-
-            /*
-             * Le bouton théorie présent
-             * directement sur la carte n'est plus
-             * accessible.
-             */
-
-            if (
-                this.mapCourseButton
-            ) {
-
-                this.mapCourseButton
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-
-
-                this.mapCourseButton.hidden =
-                    true;
-            }
-
-
-            /*
-             * Navigation entre chapitres.
-             */
-
-            this.bindCapture(
-                this.previousChapterButton,
-                () => {
-
-                    if (
-                        !this.selectedChapter
-                    ) {
-
-                        return;
-                    }
-
-
-                    const target =
-                        this.selectedChapter -
-                        1;
-
-
-                    if (
-                        target >=
-                        1
-                    ) {
-
-                        this.openChapterRoom(
-                            target
-                        );
-                    }
-                }
-            );
-
-
-            this.bindCapture(
-                this.nextChapterButton,
-                () => {
-
-                    if (
-                        !this.selectedChapter
-                    ) {
-
-                        return;
-                    }
-
-
-                    const target =
-                        this.selectedChapter +
-                        1;
-
-
-                    if (
-                        target <=
-                            this.getChapterCount() &&
-                        this.isChapterUnlocked(
-                            target
-                        )
-                    ) {
-
-                        this.openChapterRoom(
-                            target
-                        );
-                    }
-                }
-            );
-
-
-            /*
-             * Exercices.
-             */
-
-            this.levelNodes
-                .forEach(
-                    (
-                        button,
-                        index
-                    ) => {
-
-                        this.bindCapture(
-                            button,
-                            () => {
-
-                                if (
-                                    !this.selectedChapter
-                                ) {
-
-                                    return;
-                                }
-
-
-                                this.openLevel(
-                                    this.selectedChapter,
-                                    index +
-                                        1
-                                );
-                            }
-                        );
-                    }
-                );
-
-
-            /*
-             * Clic plan maison.
-             */
-
-            if (
-                this.houseCanvas
-            ) {
-
-                this.houseCanvas
-                    .addEventListener(
-                        "click",
-                        event =>
-                            this.handleHouseCanvasClick(
-                                event
-                            )
-                    );
-
-
-                this.houseCanvas
-                    .addEventListener(
-                        "touchend",
-                        event => {
-
-                            if (
-                                !event.changedTouches ||
-                                !event.changedTouches[
-                                    0
-                                ]
-                            ) {
-
-                                return;
-                            }
-
-
-                            event.preventDefault();
-
-
-                            this.handleHousePointer(
-                                event.changedTouches[
-                                    0
-                                ].clientX,
-                                event.changedTouches[
-                                    0
-                                ].clientY
-                            );
-
-                        },
-                        {
-                            passive:
-                                false
-                        }
-                    );
-            }
-
-
-            /*
-             * PREMIER ESSAI.
-             *
-             * Dès que Exécuter est pressé,
-             * la théorie devient accessible.
-             */
-
-            const attemptHandler =
-                event => {
-
-                    if (
-                        !this.currentLevelData
-                    ) {
-
-                        return;
-                    }
-
-
-                    if (
-                        event &&
-                        event
-                            .__pytAttemptCounted
-                    ) {
-
-                        return;
-                    }
-
-
-                    if (
-                        event
-                    ) {
-
-                        event
-                            .__pytAttemptCounted =
-                            true;
-                    }
-
-
-                    this.registerCurrentAttempt();
-                };
-
-
-            window.addEventListener(
-                "pyt:run-code",
-                attemptHandler
-            );
-
-
-            document.addEventListener(
-                "pyt:run-code",
-                attemptHandler
-            );
-
-
-            /*
-             * Succès.
-             */
-
-            [
-                "pyt:level-complete",
-                "pyt:level-completed",
-                "pyt:game-success"
-            ]
-                .forEach(
-                    name => {
-
-                        window.addEventListener(
-                            name,
-                            event => {
-
-                                const detail =
-                                    event.detail ||
-                                    {};
-
-
-                                this.completeLevel(
-                                    detail.level ||
-                                    detail.levelData ||
-                                    this.currentLevelData
-                                );
-                            }
-                        );
-                    }
-                );
-
-
-            /*
-             * Échec.
-             */
-
-            [
-                "pyt:level-failed",
-                "pyt:game-failure"
-            ]
-                .forEach(
-                    name => {
-
-                        window.addEventListener(
-                            name,
-                            event => {
-
-                                this.handleLevelFailure(
-                                    event.detail ||
-                                    {}
-                                );
-                            }
-                        );
-                    }
-                );
-
-
-            window.addEventListener(
-                "pyt:app-ready",
-                () => {
-
-                    this.resizeHouseCanvas();
-
-                    this.refresh();
-                }
-            );
-
-
-            window.addEventListener(
-                "resize",
-                () => {
-
-                    this.resizeHouseCanvas();
-
-                    this.refresh();
-                },
-                {
-                    passive:
-                        true
-                }
-            );
-        }
-
-
-
-        bindCapture(
-            element,
-            handler
-        ) {
-
-            if (
-                !element ||
-                element
-                    .dataset
-                    .pytUiBound ===
-                    "1"
-            ) {
-
-                return;
-            }
-
-
-            element
-                .dataset
-                .pytUiBound =
-                "1";
-
-
-            element.addEventListener(
-                "click",
-                event => {
-
-                    event.preventDefault();
-
-                    event.stopImmediatePropagation();
-
-                    handler(
-                        event
-                    );
-
-                },
-                true
-            );
-        }
-
-
-
-        /* =====================================================
-           UI FIXE
-        ===================================================== */
-
-        prepareStaticUi() {
-
-            /*
-             * On supprime visuellement
-             * "Découverte".
-             */
-
-            if (
-                this.difficultyBadge
-            ) {
-
-                this.difficultyBadge
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-
-
-                this.difficultyBadge.hidden =
-                    true;
-
-
-                this.difficultyBadge
-                    .style.display =
-                    "none";
-            }
-
-
-            /*
-             * On supprime le nom de pièce
-             * comme "Entrée" dans la barre.
-             */
-
-            if (
-                this.roomName
-            ) {
-
-                this.roomName
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-
-
-                this.roomName.hidden =
-                    true;
-
-
-                this.roomName
-                    .style.display =
-                    "none";
-            }
-
-
-            /*
-             * Carte reste disponible.
-             */
-
-            if (
-                this.mapButton
-            ) {
-
-                this.mapButton.hidden =
-                    false;
-
-
-                this.mapButton
-                    .classList
-                    .remove(
-                        "hidden"
-                    );
-
-
-                this.mapButton.textContent =
-                    "Carte";
-            }
-
-
-            if (
-                this.courseButton
-            ) {
-
-                this.courseButton.textContent =
-                    "Théorie";
-            }
-
-
-            if (
-                this.mapCourseButton
-            ) {
-
-                this.mapCourseButton.hidden =
-                    true;
-
-
-                this.mapCourseButton
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-            }
-        }
-
-
-
-        /* =====================================================
+        /* =========================================================
            DONNÉES
-        ===================================================== */
+        ========================================================= */
 
         getDataSource() {
 
             return (
+                window.PYT_GAME_DATA ||
                 window.PYT_LEVELS ||
-                window.PYTLevels ||
-                {
-                    chapters:
-                        []
-                }
+                window.GAME_LEVELS ||
+                window.LEVELS ||
+                window.levels ||
+                null
             );
         }
 
@@ -1393,22 +385,52 @@
                 this.getDataSource();
 
 
-            return Array.isArray(
-                source.chapters
-            )
-                ? source.chapters
-                : [];
+            if (
+                !source
+            ) {
+
+                return [];
+            }
+
+
+            if (
+                Array.isArray(
+                    source
+                )
+            ) {
+
+                return source;
+            }
+
+
+            if (
+                Array.isArray(
+                    source.chapters
+                )
+            ) {
+
+                return source.chapters;
+            }
+
+
+            return [];
         }
 
 
 
         getChapterCount() {
 
-            return (
+            const count =
                 this.getChapters()
-                    .length ||
-                9
-            );
+                    .length;
+
+
+            return (
+                count >
+                0
+            )
+                ? count
+                : 9;
         }
 
 
@@ -1416,6 +438,41 @@
         getChapterData(
             chapterNumber
         ) {
+
+            const number =
+                Number(
+                    chapterNumber
+                );
+
+
+            const source =
+                this.getDataSource();
+
+
+            /*
+             * API levels.js si elle existe.
+             */
+
+            if (
+                source &&
+                typeof source.getChapter ===
+                    "function"
+            ) {
+
+                const result =
+                    source.getChapter(
+                        number
+                    );
+
+
+                if (
+                    result
+                ) {
+
+                    return result;
+                }
+            }
+
 
             const chapters =
                 this.getChapters();
@@ -1428,20 +485,19 @@
                         index
                     ) => {
 
-                        const value =
+                        const current =
                             Number(
                                 chapter.chapter ??
                                 chapter.number ??
+                                chapter.id ??
                                 index +
                                     1
                             );
 
 
                         return (
-                            value ===
-                            Number(
-                                chapterNumber
-                            )
+                            current ===
+                            number
                         );
                     }
                 ) ||
@@ -1457,15 +513,71 @@
         ) {
 
             const chapter =
-                this.getChapterData(
+                Number(
                     chapterNumber
                 );
 
 
+            const level =
+                Number(
+                    levelNumber
+                );
+
+
+            const source =
+                this.getDataSource();
+
+
+            /*
+             * API levels.js si disponible.
+             */
+
             if (
-                !chapter ||
+                source &&
+                typeof source.getLevel ===
+                    "function"
+            ) {
+
+                const result =
+                    source.getLevel(
+                        chapter,
+                        level
+                    );
+
+
+                if (
+                    result
+                ) {
+
+                    return result;
+                }
+            }
+
+
+            const chapterData =
+                this.getChapterData(
+                    chapter
+                );
+
+
+            if (
+                !chapterData
+            ) {
+
+                return null;
+            }
+
+
+            const levels =
+                chapterData.levels ||
+                chapterData.exercises ||
+                chapterData.exercices ||
+                [];
+
+
+            if (
                 !Array.isArray(
-                    chapter.levels
+                    levels
                 )
             ) {
 
@@ -1474,37 +586,83 @@
 
 
             return (
-                chapter.levels
-                    .find(
-                        (
-                            level,
-                            index
-                        ) => {
+                levels.find(
+                    (
+                        item,
+                        index
+                    ) => {
 
-                            const value =
-                                Number(
-                                    level.level ??
-                                    level.number ??
-                                    index +
-                                        1
-                                );
-
-
-                            return (
-                                value ===
-                                Number(
-                                    levelNumber
-                                )
+                        const current =
+                            Number(
+                                item.level ??
+                                item.number ??
+                                item.id ??
+                                index +
+                                    1
                             );
-                        }
-                    ) ||
+
+
+                        return (
+                            current ===
+                            level
+                        );
+                    }
+                ) ||
                 null
             );
         }
 
 
 
-        levelKey(
+        getChapterNumber(
+            chapterData
+        ) {
+
+            if (
+                !chapterData
+            ) {
+
+                return Number(
+                    this.selectedChapter ||
+                    1
+                );
+            }
+
+
+            return Number(
+                chapterData.chapter ??
+                chapterData.number ??
+                chapterData.id ??
+                this.selectedChapter ??
+                1
+            );
+        }
+
+
+
+        getLevelNumber(
+            levelData
+        ) {
+
+            if (
+                !levelData
+            ) {
+
+                return 1;
+            }
+
+
+            return Number(
+                levelData.level ??
+                levelData.number ??
+                levelData.id ??
+                1
+            );
+        }
+
+
+
+        makeLevelKey(
             chapter,
             level
         ) {
@@ -1520,58 +678,176 @@
 
 
 
-        levelKeyFromData(
-            levelData
+        getChapterTitle(
+            chapterNumber,
+            chapterData = null
         ) {
 
+            const chapter =
+                chapterData ||
+                this.getChapterData(
+                    chapterNumber
+                );
+
+
             if (
-                !levelData
+                chapter
             ) {
 
-                return null;
+                const title =
+                    chapter.title ||
+                    chapter.name;
+
+
+                if (
+                    title
+                ) {
+
+                    return String(
+                        title
+                    );
+                }
             }
 
 
-            const chapter =
-                Number(
-                    levelData.chapter ??
-                    this.selectedChapter ??
-                    1
-                );
+            const fallback = {
+
+                1:
+                    "Premiers pas",
+
+                2:
+                    "Variables et opérations",
+
+                3:
+                    "Conditions",
+
+                4:
+                    "Boucles for",
+
+                5:
+                    "Boucles while",
+
+                6:
+                    "Listes",
+
+                7:
+                    "Fonctions",
+
+                8:
+                    "Combinaison",
+
+                9:
+                    "Test final"
+            };
 
 
-            const level =
-                Number(
-                    levelData.level ??
-                    levelData.number ??
-                    1
-                );
-
-
-            return this.levelKey(
-                chapter,
-                level
+            return (
+                fallback[
+                    Number(
+                        chapterNumber
+                    )
+                ] ||
+                `Chapitre ${chapterNumber}`
             );
         }
 
 
 
-        /* =====================================================
+        /* =========================================================
            PROGRESSION
-        ===================================================== */
+        ========================================================= */
 
-        isLevelComplete(
+        isLevelCompleted(
             chapter,
             level
         ) {
 
             return Boolean(
                 this.completed[
-                    this.levelKey(
+                    this.makeLevelKey(
                         chapter,
                         level
                     )
                 ]
+            );
+        }
+
+
+
+        isLevelStarted(
+            chapter,
+            level
+        ) {
+
+            return Boolean(
+                this.started[
+                    this.makeLevelKey(
+                        chapter,
+                        level
+                    )
+                ]
+            );
+        }
+
+
+
+        markLevelStarted(
+            chapter,
+            level
+        ) {
+
+            const key =
+                this.makeLevelKey(
+                    chapter,
+                    level
+                );
+
+
+            if (
+                this.started[
+                    key
+                ]
+            ) {
+
+                return;
+            }
+
+
+            this.started[
+                key
+            ] =
+                true;
+
+
+            this.saveStorageObject(
+                this.startedKey,
+                this.started
+            );
+        }
+
+
+
+        markLevelCompleted(
+            chapter,
+            level
+        ) {
+
+            const key =
+                this.makeLevelKey(
+                    chapter,
+                    level
+                );
+
+
+            this.completed[
+                key
+            ] =
+                true;
+
+
+            this.saveStorageObject(
+                this.progressKey,
+                this.completed
             );
         }
 
@@ -1596,7 +872,12 @@
             }
 
 
-            return this.isLevelComplete(
+            /*
+             * Chapitre suivant seulement après
+             * exercice 3 du précédent.
+             */
+
+            return this.isLevelCompleted(
                 number -
                     1,
                 3
@@ -1633,7 +914,7 @@
 
 
             if (
-                l <=
+                l ===
                 1
             ) {
 
@@ -1641,7 +922,7 @@
             }
 
 
-            return this.isLevelComplete(
+            return this.isLevelCompleted(
                 c,
                 l -
                     1
@@ -1650,261 +931,531 @@
 
 
 
-        /* =====================================================
-           TENTATIVES / THÉORIE
-        ===================================================== */
+        /* =========================================================
+           RÈGLE THÉORIE
+        ========================================================= */
 
-        getAttemptCount(
-            chapter,
-            level
+        isTheoryAvailable(
+            chapter
         ) {
 
-            return Number(
-                this.attempts[
-                    this.levelKey(
-                        chapter,
-                        level
-                    )
-                ] ||
-                0
-            );
-        }
+            const number =
+                Number(
+                    chapter
+                );
 
 
+            /*
+             * RÈGLE EXACTE :
+             *
+             * 1. Avant d'avoir commencé exercice 1 :
+             *    théorie disponible.
+             *
+             * 2. Exercice 1 commencé mais pas terminé :
+             *    théorie inaccessible.
+             *
+             * 3. Exercice 1 terminé :
+             *    théorie disponible définitivement
+             *    pour le reste du chapitre.
+             */
 
-        registerCurrentAttempt() {
-
-            if (
-                !this.currentLevelData
-            ) {
-
-                return;
-            }
+            const levelOneStarted =
+                this.isLevelStarted(
+                    number,
+                    1
+                );
 
 
-            const key =
-                this.levelKeyFromData(
-                    this.currentLevelData
+            const levelOneCompleted =
+                this.isLevelCompleted(
+                    number,
+                    1
                 );
 
 
             if (
-                !key
+                !levelOneStarted
+            ) {
+
+                return true;
+            }
+
+
+            return levelOneCompleted;
+        }
+
+
+
+        updateTheoryControls() {
+
+            const chapter =
+                Number(
+                    this.selectedChapter ||
+                    this.currentLevelData
+                        ?.chapter ||
+                    0
+                );
+
+
+            if (
+                !chapter
+            ) {
+
+                this.setButtonVisibility(
+                    this.courseButton,
+                    false
+                );
+
+
+                this.setButtonVisibility(
+                    this.mapCourseButton,
+                    false
+                );
+
+
+                return;
+            }
+
+
+            const available =
+                this.isTheoryAvailable(
+                    chapter
+                );
+
+
+            /*
+             * BOUTON DU HAUT
+             */
+
+            if (
+                this.courseButton
+            ) {
+
+                this.setButtonVisibility(
+                    this.courseButton,
+                    true
+                );
+
+
+                this.courseButton.disabled =
+                    !available;
+
+
+                this.courseButton
+                    .classList
+                    .toggle(
+                        "theory-locked",
+                        !available
+                    );
+
+
+                this.courseButton
+                    .setAttribute(
+                        "aria-disabled",
+                        String(
+                            !available
+                        )
+                    );
+
+
+                this.courseButton.textContent =
+                    "Théorie";
+
+
+                this.courseButton.title =
+                    available
+                        ? "Ouvrir la théorie"
+                        : "Termine l'exercice 1 pour redébloquer la théorie";
+            }
+
+
+            /*
+             * BOUTON SUR LA CARTE DU CHAPITRE
+             */
+
+            if (
+                this.mapCourseButton
+            ) {
+
+                const onChapterMap =
+                    (
+                        this.mapMode ===
+                            "chapter"
+                    );
+
+
+                this.setButtonVisibility(
+                    this.mapCourseButton,
+                    onChapterMap
+                );
+
+
+                if (
+                    onChapterMap
+                ) {
+
+                    this.mapCourseButton.disabled =
+                        !available;
+
+
+                    this.mapCourseButton
+                        .classList
+                        .toggle(
+                            "theory-locked",
+                            !available
+                        );
+
+
+                    this.mapCourseButton.textContent =
+                        available
+                            ? "Théorie"
+                            : "Théorie verrouillée";
+
+
+                    this.mapCourseButton.title =
+                        available
+                            ? "Ouvrir la théorie"
+                            : "Termine l'exercice 1 pour la redébloquer";
+                }
+            }
+        }
+
+
+
+        /* =========================================================
+           ART.JS COMPATIBILITÉ
+           ON NE CHANGE PAS LE GRAPHISME
+        ========================================================= */
+
+        ensureArtCompatibility() {
+
+            const art =
+                window.PYTArt;
+
+
+            if (
+                !art ||
+                !art.palette
             ) {
 
                 return;
             }
 
 
-            this.attempts[
-                key
-            ] =
-                Number(
-                    this.attempts[
-                        key
-                    ] ||
-                    0
-                ) +
-                1;
+            /*
+             * Compatibilité pour l'ancien art.js.
+             * Pas de modification graphique.
+             */
+
+            if (
+                typeof
+                art.palette.glassBlue !==
+                "function"
+            ) {
+
+                const color =
+                    typeof
+                    art.palette.glassBlue ===
+                    "string"
+                        ? art.palette.glassBlue
+                        : "#74c9dd";
 
 
-            this.saveObject(
-                this.attemptsKey,
-                this.attempts
-            );
+                art.palette.glassBlue =
+                    () =>
+                        color;
+            }
 
 
-            this.updateTheoryButton();
+            if (
+                typeof
+                art.palette.glassSteel !==
+                "function"
+            ) {
+
+                const color =
+                    typeof
+                    art.palette.glassSteel ===
+                    "string"
+                        ? art.palette.glassSteel
+                        : "#9fc5ca";
 
 
-            window.dispatchEvent(
-                new CustomEvent(
-                    "pyt:theory-unlocked",
-                    {
-
-                        detail: {
-
-                            chapter:
-                                Number(
-                                    this.currentLevelData
-                                        .chapter ??
-                                    this.selectedChapter
-                                ),
-
-                            level:
-                                Number(
-                                    this.currentLevelData
-                                        .level ??
-                                    this.currentLevelData
-                                        .number ??
-                                    1
-                                ),
-
-                            attempts:
-                                this.attempts[
-                                    key
-                                ]
-                        }
-                    }
-                )
-            );
+                art.palette.glassSteel =
+                    () =>
+                        color;
+            }
         }
 
 
 
-        isTheoryUnlockedForCurrentLevel() {
+        /* =========================================================
+           CANVAS CARTE
+        ========================================================= */
+
+        ensureHouseCanvas() {
 
             if (
-                !this.currentLevelData
+                !this.mapDecoration
+            ) {
+
+                return;
+            }
+
+
+            let canvas =
+                document.getElementById(
+                    "house-map-canvas"
+                );
+
+
+            if (
+                !canvas
+            ) {
+
+                canvas =
+                    document.createElement(
+                        "canvas"
+                    );
+
+
+                canvas.id =
+                    "house-map-canvas";
+
+
+                canvas.setAttribute(
+                    "aria-label",
+                    "Carte de la maison de Pyt"
+                );
+
+
+                this.mapDecoration
+                    .appendChild(
+                        canvas
+                    );
+            }
+
+
+            this.houseCanvas =
+                canvas;
+
+
+            this.houseContext =
+                canvas.getContext(
+                    "2d"
+                );
+
+
+            this.houseCanvas
+                .style.position =
+                "absolute";
+
+
+            this.houseCanvas
+                .style.inset =
+                "0";
+
+
+            this.houseCanvas
+                .style.width =
+                "100%";
+
+
+            this.houseCanvas
+                .style.height =
+                "100%";
+
+
+            this.houseCanvas
+                .style.display =
+                "block";
+
+
+            this.houseCanvas
+                .style.imageRendering =
+                "pixelated";
+
+
+            this.houseCanvas
+                .style.touchAction =
+                "manipulation";
+        }
+
+
+
+        resizeHouseCanvas() {
+
+            if (
+                !this.houseCanvas ||
+                !this.mapDecoration ||
+                !this.houseContext
             ) {
 
                 return false;
             }
 
 
-            const key =
-                this.levelKeyFromData(
-                    this.currentLevelData
-                );
+            const rect =
+                this.mapDecoration
+                    .getBoundingClientRect();
 
-
-            return (
-                key
-                    ? Number(
-                        this.attempts[
-                            key
-                        ] ||
-                        0
-                    ) >=
-                        1
-                    : false
-            );
-        }
-
-
-
-        updateTheoryButton() {
 
             if (
-                !this.courseButton
+                rect.width <
+                    10 ||
+                rect.height <
+                    10
             ) {
 
-                return;
+                return false;
             }
 
 
-            const inExercise =
-                Boolean(
-                    this.currentLevelData
-                );
-
-
-            const unlocked =
-                inExercise &&
-                this
-                    .isTheoryUnlockedForCurrentLevel();
-
-
             /*
-             * Hors exercice :
-             * pas de bouton théorie.
+             * Important :
+             * on garde les coordonnées CSS simples
+             * pour rester compatible avec art.js.
              */
 
-            this.courseButton.hidden =
-                !inExercise;
-
-
-            this.courseButton
-                .classList
-                .toggle(
-                    "hidden",
-                    !inExercise
-                );
-
-
-            /*
-             * Pendant exercice :
-             * visible mais verrouillé
-             * avant le premier essai.
-             */
-
-            this.courseButton.disabled =
-                !unlocked;
-
-
-            this.courseButton
-                .classList
-                .toggle(
-                    "theory-locked",
-                    inExercise &&
-                    !unlocked
-                );
-
-
-            this.courseButton
-                .setAttribute(
-                    "aria-disabled",
-                    String(
-                        !unlocked
+            const width =
+                Math.max(
+                    1,
+                    Math.round(
+                        rect.width
                     )
                 );
 
 
-            this.courseButton.title =
-                unlocked
-                    ? "Ouvrir la théorie"
-                    : "Fais d'abord un essai dans cet exercice";
+            const height =
+                Math.max(
+                    1,
+                    Math.round(
+                        rect.height
+                    )
+                );
+
+
+            if (
+                this.houseCanvas.width !==
+                    width
+            ) {
+
+                this.houseCanvas.width =
+                    width;
+            }
+
+
+            if (
+                this.houseCanvas.height !==
+                    height
+            ) {
+
+                this.houseCanvas.height =
+                    height;
+            }
+
+
+            this.houseContext
+                .setTransform(
+                    1,
+                    0,
+                    0,
+                    1,
+                    0,
+                    0
+                );
+
+
+            this.houseContext
+                .imageSmoothingEnabled =
+                false;
+
+
+            return true;
         }
 
 
 
-        /* =====================================================
-           TOP BAR
-        ===================================================== */
+        prepareResizeHandling() {
 
-        updateTopBar(
-            chapterNumber = null
-        ) {
+            const update =
+                () => {
+
+                    if (
+                        this.redrawFrame
+                    ) {
+
+                        cancelAnimationFrame(
+                            this.redrawFrame
+                        );
+                    }
+
+
+                    this.redrawFrame =
+                        requestAnimationFrame(
+                            () => {
+
+                                this.resizeHouseCanvas();
+
+                                this.refresh();
+                            }
+                        );
+                };
+
+
+            window.addEventListener(
+                "resize",
+                update,
+                {
+                    passive:
+                        true
+                }
+            );
+
+
+            window.addEventListener(
+                "orientationchange",
+                () => {
+
+                    setTimeout(
+                        update,
+                        120
+                    );
+                }
+            );
+
 
             if (
-                this.chapterBadge
+                this.mapDecoration &&
+                typeof
+                ResizeObserver !==
+                    "undefined"
             ) {
 
-                if (
-                    chapterNumber
-                ) {
-
-                    this.chapterBadge.hidden =
-                        false;
+                this.resizeObserver =
+                    new ResizeObserver(
+                        update
+                    );
 
 
-                    this.chapterBadge
-                        .classList
-                        .remove(
-                            "hidden"
-                        );
-
-
-                    this.chapterBadge.textContent =
-                        `Chapitre ${chapterNumber}`;
-
-                } else {
-
-                    this.chapterBadge.hidden =
-                        true;
-
-
-                    this.chapterBadge
-                        .classList
-                        .add(
-                            "hidden"
-                        );
-                }
+                this.resizeObserver
+                    .observe(
+                        this.mapDecoration
+                    );
             }
+        }
 
+
+
+        /* =========================================================
+           UI STATIQUE
+        ========================================================= */
+
+        prepareStaticUi() {
 
             /*
-             * Jamais "Découverte".
+             * SUPPRIMER :
+             * "Découverte"
              */
 
             if (
@@ -1915,14 +1466,14 @@
                     true;
 
 
-                this.difficultyBadge
-                    .style.display =
+                this.difficultyBadge.style.display =
                     "none";
             }
 
 
             /*
-             * Jamais "Entrée" en haut.
+             * SUPPRIMER :
+             * "Entrée"
              */
 
             if (
@@ -1933,14 +1484,17 @@
                     true;
 
 
-                this.roomName
-                    .style.display =
+                this.roomName.style.display =
                     "none";
+
+
+                this.roomName.textContent =
+                    "";
             }
 
 
             /*
-             * Carte toujours présente.
+             * CARTE toujours visible.
              */
 
             if (
@@ -1956,26 +1510,352 @@
                     .remove(
                         "hidden"
                     );
+
+
+                this.mapButton.textContent =
+                    "Carte";
             }
-
-
-            this.updateTheoryButton();
         }
 
 
 
-        /* =====================================================
-           AFFICHAGE ÉCRANS
-        ===================================================== */
+        /* =========================================================
+           EVENTS
+        ========================================================= */
+
+        bindEvents() {
+
+            /*
+             * CARTE GLOBALE
+             */
+
+            this.bindButton(
+                this.mapButton,
+                () =>
+                    this.openHouseMap()
+            );
+
+
+            /*
+             * THÉORIE TOPBAR
+             */
+
+            this.bindButton(
+                this.courseButton,
+                () =>
+                    this.handleTheoryRequest()
+            );
+
+
+            /*
+             * THÉORIE DEPUIS CARTE CHAPITRE
+             */
+
+            this.bindButton(
+                this.mapCourseButton,
+                () =>
+                    this.handleTheoryRequest()
+            );
+
+
+            /*
+             * RETOUR DE THÉORIE
+             */
+
+            this.bindButton(
+                this.courseMapButton,
+                () =>
+                    this.returnFromTheory()
+            );
+
+
+            /*
+             * EXERCICES
+             */
+
+            this.levelNodes
+                .forEach(
+                    (
+                        button,
+                        index
+                    ) => {
+
+                        this.bindButton(
+                            button,
+                            () => {
+
+                                if (
+                                    !this.selectedChapter
+                                ) {
+
+                                    return;
+                                }
+
+
+                                this.openLevel(
+                                    this.selectedChapter,
+                                    index +
+                                        1
+                                );
+                            }
+                        );
+                    }
+                );
+
+
+            /*
+             * CHAPITRE PRÉCÉDENT.
+             *
+             * Si on est au chapitre 1 :
+             * retour maison.
+             */
+
+            this.bindButton(
+                this.previousChapterButton,
+                () => {
+
+                    if (
+                        !this.selectedChapter
+                    ) {
+
+                        this.openHouseMap();
+
+                        return;
+                    }
+
+
+                    if (
+                        this.selectedChapter <=
+                        1
+                    ) {
+
+                        this.openHouseMap();
+
+                        return;
+                    }
+
+
+                    this.openChapterRoom(
+                        this.selectedChapter -
+                            1
+                    );
+                }
+            );
+
+
+            /*
+             * CHAPITRE SUIVANT
+             */
+
+            this.bindButton(
+                this.nextChapterButton,
+                () => {
+
+                    if (
+                        !this.selectedChapter
+                    ) {
+
+                        return;
+                    }
+
+
+                    const next =
+                        this.selectedChapter +
+                        1;
+
+
+                    if (
+                        !this.isChapterUnlocked(
+                            next
+                        )
+                    ) {
+
+                        this.showGuide(
+                            "Termine les trois exercices de ce chapitre pour débloquer le suivant."
+                        );
+
+
+                        return;
+                    }
+
+
+                    this.openChapterRoom(
+                        next
+                    );
+                }
+            );
+
+
+            /*
+             * CARTE MAISON :
+             * clic badges.
+             */
+
+            if (
+                this.houseCanvas
+            ) {
+
+                this.houseCanvas
+                    .addEventListener(
+                        "click",
+                        event => {
+
+                            this.handleHousePointer(
+                                event.clientX,
+                                event.clientY
+                            );
+                        }
+                    );
+
+
+                this.houseCanvas
+                    .addEventListener(
+                        "touchend",
+                        event => {
+
+                            const touch =
+                                event.changedTouches
+                                    ?.[0];
+
+
+                            if (
+                                !touch
+                            ) {
+
+                                return;
+                            }
+
+
+                            event.preventDefault();
+
+
+                            this.handleHousePointer(
+                                touch.clientX,
+                                touch.clientY
+                            );
+
+                        },
+                        {
+                            passive:
+                                false
+                        }
+                    );
+            }
+
+
+            /*
+             * SUCCÈS.
+             *
+             * Plusieurs noms acceptés
+             * pour compatibilité game.js.
+             */
+
+            [
+                "pyt:level-complete",
+                "pyt:level-completed",
+                "pyt:game-success"
+            ]
+                .forEach(
+                    eventName => {
+
+                        window.addEventListener(
+                            eventName,
+                            event =>
+                                this.handleCompletionEvent(
+                                    event
+                                )
+                        );
+                    }
+                );
+
+
+            /*
+             * ÉCHEC.
+             */
+
+            [
+                "pyt:level-failed",
+                "pyt:game-failure"
+            ]
+                .forEach(
+                    eventName => {
+
+                        window.addEventListener(
+                            eventName,
+                            event => {
+
+                                this.handleFailure(
+                                    event.detail ||
+                                    {}
+                                );
+                            }
+                        );
+                    }
+                );
+
+
+            /*
+             * ERREUR DE LIGNE.
+             */
+
+            window.addEventListener(
+                "pyt:code-error-line",
+                event => {
+
+                    const detail =
+                        event.detail ||
+                        {};
+
+
+                    this.renderCodeError(
+                        detail.line,
+                        detail.message
+                    );
+                }
+            );
+        }
+
+
+
+        bindButton(
+            button,
+            callback
+        ) {
+
+            if (
+                !button
+            ) {
+
+                return;
+            }
+
+
+            button.addEventListener(
+                "click",
+                event => {
+
+                    event.preventDefault();
+
+                    callback(
+                        event
+                    );
+                }
+            );
+        }
+
+
+
+        /* =========================================================
+           ÉCRANS
+        ========================================================= */
 
         showMapScreen() {
 
             if (
                 window.pytApp &&
                 typeof
-                window.pytApp
-                    .showMap ===
-                "function"
+                window.pytApp.showMap ===
+                    "function"
             ) {
 
                 window.pytApp
@@ -1983,38 +1863,27 @@
 
             } else {
 
-                this.fallbackShowScreen(
+                this.fallbackShow(
                     this.mapScreen
                 );
             }
 
 
-            if (
-                this.mapScreen
-            ) {
-
-                this.mapScreen
-                    .classList
-                    .remove(
-                        "hidden"
-                    );
-
-
-                this.mapScreen.hidden =
-                    false;
-            }
+            this.setElementVisibility(
+                this.mapScreen,
+                true
+            );
         }
 
 
 
-        showCourseScreen() {
+        showTheoryScreen() {
 
             if (
                 window.pytApp &&
                 typeof
-                window.pytApp
-                    .showCourse ===
-                "function"
+                window.pytApp.showCourse ===
+                    "function"
             ) {
 
                 window.pytApp
@@ -2022,26 +1891,16 @@
 
             } else {
 
-                this.fallbackShowScreen(
+                this.fallbackShow(
                     this.chapterScreen
                 );
             }
 
 
-            if (
-                this.chapterScreen
-            ) {
-
-                this.chapterScreen
-                    .classList
-                    .remove(
-                        "hidden"
-                    );
-
-
-                this.chapterScreen.hidden =
-                    false;
-            }
+            this.setElementVisibility(
+                this.chapterScreen,
+                true
+            );
         }
 
 
@@ -2051,9 +1910,8 @@
             if (
                 window.pytApp &&
                 typeof
-                window.pytApp
-                    .showGame ===
-                "function"
+                window.pytApp.showGame ===
+                    "function"
             ) {
 
                 window.pytApp
@@ -2061,37 +1919,52 @@
 
             } else {
 
-                this.fallbackShowScreen(
+                this.fallbackShow(
                     this.gameScreen
                 );
             }
 
 
+            this.setElementVisibility(
+                this.gameScreen,
+                true
+            );
+
+
+            /*
+             * Sécurité écran noir.
+             */
+
             if (
-                this.gameScreen
+                this.gameCanvas
             ) {
 
-                this.gameScreen
-                    .classList
-                    .remove(
-                        "hidden"
-                    );
-
-
-                this.gameScreen.hidden =
+                this.gameCanvas.hidden =
                     false;
+
+
+                this.gameCanvas.style.display =
+                    "block";
+
+
+                this.gameCanvas.style.visibility =
+                    "visible";
+
+
+                this.gameCanvas.style.opacity =
+                    "1";
             }
         }
 
 
 
-        fallbackShowScreen(
+        fallbackShow(
             target
         ) {
 
             [
-                this.mapScreen,
                 this.chapterScreen,
+                this.mapScreen,
                 this.gameScreen
             ]
                 .forEach(
@@ -2105,30 +1978,150 @@
                         }
 
 
-                        const active =
+                        this.setElementVisibility(
+                            screen,
                             screen ===
-                            target;
-
-
-                        screen.hidden =
-                            !active;
-
-
-                        screen
-                            .classList
-                            .toggle(
-                                "hidden",
-                                !active
-                            );
+                                target
+                        );
                     }
                 );
         }
 
 
 
-        /* =====================================================
-           CARTE GLOBALE
-        ===================================================== */
+        setElementVisibility(
+            element,
+            visible
+        ) {
+
+            if (
+                !element
+            ) {
+
+                return;
+            }
+
+
+            element.hidden =
+                !visible;
+
+
+            element
+                .classList
+                .toggle(
+                    "hidden",
+                    !visible
+                );
+        }
+
+
+
+        setButtonVisibility(
+            element,
+            visible
+        ) {
+
+            this.setElementVisibility(
+                element,
+                visible
+            );
+        }
+
+
+
+        /* =========================================================
+           TOPBAR
+        ========================================================= */
+
+        updateTopBar(
+            chapter = null
+        ) {
+
+            if (
+                this.chapterBadge
+            ) {
+
+                if (
+                    chapter
+                ) {
+
+                    this.chapterBadge.textContent =
+                        `Chapitre ${chapter}`;
+
+
+                    this.setElementVisibility(
+                        this.chapterBadge,
+                        true
+                    );
+
+                } else {
+
+                    this.setElementVisibility(
+                        this.chapterBadge,
+                        false
+                    );
+                }
+            }
+
+
+            /*
+             * Ces deux éléments ne doivent
+             * jamais revenir.
+             */
+
+            if (
+                this.difficultyBadge
+            ) {
+
+                this.difficultyBadge.hidden =
+                    true;
+
+
+                this.difficultyBadge.style.display =
+                    "none";
+            }
+
+
+            if (
+                this.roomName
+            ) {
+
+                this.roomName.hidden =
+                    true;
+
+
+                this.roomName.style.display =
+                    "none";
+            }
+
+
+            /*
+             * Carte toujours disponible.
+             */
+
+            if (
+                this.mapButton
+            ) {
+
+                this.setElementVisibility(
+                    this.mapButton,
+                    true
+                );
+
+
+                this.mapButton.textContent =
+                    "Carte";
+            }
+
+
+            this.updateTheoryControls();
+        }
+
+
+
+        /* =========================================================
+           MAISON
+        ========================================================= */
 
         openHouseMap(
             firstEntry = false
@@ -2142,19 +2135,24 @@
                 null;
 
 
-            this.theoryReturnToGame =
-                false;
+            this.currentChapterData =
+                null;
 
 
             this.currentLevelData =
                 null;
 
 
-            this.loadedLevelKey =
+            this.currentLevelKey =
                 null;
 
 
+            this.theoryReturnMode =
+                "chapter";
+
+
             this.showMapScreen();
+
 
             this.updateTopBar(
                 null
@@ -2166,7 +2164,7 @@
             ) {
 
                 this.mapTitle.textContent =
-                    "Maison PYT";
+                    "Maison de Pyt";
             }
 
 
@@ -2175,13 +2173,8 @@
             ) {
 
                 this.mapSubtitle.textContent =
-                    "Choisis un chapitre. Les chapitres se débloquent dans l'ordre.";
+                    "Choisis un chapitre dans la maison.";
             }
-
-
-            this.setChapterNavigationVisible(
-                false
-            );
 
 
             this.setLevelNodesVisible(
@@ -2189,28 +2182,26 @@
             );
 
 
-            if (
-                this.mapCourseButton
-            ) {
-
-                this.mapCourseButton.hidden =
-                    true;
+            this.setChapterNavigationVisible(
+                false
+            );
 
 
-                this.mapCourseButton
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-            }
+            this.setButtonVisibility(
+                this.mapCourseButton,
+                false
+            );
 
 
             requestAnimationFrame(
                 () => {
 
-                    this.resizeHouseCanvas();
+                    if (
+                        this.resizeHouseCanvas()
+                    ) {
 
-                    this.drawHouseOverview();
+                        this.drawHouseMap();
+                    }
                 }
             );
 
@@ -2225,64 +2216,32 @@
 
 
 
-        showFirstHouseHint() {
-
-            const key =
-                "pyt-house-hint-seen";
-
-
-            if (
-                localStorage.getItem(
-                    key
-                ) ===
-                "1"
-            ) {
-
-                return;
-            }
-
-
-            localStorage.setItem(
-                key,
-                "1"
-            );
-
-
-            setTimeout(
-                () => {
-
-                    this.showGuideMessage(
-                        "Commence par le Chapitre 1. Termine ses trois exercices pour débloquer le chapitre suivant."
-                    );
-
-                },
-                350
-            );
-        }
-
-
-
-        drawHouseOverview() {
+        drawHouseMap() {
 
             if (
                 this.mapMode !==
                     "house" ||
                 !this.houseContext ||
-                !window.PYTArt
+                !window.PYTArt ||
+                typeof
+                window.PYTArt
+                    .drawHouseMap !==
+                    "function"
             ) {
 
                 return;
             }
 
 
-            this.repairArtCompatibility();
+            this.ensureArtCompatibility();
 
 
-            const {
-                width,
-                height
-            } =
-                this.getCanvasLogicalSize();
+            const width =
+                this.houseCanvas.width;
+
+
+            const height =
+                this.houseCanvas.height;
 
 
             if (
@@ -2296,36 +2255,20 @@
             }
 
 
-            const ctx =
-                this.houseContext;
-
-
-            ctx.clearRect(
-                0,
-                0,
-                width,
-                height
-            );
-
-
-            /*
-             * Taille proportionnelle.
-             */
-
             const radius =
                 this.clamp(
                     Math.min(
                         width,
                         height
                     ) *
-                    0.042,
-                    25,
-                    39
+                        0.040,
+                    24,
+                    38
                 );
 
 
             const positions =
-                this.getHouseChapterPositions(
+                this.getChapterPositions(
                     width,
                     height,
                     radius
@@ -2334,38 +2277,28 @@
 
             this.houseBadges =
                 positions.map(
-                    position => {
+                    item => {
 
-                        const chapter =
-                            this.getChapterData(
-                                position.number
+                        const title =
+                            this.getChapterTitle(
+                                item.number
                             );
 
 
                         return {
 
-                            ...position,
+                            ...item,
 
-                            label:
-                                `CHAPITRE ${position.number}`,
-
-                            title:
-                                this.getChapterDisplayTitle(
-                                    chapter,
-                                    position.number
-                                ),
+                            title,
 
                             locked:
                                 !this.isChapterUnlocked(
-                                    position.number
+                                    item.number
                                 ),
 
-                            active:
-                                false,
-
                             completed:
-                                this.isLevelComplete(
-                                    position.number,
+                                this.isLevelCompleted(
+                                    item.number,
                                     3
                                 )
                         };
@@ -2373,13 +2306,25 @@
                 );
 
 
+            this.houseContext
+                .clearRect(
+                    0,
+                    0,
+                    width,
+                    height
+                );
+
+
             /*
-             * ON UTILISE art.js TEL QUEL.
+             * IMPORTANT :
+             *
+             * le rendu est toujours celui
+             * de art.js.
              */
 
             window.PYTArt
                 .drawHouseMap(
-                    ctx,
+                    this.houseContext,
                     0,
                     0,
                     width,
@@ -2391,6 +2336,9 @@
                                 .map(
                                     badge => ({
 
+                                        number:
+                                            badge.number,
+
                                         x:
                                             badge.x,
 
@@ -2400,17 +2348,14 @@
                                         radius:
                                             badge.radius,
 
-                                        number:
-                                            badge.number,
-
                                         label:
-                                            badge.label,
+                                            `CHAPITRE ${badge.number}`,
 
                                         locked:
                                             badge.locked,
 
                                         active:
-                                            badge.active
+                                            false
                                     })
                                 )
                     }
@@ -2418,41 +2363,26 @@
 
 
             /*
-             * Le nom du chapitre est dessiné
-             * PAR UI.JS sous le cercle.
-             *
-             * Donc art.js reste intact.
+             * Nom du chapitre en petit
+             * sous le cercle.
              */
 
-            this.drawHouseChapterSubtitles(
-                ctx,
-                this.houseBadges,
-                width,
-                height
-            );
+            this.drawChapterNames();
         }
 
 
 
-        getHouseChapterPositions(
+        getChapterPositions(
             width,
             height,
             radius
         ) {
 
             /*
-             * Positions adaptées au plan stable
-             * de art.js.
+             * On conserve les positions liées
+             * au plan actuel.
              *
-             * 1 Entrée
-             * 2 Cuisine
-             * 3 Salon
-             * 4 Chambre
-             * 5 Garage
-             * 6 Cave
-             * 7 Balcon
-             * 8 Toilette
-             * 9 Jardin
+             * Pas de refonte graphique ici.
              */
 
             const values = [
@@ -2495,7 +2425,7 @@
 
                 [
                     7,
-                    0.090,
+                    0.105,
                     0.430
                 ],
 
@@ -2519,23 +2449,18 @@
                     this.getChapterCount()
                 )
                 .map(
-                    (
-                        [
-                            number,
-                            rx,
-                            ry
-                        ]
-                    ) => ({
+                    item => ({
 
-                        number,
+                        number:
+                            item[0],
 
                         x:
                             width *
-                            rx,
+                            item[1],
 
                         y:
                             height *
-                            ry,
+                            item[2],
 
                         radius
                     })
@@ -2544,153 +2469,71 @@
 
 
 
-        drawHouseChapterSubtitles(
-            ctx,
-            badges,
-            width,
-            height
-        ) {
-
-            const art =
-                window.PYTArt;
-
+        drawChapterNames() {
 
             if (
-                !art ||
+                !window.PYTArt ||
                 typeof
-                art.drawPixelText !==
-                "function"
+                window.PYTArt
+                    .drawPixelText !==
+                    "function"
             ) {
 
                 return;
             }
 
 
-            badges.forEach(
-                badge => {
-
-                    const title =
-                        this.shortenPixelTitle(
-                            badge.title
-                        );
+            const art =
+                window.PYTArt;
 
 
-                    const subtitleY =
-                        Math.min(
-                            height -
-                                12,
+            this.houseBadges
+                .forEach(
+                    badge => {
+
+                        const value =
+                            this.normalizePixelText(
+                                badge.title
+                            );
+
+
+                        art.drawPixelText(
+                            this.houseContext,
+                            value,
+                            badge.x,
                             badge.y +
                                 badge.radius +
-                                Math.max(
-                                    8,
-                                    badge.radius *
-                                    0.24
-                                )
+                                9,
+                            {
+
+                                scale:
+                                    1,
+
+                                align:
+                                    "center",
+
+                                color:
+                                    badge.locked
+                                        ? "#85828e"
+                                        : "#fff1d2",
+
+                                shadow:
+                                    "#0c0c14"
+                            }
                         );
-
-
-                    art.drawPixelText(
-                        ctx,
-                        title,
-                        badge.x,
-                        subtitleY,
-                        {
-
-                            scale:
-                                1,
-
-                            align:
-                                "center",
-
-                            color:
-                                badge.locked
-                                    ? "#8d8998"
-                                    : "#fff1d2",
-
-                            shadow:
-                                "#0c0c14"
-                        }
-                    );
-                }
-            );
+                    }
+                );
         }
 
 
 
-        getChapterDisplayTitle(
-            chapter,
-            number
+        normalizePixelText(
+            text
         ) {
 
-            if (
-                chapter
-            ) {
-
-                const title =
-                    chapter.title ||
-                    chapter.name ||
-                    chapter.subtitle;
-
-
-                if (
-                    title
-                ) {
-
-                    return String(
-                        title
-                    );
-                }
-            }
-
-
-            const fallback = {
-
-                1:
-                    "Premiers pas",
-
-                2:
-                    "Variables",
-
-                3:
-                    "Conditions",
-
-                4:
-                    "Boucles for",
-
-                5:
-                    "Boucles while",
-
-                6:
-                    "Listes",
-
-                7:
-                    "Fonctions",
-
-                8:
-                    "Combinaison",
-
-                9:
-                    "Test final"
-            };
-
-
-            return (
-                fallback[
-                    number
-                ] ||
-                `Chapitre ${number}`
-            );
-        }
-
-
-
-        shortenPixelTitle(
-            title
-        ) {
-
-            const value =
+            let value =
                 String(
-                    title ||
+                    text ||
                     ""
                 )
                     .normalize(
@@ -2703,27 +2546,31 @@
                     .toUpperCase();
 
 
-            return (
+            /*
+             * Police pixel art limitée.
+             */
+
+            value =
+                value.replace(
+                    /[^A-Z0-9 .-]/g,
+                    " "
+                );
+
+
+            if (
                 value.length >
-                    20
-            )
-                ? `${value.slice(
-                    0,
-                    18
-                )}.`
-                : value;
-        }
+                20
+            ) {
+
+                value =
+                    value.slice(
+                        0,
+                        20
+                    );
+            }
 
 
-
-        handleHouseCanvasClick(
-            event
-        ) {
-
-            this.handleHousePointer(
-                event.clientX,
-                event.clientY
-            );
+            return value;
         }
 
 
@@ -2748,14 +2595,41 @@
                     .getBoundingClientRect();
 
 
+            if (
+                rect.width ===
+                    0 ||
+                rect.height ===
+                    0
+            ) {
+
+                return;
+            }
+
+
+            /*
+             * Conversion CSS -> canvas.
+             */
+
             const x =
-                clientX -
-                rect.left;
+                (
+                    clientX -
+                    rect.left
+                ) *
+                (
+                    this.houseCanvas.width /
+                    rect.width
+                );
 
 
             const y =
-                clientY -
-                rect.top;
+                (
+                    clientY -
+                    rect.top
+                ) *
+                (
+                    this.houseCanvas.height /
+                    rect.height
+                );
 
 
             const hit =
@@ -2763,23 +2637,15 @@
                     .find(
                         badge => {
 
-                            const dx =
-                                x -
-                                badge.x;
-
-
-                            const dy =
-                                y -
-                                badge.y;
-
-
                             return (
                                 Math.hypot(
-                                    dx,
-                                    dy
+                                    x -
+                                        badge.x,
+                                    y -
+                                        badge.y
                                 ) <=
                                 badge.radius *
-                                1.2
+                                    1.30
                             );
                         }
                     );
@@ -2797,23 +2663,14 @@
                 hit.locked
             ) {
 
-                this.showGuideMessage(
-                    `Le Chapitre ${hit.number} est verrouillé. Termine les trois exercices du chapitre précédent.`
+                this.showGuide(
+                    `Le chapitre ${hit.number} est verrouillé. Termine les trois exercices du chapitre précédent.`
                 );
 
 
                 return;
             }
 
-
-            /*
-             * IMPORTANT :
-             *
-             * PLUS DE THÉORIE AUTOMATIQUE.
-             *
-             * On entre directement dans les
-             * exercices.
-             */
 
             this.openChapterRoom(
                 hit.number
@@ -2822,15 +2679,52 @@
 
 
 
-        /* =====================================================
-           CHAPITRE
-        ===================================================== */
+        showFirstHouseHint() {
+
+            const key =
+                "pyt-house-intro-seen";
+
+
+            if (
+                localStorage.getItem(
+                    key
+                ) ===
+                "1"
+            ) {
+
+                return;
+            }
+
+
+            localStorage.setItem(
+                key,
+                "1"
+            );
+
+
+            setTimeout(
+                () => {
+
+                    this.showGuide(
+                        "Commence par le Chapitre 1. Tu peux lire sa théorie avant de commencer l'exercice 1."
+                    );
+
+                },
+                350
+            );
+        }
+
+
+
+        /* =========================================================
+           CARTE D'UN CHAPITRE
+        ========================================================= */
 
         openChapterRoom(
             chapterNumber
         ) {
 
-            const number =
+            const chapter =
                 Number(
                     chapterNumber
                 );
@@ -2838,11 +2732,11 @@
 
             if (
                 !this.isChapterUnlocked(
-                    number
+                    chapter
                 )
             ) {
 
-                this.showGuideMessage(
+                this.showGuide(
                     "Ce chapitre n'est pas encore débloqué."
                 );
 
@@ -2851,18 +2745,18 @@
             }
 
 
-            const chapter =
+            const chapterData =
                 this.getChapterData(
-                    number
+                    chapter
                 );
 
 
             if (
-                !chapter
+                !chapterData
             ) {
 
-                this.showGuideMessage(
-                    "Les données de ce chapitre sont introuvables."
+                this.showGuide(
+                    "Impossible de charger ce chapitre."
                 );
 
 
@@ -2875,25 +2769,30 @@
 
 
             this.selectedChapter =
-                number;
+                chapter;
+
+
+            this.currentChapterData =
+                chapterData;
 
 
             this.currentLevelData =
                 null;
 
 
-            this.loadedLevelKey =
+            this.currentLevelKey =
                 null;
 
 
-            this.theoryReturnToGame =
-                false;
+            this.theoryReturnMode =
+                "chapter";
 
 
             this.showMapScreen();
 
+
             this.updateTopBar(
-                number
+                chapter
             );
 
 
@@ -2902,7 +2801,7 @@
             ) {
 
                 this.mapTitle.textContent =
-                    `Chapitre ${number}`;
+                    `Chapitre ${chapter}`;
             }
 
 
@@ -2911,19 +2810,11 @@
             ) {
 
                 this.mapSubtitle.textContent =
-                    this.getChapterDisplayTitle(
+                    this.getChapterTitle(
                         chapter,
-                        number
+                        chapterData
                     );
             }
-
-
-            this.setChapterNavigationVisible(
-                true
-            );
-
-
-            this.updateChapterNavigation();
 
 
             this.setLevelNodesVisible(
@@ -2931,38 +2822,29 @@
             );
 
 
+            this.setChapterNavigationVisible(
+                true
+            );
+
+
             this.updateLevelNodes();
 
+            this.updateChapterNavigation();
 
-            /*
-             * Théorie inaccessible depuis
-             * la carte.
-             */
-
-            if (
-                this.mapCourseButton
-            ) {
-
-                this.mapCourseButton.hidden =
-                    true;
-
-
-                this.mapCourseButton
-                    .classList
-                    .add(
-                        "hidden"
-                    );
-            }
+            this.updateTheoryControls();
 
 
             requestAnimationFrame(
                 () => {
 
-                    this.resizeHouseCanvas();
+                    if (
+                        this.resizeHouseCanvas()
+                    ) {
 
-                    this.drawChapterRoom(
-                        chapter
-                    );
+                        this.drawChapterRoom(
+                            chapterData
+                        );
+                    }
                 }
             );
         }
@@ -2970,28 +2852,30 @@
 
 
         drawChapterRoom(
-            chapter
+            chapterData
         ) {
 
             if (
                 this.mapMode !==
                     "chapter" ||
                 !this.houseContext ||
-                !window.PYTArt
+                !window.PYTArt ||
+                typeof
+                window.PYTArt
+                    .drawRoomScene !==
+                    "function"
             ) {
 
                 return;
             }
 
 
-            this.repairArtCompatibility();
+            const width =
+                this.houseCanvas.width;
 
 
-            const {
-                width,
-                height
-            } =
-                this.getCanvasLogicalSize();
+            const height =
+                this.houseCanvas.height;
 
 
             if (
@@ -3005,16 +2889,13 @@
             }
 
 
-            const ctx =
-                this.houseContext;
-
-
-            ctx.clearRect(
-                0,
-                0,
-                width,
-                height
-            );
+            this.houseContext
+                .clearRect(
+                    0,
+                    0,
+                    width,
+                    height
+                );
 
 
             const margin =
@@ -3023,57 +2904,60 @@
                         width,
                         height
                     ) *
-                    0.035,
+                        0.035,
                     14,
-                    30
+                    28
                 );
 
 
             const room =
-                chapter.room ||
-                chapter.location ||
+                chapterData.room ||
+                chapterData.location ||
                 "entree";
 
 
+            this.houseContext.save();
+
+
             /*
-             * Clip pour empêcher tout décor
-             * de dépasser lorsque la fenêtre
-             * devient petite.
+             * Empêche le décor de dépasser
+             * de son écran quand la fenêtre
+             * est petite.
              */
 
-            ctx.save();
+            this.houseContext
+                .beginPath();
 
 
-            ctx.beginPath();
+            this.houseContext
+                .rect(
+                    margin,
+                    margin,
+                    width -
+                        margin *
+                            2,
+                    height -
+                        margin *
+                            2
+                );
 
 
-            ctx.rect(
-                margin,
-                margin,
-                width -
-                    margin *
-                    2,
-                height -
-                    margin *
-                    2
-            );
-
-
-            ctx.clip();
+            this.houseContext
+                .clip();
 
 
             window.PYTArt
                 .drawRoomScene(
-                    ctx,
+                    this.houseContext,
                     room,
                     margin,
                     margin,
                     width -
                         margin *
-                        2,
+                            2,
                     height -
                         margin *
-                        2,
+                            2,
                     {
 
                         furniture:
@@ -3082,147 +2966,24 @@
                 );
 
 
-            ctx.restore();
-        }
-
-
-
-        /* =====================================================
-           EXERCICES SUR CARTE
-        ===================================================== */
-
-        setLevelNodesVisible(
-            visible
-        ) {
-
-            this.levelNodes
-                .forEach(
-                    button => {
-
-                        if (
-                            !button
-                        ) {
-
-                            return;
-                        }
-
-
-                        button.hidden =
-                            !visible;
-
-
-                        button
-                            .classList
-                            .toggle(
-                                "hidden",
-                                !visible
-                            );
-                    }
-                );
-        }
-
-
-
-        setChapterNavigationVisible(
-            visible
-        ) {
-
-            [
-                this.previousChapterButton,
-                this.mapChapterIndicator,
-                this.nextChapterButton
-            ]
-                .forEach(
-                    element => {
-
-                        if (
-                            !element
-                        ) {
-
-                            return;
-                        }
-
-
-                        element.hidden =
-                            !visible;
-
-
-                        element
-                            .classList
-                            .toggle(
-                                "hidden",
-                                !visible
-                            );
-                    }
-                );
-        }
-
-
-
-        updateChapterNavigation() {
-
-            const chapter =
-                Number(
-                    this.selectedChapter ||
-                    1
-                );
-
-
-            const count =
-                this.getChapterCount();
-
-
-            if (
-                this.mapChapterIndicator
-            ) {
-
-                this.mapChapterIndicator
-                    .textContent =
-                    `Chapitre ${chapter} / ${count}`;
-            }
-
-
-            if (
-                this.previousChapterButton
-            ) {
-
-                this.previousChapterButton
-                    .disabled =
-                    chapter <=
-                    1;
-            }
-
-
-            if (
-                this.nextChapterButton
-            ) {
-
-                const next =
-                    chapter +
-                    1;
-
-
-                this.nextChapterButton
-                    .disabled =
-                    (
-                        next >
-                            count ||
-                        !this.isChapterUnlocked(
-                            next
-                        )
-                    );
-            }
+            this.houseContext
+                .restore();
         }
 
 
 
         updateLevelNodes() {
 
+            if (
+                !this.selectedChapter
+            ) {
+
+                return;
+            }
+
+
             const chapter =
-                Number(
-                    this.selectedChapter ||
-                    1
-                );
+                this.selectedChapter;
 
 
             this.levelNodes
@@ -3260,7 +3021,7 @@
 
 
                         const completed =
-                            this.isLevelComplete(
+                            this.isLevelCompleted(
                                 chapter,
                                 level
                             );
@@ -3307,24 +3068,15 @@
                             );
 
 
-                        button
-                            .setAttribute(
-                                "aria-disabled",
-                                String(
-                                    !unlocked
-                                )
-                            );
-
-
-                        const titleNode =
-                            button.querySelector(
-                                ".level-title, .node-title, .exercise-title"
-                            );
-
-
                         const numberNode =
                             button.querySelector(
-                                ".level-number, .node-number, .exercise-number"
+                                ".level-node-number"
+                            );
+
+
+                        const stateNode =
+                            button.querySelector(
+                                ".level-node-state"
                             );
 
 
@@ -3340,28 +3092,40 @@
 
 
                         if (
-                            titleNode
+                            stateNode
                         ) {
 
-                            titleNode.textContent =
-                                levelData
-                                    ?.title ||
-                                `Exercice ${level}`;
+                            if (
+                                completed
+                            ) {
 
-                        } else if (
-                            !button.children.length
-                        ) {
+                                stateNode.textContent =
+                                    "Terminé";
 
-                            button.textContent =
-                                `Exercice ${level}`;
+                            } else if (
+                                !unlocked
+                            ) {
+
+                                stateNode.textContent =
+                                    "Verrouillé";
+
+                            } else {
+
+                                stateNode.textContent =
+                                    (
+                                        levelData
+                                            ?.title ||
+                                        `Exercice ${level}`
+                                    );
+                            }
                         }
 
 
                         button.title =
-                            !unlocked
-                                ? "Termine l'exercice précédent"
-                                : completed
-                                    ? "Rejouer cet exercice"
+                            completed
+                                ? `Rejouer l'exercice ${level}`
+                                : !unlocked
+                                    ? "Termine l'exercice précédent"
                                     : (
                                         levelData
                                             ?.title ||
@@ -3373,320 +3137,129 @@
 
 
 
-        /* =====================================================
-           OUVERTURE EXERCICE
-        ===================================================== */
-
-        openLevel(
-            chapterNumber,
-            levelNumber
+        setLevelNodesVisible(
+            visible
         ) {
 
-            const chapter =
-                Number(
-                    chapterNumber
+            this.levelNodes
+                .forEach(
+                    button =>
+                        this.setElementVisibility(
+                            button,
+                            visible
+                        )
                 );
+        }
 
 
-            const level =
-                Number(
-                    levelNumber
-                );
 
+        setChapterNavigationVisible(
+            visible
+        ) {
 
-            if (
-                !this.isLevelUnlocked(
-                    chapter,
-                    level
-                )
-            ) {
-
-                this.showGuideMessage(
-                    "Termine d'abord l'exercice précédent."
-                );
-
-
-                return;
-            }
-
-
-            const levelData =
-                this.getLevelData(
-                    chapter,
-                    level
-                );
-
-
-            if (
-                !levelData
-            ) {
-
-                this.showGuideMessage(
-                    "Cet exercice n'a pas pu être chargé."
-                );
-
-
-                return;
-            }
-
-
-            this.selectedChapter =
-                chapter;
-
-
-            this.currentLevelData =
-                levelData;
-
-
-            this.loadedLevelKey =
-                this.levelKey(
-                    chapter,
-                    level
-                );
-
-
-            this.theoryReturnToGame =
-                false;
-
-
-            this.savedEditorCode =
-                "";
-
-
-            if (
-                this.missionTitle
-            ) {
-
-                this.missionTitle.textContent =
-                    levelData.title ||
-                    `Exercice ${level}`;
-            }
-
-
-            if (
-                this.missionInstruction
-            ) {
-
-                this.missionInstruction.textContent =
-                    levelData.instruction ||
-                    levelData.mission ||
-                    "";
-            }
-
-
-            if (
-                this.gameStatus
-            ) {
-
-                this.gameStatus.textContent =
-                    `Chapitre ${chapter} · Exercice ${level}`;
-            }
-
-
-            if (
-                this.editor
-            ) {
-
-                this.editor.value =
-                    String(
-                        levelData.starterCode ??
-                        levelData.code ??
-                        ""
-                    );
-            }
-
-
-            this.clearCodeError();
-
-            this.clearConsole();
-
-
-            /*
-             * IMPORTANT :
-             *
-             * On affiche d'abord l'écran du jeu,
-             * PUIS seulement on demande au moteur
-             * de dessiner.
-             *
-             * Cela évite le canvas noir lorsque
-             * le moteur calculait les dimensions
-             * pendant que l'écran était caché.
-             */
-
-            this.showGameScreen();
-
-            this.updateTopBar(
-                chapter
+            this.setElementVisibility(
+                this.previousChapterButton,
+                visible
             );
 
 
-            if (
-                this.gameCanvas
-            ) {
-
-                if (
-                    !this.gameCanvas.width
-                ) {
-
-                    this.gameCanvas.width =
-                        960;
-                }
+            this.setElementVisibility(
+                this.mapChapterIndicator,
+                visible
+            );
 
 
-                if (
-                    !this.gameCanvas.height
-                ) {
-
-                    this.gameCanvas.height =
-                        640;
-                }
-
-
-                this.gameCanvas
-                    .style.visibility =
-                    "visible";
-
-
-                this.gameCanvas
-                    .style.opacity =
-                    "1";
-            }
-
-
-            requestAnimationFrame(
-                () => {
-
-                    requestAnimationFrame(
-                        () => {
-
-                            try {
-
-                                if (
-                                    !window.pytGame
-                                ) {
-
-                                    throw new Error(
-                                        "Le moteur de jeu n'est pas prêt."
-                                    );
-                                }
-
-
-                                if (
-                                    typeof
-                                    window.pytGame
-                                        .loadLevel ===
-                                    "function"
-                                ) {
-
-                                    window.pytGame
-                                        .loadLevel(
-                                            levelData
-                                        );
-
-                                } else if (
-                                    typeof
-                                    window.pytGame
-                                        .openLevel ===
-                                    "function"
-                                ) {
-
-                                    window.pytGame
-                                        .openLevel(
-                                            levelData
-                                        );
-
-                                } else {
-
-                                    throw new Error(
-                                        "Aucune fonction de chargement de niveau n'est disponible."
-                                    );
-                                }
-
-
-                                if (
-                                    typeof
-                                    window.pytGame
-                                        .resizeCanvas ===
-                                    "function"
-                                ) {
-
-                                    window.pytGame
-                                        .resizeCanvas();
-                                }
-
-
-                                if (
-                                    typeof
-                                    window.pytGame
-                                        .render ===
-                                    "function"
-                                ) {
-
-                                    window.pytGame
-                                        .render();
-                                }
-
-
-                                window.dispatchEvent(
-                                    new CustomEvent(
-                                        "pyt:level-opened",
-                                        {
-
-                                            detail: {
-
-                                                chapter,
-
-                                                level,
-
-                                                levelData
-                                            }
-                                        }
-                                    )
-                                );
-
-                            } catch (
-                                error
-                            ) {
-
-                                console.error(
-                                    "[PYT] Erreur de chargement de l'exercice :",
-                                    error
-                                );
-
-
-                                if (
-                                    this.gameStatus
-                                ) {
-
-                                    this.gameStatus.textContent =
-                                        "Erreur de chargement de l'exercice";
-                                }
-
-
-                                this.showGuideMessage(
-                                    "L'exercice n'a pas pu s'afficher. Ouvre la console du navigateur et envoie-moi la première erreur rouge si cela recommence."
-                                );
-                            }
-                        }
-                    );
-                }
+            this.setElementVisibility(
+                this.nextChapterButton,
+                visible
             );
         }
 
 
 
-        /* =====================================================
-           THÉORIE
-        ===================================================== */
+        updateChapterNavigation() {
 
-        openTheoryForChapter(
-            chapterNumber,
-            returnToGame = false
-        ) {
+            if (
+                !this.selectedChapter
+            ) {
+
+                return;
+            }
+
 
             const chapter =
-                this.getChapterData(
-                    chapterNumber
+                this.selectedChapter;
+
+
+            if (
+                this.mapChapterIndicator
+            ) {
+
+                this.mapChapterIndicator.textContent =
+                    `${chapter} / ${this.getChapterCount()}`;
+            }
+
+
+            if (
+                this.previousChapterButton
+            ) {
+
+                this.previousChapterButton.disabled =
+                    false;
+
+
+                this.previousChapterButton.textContent =
+                    chapter ===
+                        1
+                        ? "← Maison"
+                        : `← Chapitre ${chapter - 1}`;
+            }
+
+
+            if (
+                this.nextChapterButton
+            ) {
+
+                const next =
+                    chapter +
+                    1;
+
+
+                const exists =
+                    next <=
+                    this.getChapterCount();
+
+
+                this.nextChapterButton.disabled =
+                    (
+                        !exists ||
+                        !this.isChapterUnlocked(
+                            next
+                        )
+                    );
+
+
+                this.nextChapterButton.textContent =
+                    exists
+                        ? `Chapitre ${next} →`
+                        : "Terminé";
+            }
+        }
+
+
+
+        /* =========================================================
+           THÉORIE
+        ========================================================= */
+
+        handleTheoryRequest() {
+
+            const chapter =
+                Number(
+                    this.selectedChapter ||
+                    this.currentLevelData
+                        ?.chapter ||
+                    0
                 );
 
 
@@ -3698,20 +3271,14 @@
             }
 
 
-            /*
-             * La théorie ne peut plus être
-             * ouverte avant le premier essai.
-             */
-
             if (
-                returnToGame &&
-                this.currentLevelData &&
-                !this
-                    .isTheoryUnlockedForCurrentLevel()
+                !this.isTheoryAvailable(
+                    chapter
+                )
             ) {
 
-                this.showGuideMessage(
-                    "Fais d'abord un essai dans l'exercice avant d'ouvrir la théorie."
+                this.showGuide(
+                    "Tu as commencé l'exercice 1. Termine-le pour redébloquer la théorie."
                 );
 
 
@@ -3719,19 +3286,80 @@
             }
 
 
-            this.theoryReturnToGame =
-                Boolean(
-                    returnToGame &&
-                    this.currentLevelData
+            const returnMode =
+                this.currentLevelData
+                    ? "game"
+                    : "chapter";
+
+
+            this.openTheory(
+                chapter,
+                returnMode
+            );
+        }
+
+
+
+        openTheory(
+            chapterNumber,
+            returnMode = "chapter"
+        ) {
+
+            const chapter =
+                Number(
+                    chapterNumber
                 );
 
 
+            if (
+                !this.isTheoryAvailable(
+                    chapter
+                )
+            ) {
+
+                this.showGuide(
+                    "La théorie sera de nouveau disponible après avoir terminé l'exercice 1."
+                );
+
+
+                return;
+            }
+
+
+            const chapterData =
+                this.getChapterData(
+                    chapter
+                );
+
+
+            if (
+                !chapterData
+            ) {
+
+                return;
+            }
+
+
+            this.selectedChapter =
+                chapter;
+
+
+            this.currentChapterData =
+                chapterData;
+
+
+            this.theoryReturnMode =
+                returnMode;
+
+
             /*
-             * On conserve le code.
+             * Conserve le code si théorie
+             * ouverte depuis un exercice.
              */
 
             if (
-                this.theoryReturnToGame &&
+                returnMode ===
+                    "game" &&
                 this.editor
             ) {
 
@@ -3741,19 +3369,15 @@
 
 
             this.renderTheory(
-                chapter
+                chapterData
             );
 
 
-            this.showCourseScreen();
+            this.showTheoryScreen();
 
 
             this.updateTopBar(
-                Number(
-                    chapter.chapter ??
-                    chapter.number ??
-                    chapterNumber
-                )
+                chapter
             );
 
 
@@ -3761,19 +3385,9 @@
                 this.courseMapButton
             ) {
 
-                this.courseMapButton.hidden =
-                    false;
-
-
-                this.courseMapButton
-                    .classList
-                    .remove(
-                        "hidden"
-                    );
-
-
                 this.courseMapButton.textContent =
-                    this.theoryReturnToGame
+                    returnMode ===
+                        "game"
                         ? "Retour à l'exercice"
                         : "Retour aux exercices";
             }
@@ -3781,112 +3395,68 @@
 
 
 
-        openTheoryReview() {
+        returnFromTheory() {
 
             if (
-                !this.currentLevelData ||
-                !this
-                    .isTheoryUnlockedForCurrentLevel()
+                this.theoryReturnMode ===
+                    "game" &&
+                this.currentLevelData
             ) {
 
-                this.showGuideMessage(
-                    "Fais d'abord un essai dans cet exercice."
-                );
+                this.showGameScreen();
 
 
-                return;
-            }
+                if (
+                    this.editor
+                ) {
 
-
-            const chapter =
-                Number(
-                    this.currentLevelData
-                        .chapter ??
-                    this.selectedChapter ??
-                    1
-                );
-
-
-            this.openTheoryForChapter(
-                chapter,
-                true
-            );
-        }
-
-
-
-        returnFromTheoryToGame() {
-
-            if (
-                !this.currentLevelData
-            ) {
-
-                this.openHouseMap();
-
-                return;
-            }
-
-
-            this.showGameScreen();
-
-
-            this.updateTopBar(
-                Number(
-                    this.currentLevelData
-                        .chapter ??
-                    this.selectedChapter ??
-                    1
-                )
-            );
-
-
-            /*
-             * Code restauré exactement.
-             */
-
-            if (
-                this.editor
-            ) {
-
-                this.editor.value =
-                    this.savedEditorCode;
-            }
-
-
-            this.theoryReturnToGame =
-                false;
-
-
-            requestAnimationFrame(
-                () => {
-
-                    if (
-                        window.pytGame &&
-                        typeof
-                        window.pytGame
-                            .render ===
-                        "function"
-                    ) {
-
-                        window.pytGame
-                            .render();
-                    }
+                    this.editor.value =
+                        this.savedEditorCode;
                 }
+
+
+                this.updateTopBar(
+                    this.selectedChapter
+                );
+
+
+                requestAnimationFrame(
+                    () => {
+
+                        if (
+                            window.pytGame &&
+                            typeof
+                            window.pytGame
+                                .render ===
+                                "function"
+                        ) {
+
+                            window.pytGame
+                                .render();
+                        }
+                    }
+                );
+
+
+                return;
+            }
+
+
+            this.openChapterRoom(
+                this.selectedChapter ||
+                1
             );
         }
 
 
 
         renderTheory(
-            chapter
+            chapterData
         ) {
 
-            const chapterNumber =
-                Number(
-                    chapter.chapter ??
-                    chapter.number ??
-                    this.selectedChapter ??
-                    1
+            const chapter =
+                this.getChapterNumber(
+                    chapterData
                 );
 
 
@@ -3895,7 +3465,7 @@
             ) {
 
                 this.courseChapterNumber.textContent =
-                    `Chapitre ${chapterNumber}`;
+                    `Chapitre ${chapter}`;
             }
 
 
@@ -3904,9 +3474,10 @@
             ) {
 
                 this.courseTitle.textContent =
-                    chapter.title ||
-                    chapter.name ||
-                    `Chapitre ${chapterNumber}`;
+                    this.getChapterTitle(
+                        chapter,
+                        chapterData
+                    );
             }
 
 
@@ -3915,8 +3486,8 @@
             ) {
 
                 this.courseSubtitle.textContent =
-                    chapter.subtitle ||
-                    "Théorie";
+                    chapterData.subtitle ||
+                    "Théorie Python";
             }
 
 
@@ -3933,13 +3504,14 @@
 
 
             const sections =
-                this.normalizeTheorySections(
-                    chapter.theory
+                this.normalizeTheory(
+                    chapterData.theory
                 );
 
 
             if (
-                !sections.length
+                sections.length ===
+                0
             ) {
 
                 const paragraph =
@@ -3949,7 +3521,7 @@
 
 
                 paragraph.textContent =
-                    "La théorie de ce chapitre sera disponible ici.";
+                    "La théorie de ce chapitre sera affichée ici.";
 
 
                 this.courseContent
@@ -3962,119 +3534,122 @@
             }
 
 
-            sections.forEach(
-                section => {
+            sections
+                .forEach(
+                    section => {
 
-                    const article =
-                        document.createElement(
-                            "article"
-                        );
-
-
-                    article.className =
-                        "theory-section";
-
-
-                    if (
-                        section.title
-                    ) {
-
-                        const heading =
+                        const article =
                             document.createElement(
-                                "h3"
+                                "article"
                             );
 
 
-                        heading.textContent =
-                            section.title;
+                        article.className =
+                            "theory-section";
 
 
-                        article.appendChild(
-                            heading
-                        );
-                    }
+                        if (
+                            section.title
+                        ) {
 
-
-                    const bodyValues =
-                        Array.isArray(
-                            section.body
-                        )
-                            ? section.body
-                            : [
-                                section.body
-                            ];
-
-
-                    bodyValues
-                        .filter(
-                            Boolean
-                        )
-                        .forEach(
-                            body => {
-
-                                const paragraph =
-                                    document.createElement(
-                                        "p"
-                                    );
-
-
-                                paragraph.textContent =
-                                    String(
-                                        body
-                                    );
-
-
-                                article.appendChild(
-                                    paragraph
+                            const heading =
+                                document.createElement(
+                                    "h3"
                                 );
-                            }
-                        );
 
 
-                    if (
-                        section.code
-                    ) {
-
-                        const pre =
-                            document.createElement(
-                                "pre"
-                            );
+                            heading.textContent =
+                                section.title;
 
 
-                        const code =
-                            document.createElement(
-                                "code"
-                            );
-
-
-                        code.textContent =
-                            String(
-                                section.code
-                            );
-
-
-                        pre.appendChild(
-                            code
-                        );
-
-
-                        article.appendChild(
-                            pre
-                        );
-                    }
-
-
-                    this.courseContent
-                        .appendChild(
                             article
-                        );
-                }
-            );
+                                .appendChild(
+                                    heading
+                                );
+                        }
+
+
+                        const paragraphs =
+                            Array.isArray(
+                                section.body
+                            )
+                                ? section.body
+                                : [
+                                    section.body
+                                ];
+
+
+                        paragraphs
+                            .filter(
+                                Boolean
+                            )
+                            .forEach(
+                                text => {
+
+                                    const paragraph =
+                                        document.createElement(
+                                            "p"
+                                        );
+
+
+                                    paragraph.textContent =
+                                        String(
+                                            text
+                                        );
+
+
+                                    article
+                                        .appendChild(
+                                            paragraph
+                                        );
+                                }
+                            );
+
+
+                        if (
+                            section.code
+                        ) {
+
+                            const pre =
+                                document.createElement(
+                                    "pre"
+                                );
+
+
+                            const code =
+                                document.createElement(
+                                    "code"
+                                );
+
+
+                            code.textContent =
+                                String(
+                                    section.code
+                                );
+
+
+                            pre.appendChild(
+                                code
+                            );
+
+
+                            article.appendChild(
+                                pre
+                            );
+                        }
+
+
+                        this.courseContent
+                            .appendChild(
+                                article
+                            );
+                    }
+                );
         }
 
 
 
-        normalizeTheorySections(
+        normalizeTheory(
             theory
         ) {
 
@@ -4083,6 +3658,20 @@
             ) {
 
                 return [];
+            }
+
+
+            if (
+                typeof theory ===
+                    "string"
+            ) {
+
+                return [
+                    {
+                        body:
+                            theory
+                    }
+                ];
             }
 
 
@@ -4097,7 +3686,7 @@
 
                         if (
                             typeof item ===
-                            "string"
+                                "string"
                         ) {
 
                             return {
@@ -4131,59 +3720,57 @@
 
 
             if (
-                typeof theory ===
-                "string"
-            ) {
-
-                return [
-                    {
-                        body:
-                            theory
-                    }
-                ];
-            }
-
-
-            if (
                 Array.isArray(
                     theory.sections
                 )
             ) {
 
-                const intro =
+                const result =
+                    [];
+
+
+                if (
                     theory.intro
-                        ? [
-                            {
-                                body:
-                                    theory.intro
-                            }
-                        ]
-                        : [];
+                ) {
+
+                    result.push(
+                        {
+                            body:
+                                theory.intro
+                        }
+                    );
+                }
 
 
-                return intro.concat(
-                    theory.sections
-                        .map(
-                            item => ({
+                theory.sections
+                    .forEach(
+                        item => {
 
-                                title:
-                                    item.title ||
-                                    item.heading ||
-                                    "",
+                            result.push(
+                                {
 
-                                body:
-                                    item.body ||
-                                    item.text ||
-                                    item.description ||
-                                    "",
+                                    title:
+                                        item.title ||
+                                        item.heading ||
+                                        "",
 
-                                code:
-                                    item.code ||
-                                    item.example ||
-                                    ""
-                            })
-                        )
-                );
+                                    body:
+                                        item.body ||
+                                        item.text ||
+                                        item.description ||
+                                        "",
+
+                                    code:
+                                        item.code ||
+                                        item.example ||
+                                        ""
+                                }
+                            );
+                        }
+                    );
+
+
+                return result;
             }
 
 
@@ -4210,22 +3797,347 @@
 
 
 
-        /* =====================================================
-           FIN EXERCICE
-        ===================================================== */
+        /* =========================================================
+           EXERCICE
+        ========================================================= */
+
+        openLevel(
+            chapterNumber,
+            levelNumber
+        ) {
+
+            const chapter =
+                Number(
+                    chapterNumber
+                );
+
+
+            const level =
+                Number(
+                    levelNumber
+                );
+
+
+            if (
+                !this.isLevelUnlocked(
+                    chapter,
+                    level
+                )
+            ) {
+
+                this.showGuide(
+                    "Termine d'abord l'exercice précédent."
+                );
+
+
+                return;
+            }
+
+
+            const levelData =
+                this.getLevelData(
+                    chapter,
+                    level
+                );
+
+
+            if (
+                !levelData
+            ) {
+
+                this.showGuide(
+                    "Impossible de charger cet exercice."
+                );
+
+
+                return;
+            }
+
+
+            /*
+             * Dès que exercice 1 est réellement
+             * ouvert, la théorie se verrouille
+             * jusqu'à sa réussite.
+             */
+
+            this.markLevelStarted(
+                chapter,
+                level
+            );
+
+
+            this.selectedChapter =
+                chapter;
+
+
+            this.currentChapterData =
+                this.getChapterData(
+                    chapter
+                );
+
+
+            this.currentLevelData =
+                levelData;
+
+
+            this.currentLevelKey =
+                this.makeLevelKey(
+                    chapter,
+                    level
+                );
+
+
+            this.theoryReturnMode =
+                "game";
+
+
+            this.savedEditorCode =
+                "";
+
+
+            if (
+                this.missionTitle
+            ) {
+
+                this.missionTitle.textContent =
+                    levelData.title ||
+                    `Exercice ${level}`;
+            }
+
+
+            if (
+                this.missionInstruction
+            ) {
+
+                this.missionInstruction.textContent =
+                    levelData.instruction ||
+                    levelData.mission ||
+                    levelData.objective ||
+                    "Aide Pyt à terminer sa mission.";
+            }
+
+
+            if (
+                this.gameStatus
+            ) {
+
+                this.gameStatus.textContent =
+                    `Chapitre ${chapter} · Exercice ${level}`;
+            }
+
+
+            /*
+             * Starter code.
+             */
+
+            if (
+                this.editor
+            ) {
+
+                this.editor.value =
+                    String(
+                        levelData.starterCode ??
+                        levelData.startCode ??
+                        levelData.code ??
+                        ""
+                    );
+            }
+
+
+            this.clearCodeError();
+
+            this.clearConsole();
+
+
+            /*
+             * IMPORTANT ÉCRAN NOIR :
+             *
+             * on rend l'écran visible AVANT
+             * d'appeler loadLevel().
+             */
+
+            this.showGameScreen();
+
+
+            this.updateTopBar(
+                chapter
+            );
+
+
+            requestAnimationFrame(
+                () => {
+
+                    requestAnimationFrame(
+                        () => {
+
+                            try {
+
+                                if (
+                                    !window.pytGame
+                                ) {
+
+                                    throw new Error(
+                                        "Le moteur du jeu n'est pas disponible."
+                                    );
+                                }
+
+
+                                if (
+                                    typeof
+                                    window.pytGame
+                                        .loadLevel ===
+                                        "function"
+                                ) {
+
+                                    window.pytGame
+                                        .loadLevel(
+                                            levelData
+                                        );
+
+                                } else if (
+                                    typeof
+                                    window.pytGame
+                                        .openLevel ===
+                                        "function"
+                                ) {
+
+                                    window.pytGame
+                                        .openLevel(
+                                            levelData
+                                        );
+
+                                } else {
+
+                                    throw new Error(
+                                        "Aucune méthode de chargement de niveau trouvée."
+                                    );
+                                }
+
+
+                                if (
+                                    typeof
+                                    window.pytGame
+                                        .resizeCanvas ===
+                                        "function"
+                                ) {
+
+                                    window.pytGame
+                                        .resizeCanvas();
+                                }
+
+
+                                if (
+                                    typeof
+                                    window.pytGame
+                                        .render ===
+                                        "function"
+                                ) {
+
+                                    window.pytGame
+                                        .render();
+                                }
+
+
+                                window.dispatchEvent(
+                                    new CustomEvent(
+                                        "pyt:level-opened",
+                                        {
+
+                                            detail: {
+
+                                                chapter,
+
+                                                level,
+
+                                                levelData
+                                            }
+                                        }
+                                    )
+                                );
+
+                            } catch (
+                                error
+                            ) {
+
+                                console.error(
+                                    "[PYT] Erreur exercice :",
+                                    error
+                                );
+
+
+                                if (
+                                    this.gameStatus
+                                ) {
+
+                                    this.gameStatus.textContent =
+                                        "Erreur de chargement";
+                                }
+
+
+                                this.showGuide(
+                                    "L'exercice n'a pas pu se charger correctement."
+                                );
+                            }
+                        }
+                    );
+                }
+            );
+        }
+
+
+
+        /* =========================================================
+           SUCCÈS
+        ========================================================= */
+
+        handleCompletionEvent(
+            event
+        ) {
+
+            const detail =
+                event?.detail ||
+                {};
+
+
+            /*
+             * Évite le double traitement
+             * si game.js envoie plusieurs
+             * événements compatibles.
+             */
+
+            const detailData =
+                detail.levelData ||
+                detail.level;
+
+
+            if (
+                detailData &&
+                typeof detailData ===
+                    "object"
+            ) {
+
+                this.completeLevel(
+                    detailData
+                );
+
+                return;
+            }
+
+
+            this.completeLevel(
+                this.currentLevelData
+            );
+        }
+
+
 
         completeLevel(
-            levelData = null
+            levelData
         ) {
 
             const data =
-                (
-                    levelData &&
-                    typeof levelData ===
-                    "object"
-                )
-                    ? levelData
-                    : this.currentLevelData;
+                levelData ||
+                this.currentLevelData;
 
 
             if (
@@ -4255,166 +4167,160 @@
 
 
             const key =
-                this.levelKey(
+                this.makeLevelKey(
                     chapter,
                     level
                 );
 
 
-            this.completed[
-                key
-            ] =
-                true;
+            /*
+             * Si déjà traité :
+             * ne pas refaire la progression.
+             */
+
+            const wasCompleted =
+                Boolean(
+                    this.completed[
+                        key
+                    ]
+                );
 
 
-            this.saveObject(
-                this.progressKey,
-                this.completed
+            this.markLevelCompleted(
+                chapter,
+                level
             );
 
 
-            this.clearCodeError();
+            /*
+             * Exercice 1 terminé :
+             * théorie immédiatement
+             * disponible à nouveau.
+             */
+
+            this.updateTheoryControls();
 
 
-            const isLastExercise =
-                level >=
-                3;
+            if (
+                wasCompleted
+            ) {
+
+                return;
+            }
 
 
-            const isLastChapter =
+            if (
+                level <
+                3
+            ) {
+
+                this.showCompletion(
+                    "Exercice réussi",
+                    `L'exercice ${level + 1} est maintenant débloqué.`,
+                    "Exercice suivant",
+                    () => {
+
+                        this.openLevel(
+                            chapter,
+                            level +
+                                1
+                        );
+                    },
+                    "Retour aux exercices",
+                    () => {
+
+                        this.openChapterRoom(
+                            chapter
+                        );
+                    }
+                );
+
+
+                return;
+            }
+
+
+            const lastChapter =
                 chapter >=
                 this.getChapterCount();
 
 
             if (
-                isLastExercise
+                lastChapter
             ) {
 
-                this.showCompletionModal(
-
-                    isLastChapter
-                        ? "Mission terminée"
-                        : `Chapitre ${chapter} terminé`,
-
-                    isLastChapter
-                        ? "Tu as terminé les exercices de PYT."
-                        : `Le Chapitre ${chapter + 1} est maintenant débloqué.`,
-
-                    "Retour à la carte",
-
+                this.showCompletion(
+                    "Mission terminée",
+                    "Tu as terminé tous les chapitres de PYT.",
+                    "Retour à la maison",
                     () =>
                         this.openHouseMap()
                 );
 
             } else {
 
-                this.showCompletionModal(
-
-                    "Exercice réussi",
-
-                    `L'exercice ${level + 1} est maintenant débloqué.`,
-
-                    "Exercice suivant",
-
+                this.showCompletion(
+                    `Chapitre ${chapter} terminé`,
+                    `Le Chapitre ${chapter + 1} est maintenant débloqué.`,
+                    "Retour à la maison",
                     () =>
-                        this.openLevel(
-                            chapter,
-                            level +
-                                1
-                        ),
-
-                    "Retour aux exercices",
-
-                    () =>
-                        this.openChapterRoom(
-                            chapter
-                        )
+                        this.openHouseMap()
                 );
             }
-
-
-            window.dispatchEvent(
-                new CustomEvent(
-                    "pyt:progress-changed",
-                    {
-
-                        detail: {
-
-                            chapter,
-
-                            level,
-
-                            completed:
-                                true
-                        }
-                    }
-                )
-            );
         }
 
 
 
-        /* =====================================================
-           ÉCHEC
-        ===================================================== */
+        /* =========================================================
+           ÉCHECS
+        ========================================================= */
 
-        handleLevelFailure(
-            result = {}
+        handleFailure(
+            detail = {}
         ) {
 
             if (
-                !this.currentLevelData
+                !this.currentLevelKey
             ) {
 
                 return;
             }
 
 
-            const key =
-                this.levelKeyFromData(
-                    this.currentLevelData
-                );
-
-
             this.failureCounts[
-                key
+                this.currentLevelKey
             ] =
                 Number(
                     this.failureCounts[
-                        key
+                        this.currentLevelKey
                     ] ||
                     0
                 ) +
                 1;
 
 
-            const failureNumber =
+            const count =
                 this.failureCounts[
-                    key
+                    this.currentLevelKey
                 ];
 
 
             /*
-             * Premier échec :
-             *
-             * pas de ligne rouge.
-             * juste théorie disponible.
+             * PREMIER ÉCHEC :
+             * aucune ligne soulignée.
              */
 
             if (
-                failureNumber ===
+                count ===
                 1
             ) {
 
                 this.clearCodeError();
 
 
-                this.showGuideMessage(
-                    "Ce n'est pas encore ça. La théorie est maintenant disponible avec le bouton Théorie. Ton code est conservé."
+                this.showGuide(
+                    "Ce n’est pas là que je voulais aller... Observe ce que Pyt a fait et réessaie."
                 );
-
-
-                this.updateTheoryButton();
 
 
                 return;
@@ -4422,24 +4328,17 @@
 
 
             /*
-             * Deuxième échec ou plus :
-             * on peut indiquer une ligne
-             * si le moteur en fournit une.
+             * DEUXIÈME ÉCHEC ET PLUS :
+             * ligne seulement si réellement fournie.
              */
 
             const line =
                 Number(
-                    result.line ??
-                    result.lineNumber ??
-                    result.errorLine ??
+                    detail.line ??
+                    detail.lineNumber ??
+                    detail.errorLine ??
                     0
                 );
-
-
-            const message =
-                result.message ||
-                result.error ||
-                "Regarde la ligne indiquée et vérifie la logique de ton programme.";
 
 
             if (
@@ -4449,13 +4348,15 @@
 
                 this.renderCodeError(
                     line,
-                    message
+                    detail.message ||
+                    detail.error ||
+                    "Vérifie cette ligne."
                 );
             }
 
 
-            this.showGuideMessage(
-                "Réessaie en observant le trajet de Pyt. La théorie reste disponible sans effacer ton code."
+            this.showGuide(
+                "Regarde attentivement le trajet de Pyt et vérifie la logique de ton programme."
             );
         }
 
@@ -4467,7 +4368,8 @@
         ) {
 
             if (
-                !this.codeErrorHighlights
+                !this.codeErrorHighlights ||
+                !line
             ) {
 
                 return;
@@ -4488,12 +4390,6 @@
                 "code-error-line";
 
 
-            item.dataset.line =
-                String(
-                    line
-                );
-
-
             item.textContent =
                 message
                     ? `Ligne ${line} : ${message}`
@@ -4506,15 +4402,10 @@
                 );
 
 
-            this.codeErrorHighlights
-                .classList
-                .remove(
-                    "hidden"
-                );
-
-
-            this.codeErrorHighlights.hidden =
-                false;
+            this.setElementVisibility(
+                this.codeErrorHighlights,
+                true
+            );
         }
 
 
@@ -4533,15 +4424,10 @@
                 .replaceChildren();
 
 
-            this.codeErrorHighlights
-                .classList
-                .add(
-                    "hidden"
-                );
-
-
-            this.codeErrorHighlights.hidden =
-                true;
+            this.setElementVisibility(
+                this.codeErrorHighlights,
+                false
+            );
         }
 
 
@@ -4559,77 +4445,44 @@
 
 
 
-        /* =====================================================
+        /* =========================================================
            GUIDE
-        ===================================================== */
+        ========================================================= */
 
-        showGuideMessage(
+        showGuide(
             message
         ) {
 
             if (
                 window.pytApp &&
                 typeof
+                window.pytApp.showGuide ===
+                    "function"
+            ) {
+
                 window.pytApp
-                    .showGuide ===
-                "function"
-            ) {
-
-                try {
-
-                    window.pytApp
-                        .showGuide(
-                            message
-                        );
-
-
-                    return;
-
-                } catch (
-                    error
-                ) {
-
-                    console.warn(
-                        "[PYT] showGuide indisponible, fallback utilisé.",
-                        error
+                    .showGuide(
+                        message
                     );
-                }
-            }
 
-
-            if (
-                !this.guide ||
-                !this.guideMessage
-            ) {
 
                 return;
             }
 
 
-            this.guideMessage.textContent =
-                String(
-                    message
-                );
-
-
-            this.guide
-                .classList
-                .remove(
-                    "hidden"
-                );
-
-
-            this.guide.hidden =
-                false;
+            console.info(
+                "[PYT]",
+                message
+            );
         }
 
 
 
-        /* =====================================================
-           MODAL
-        ===================================================== */
+        /* =========================================================
+           MODALE
+        ========================================================= */
 
-        showCompletionModal(
+        showCompletion(
             title,
             message,
             primaryText,
@@ -4639,156 +4492,57 @@
         ) {
 
             if (
-                !this.modalBackground ||
-                !this.modalTitle ||
-                !this.modalMessage ||
-                !this.modalPrimaryButton
+                window.pytApp &&
+                typeof
+                window.pytApp.showModal ===
+                    "function"
             ) {
 
-                if (
-                    typeof
-                    primaryAction ===
-                    "function"
-                ) {
+                window.pytApp
+                    .showModal(
+                        {
 
-                    primaryAction();
-                }
+                            label:
+                                "PYT",
+
+                            title,
+
+                            message,
+
+                            primaryText,
+
+                            primaryAction,
+
+                            secondaryText,
+
+                            secondaryAction
+                        }
+                    );
 
 
                 return;
             }
 
 
-            if (
-                this.modalLabel
-            ) {
-
-                this.modalLabel.textContent =
-                    "PYT";
-            }
-
-
-            this.modalTitle.textContent =
-                title;
-
-
-            this.modalMessage.textContent =
-                message;
-
-
-            this.modalPrimaryButton.textContent =
-                primaryText;
-
-
-            this.modalPrimaryButton.onclick =
-                () => {
-
-                    this.hideModal();
-
-
-                    if (
-                        typeof
-                        primaryAction ===
-                        "function"
-                    ) {
-
-                        primaryAction();
-                    }
-                };
-
+            /*
+             * Fallback minimal.
+             */
 
             if (
-                this.modalSecondaryButton
-            ) {
-
-                if (
-                    secondaryText &&
-                    typeof
-                    secondaryAction ===
+                typeof
+                primaryAction ===
                     "function"
-                ) {
-
-                    this.modalSecondaryButton.hidden =
-                        false;
-
-
-                    this.modalSecondaryButton
-                        .classList
-                        .remove(
-                            "hidden"
-                        );
-
-
-                    this.modalSecondaryButton.textContent =
-                        secondaryText;
-
-
-                    this.modalSecondaryButton.onclick =
-                        () => {
-
-                            this.hideModal();
-
-                            secondaryAction();
-                        };
-
-                } else {
-
-                    this.modalSecondaryButton.hidden =
-                        true;
-
-
-                    this.modalSecondaryButton
-                        .classList
-                        .add(
-                            "hidden"
-                        );
-
-
-                    this.modalSecondaryButton.onclick =
-                        null;
-                }
-            }
-
-
-            this.modalBackground
-                .classList
-                .remove(
-                    "hidden"
-                );
-
-
-            this.modalBackground.hidden =
-                false;
-        }
-
-
-
-        hideModal() {
-
-            if (
-                !this.modalBackground
             ) {
 
-                return;
+                primaryAction();
             }
-
-
-            this.modalBackground
-                .classList
-                .add(
-                    "hidden"
-                );
-
-
-            this.modalBackground.hidden =
-                true;
         }
 
 
 
-        /* =====================================================
+        /* =========================================================
            REFRESH
-        ===================================================== */
+        ========================================================= */
 
         refresh() {
 
@@ -4797,38 +4551,66 @@
 
             if (
                 this.mapMode ===
-                "house"
+                    "house"
             ) {
 
-                this.drawHouseOverview();
+                this.drawHouseMap();
 
             } else if (
                 this.mapMode ===
                     "chapter" &&
-                this.selectedChapter
+                this.currentChapterData
             ) {
 
-                const chapter =
-                    this.getChapterData(
-                        this.selectedChapter
-                    );
-
-
-                if (
-                    chapter
-                ) {
-
-                    this.drawChapterRoom(
-                        chapter
-                    );
-                }
+                this.drawChapterRoom(
+                    this.currentChapterData
+                );
             }
 
 
-            this.updateTheoryButton();
+            this.updateTheoryControls();
         }
 
 
+
+        /* =========================================================
+           RESET DEBUG
+        ========================================================= */
+
+        resetProgress() {
+
+            this.completed =
+                {};
+
+
+            this.started =
+                {};
+
+
+            this.failureCounts =
+                {};
+
+
+            this.saveStorageObject(
+                this.progressKey,
+                this.completed
+            );
+
+
+            this.saveStorageObject(
+                this.startedKey,
+                this.started
+            );
+
+
+            this.openHouseMap();
+        }
+
+
+
+        /* =========================================================
+           UTILS
+        ========================================================= */
 
         clamp(
             value,
@@ -4844,48 +4626,13 @@
                 )
             );
         }
-
-
-
-        /* =====================================================
-           DEBUG / RESET
-        ===================================================== */
-
-        resetProgress() {
-
-            this.completed =
-                {};
-
-
-            this.attempts =
-                {};
-
-
-            this.failureCounts =
-                {};
-
-
-            this.saveObject(
-                this.progressKey,
-                this.completed
-            );
-
-
-            this.saveObject(
-                this.attemptsKey,
-                this.attempts
-            );
-
-
-            this.openHouseMap();
-        }
     }
 
 
 
-    /* =========================================================
+    /* =============================================================
        EXPORT
-    ========================================================= */
+    ============================================================= */
 
     window.PytUI =
         PytUI;

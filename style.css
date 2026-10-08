@@ -702,7 +702,6 @@ textarea:focus-visible {
         transform 450ms ease;
 }
 
-
 .intro-screen::before {
     content: "";
 
@@ -714,43 +713,23 @@ textarea:focus-visible {
 
     background-image:
         linear-gradient(
-            rgba(
-                255,
-                255,
-                255,
-                0.018
-            )
-            1px,
-            transparent
-            1px
+            rgba(255, 255, 255, 0.018) 1px,
+            transparent 1px
         ),
         linear-gradient(
             90deg,
-            rgba(
-                255,
-                255,
-                255,
-                0.018
-            )
-            1px,
-            transparent
-            1px
+            rgba(255, 255, 255, 0.018) 1px,
+            transparent 1px
         );
 
-    background-size:
-        5px 5px;
+    background-size: 5px 5px;
 }
-
 
 .intro-screen.intro-leaving {
     opacity: 0;
 
-    transform:
-        scale(
-            1.025
-        );
+    transform: scale(1.025);
 }
-
 
 .intro-scene {
     position: relative;
@@ -763,67 +742,44 @@ textarea:focus-visible {
 
     justify-content: center;
 
-    gap:
-        clamp(
-            18px,
-            5vw,
-            56px
-        );
+    gap: clamp(22px, 5vw, 62px);
 
-    min-height: 270px;
+    min-height: 290px;
 }
 
-
 .intro-letter {
-    color:
-        #fff8df;
+    color: #fff8df;
 
-    font-family:
-        var(--pixel-font);
+    font-family: var(--pixel-font);
 
-    font-size:
-        clamp(
-            82px,
-            17vw,
-            205px
-        );
+    font-size: clamp(82px, 17vw, 205px);
 
     font-weight: 900;
 
     line-height: 0.75;
 
     text-shadow:
-        7px 7px 0
-        #3a2855,
-        12px 12px 0
-        #0c0d16;
+        7px 7px 0 #3a2855,
+        12px 12px 0 #0c0d16;
 
     animation:
         intro-letter-appear
         800ms
-        steps(
-            8,
-            end
-        )
+        steps(8, end)
         both;
 }
 
-
 .intro-letter-p {
-    animation-delay:
-        150ms;
+    animation-delay: 150ms;
 }
-
 
 .intro-letter-t {
-    animation-delay:
-        350ms;
+    animation-delay: 350ms;
 }
 
-
 .intro-robot-wrapper {
-    width: 90px;
-    height: 155px;
+    width: 108px;
+    height: 170px;
 
     display: flex;
 
@@ -832,121 +788,114 @@ textarea:focus-visible {
     justify-content: center;
 
     animation:
-        intro-robot-travel
-        3.2s
-        cubic-bezier(
-            0.35,
-            0.02,
-            0.18,
-            1
-        )
+        intro-robot-slide
+        3.1s
+        cubic-bezier(0.22, 0.6, 0.2, 1)
         both;
 }
 
-
 .intro-pyt {
-    transform:
-        scale(
-            0.78
-        );
+    transform: scale(0.9);
 }
 
-
-.intro-pyt
-.pyt-arm-left {
+.intro-pyt .pyt-arm-left {
     animation:
         intro-left-arm
-        500ms
-        2.5s
-        steps(
-            4,
-            end
-        )
+        480ms
+        2.35s
+        steps(4, end)
         forwards;
 }
 
-
-.intro-pyt
-.pyt-arm-right {
+.intro-pyt .pyt-arm-right {
     animation:
         intro-right-arm
-        500ms
-        2.5s
-        steps(
-            4,
-            end
-        )
+        480ms
+        2.35s
+        steps(4, end)
         forwards;
 }
 
-
-.intro-pyt
-.pyt-eye {
+.intro-pyt .pyt-eye {
     animation:
         happy-blink
         2.2s
-        2.2s
+        2.15s
         infinite;
 }
 
-
-.intro-continue-message {
+.intro-subtitle {
     position: absolute;
 
     left: 50%;
-    bottom:
-        calc(
-            7vh +
-            var(
-                --safe-bottom
-            )
-        );
+    bottom: calc(17vh + var(--safe-bottom));
 
     z-index: 3;
 
-    width:
-        min(
-            90vw,
-            650px
-        );
+    transform: translateX(-50%);
+
+    width: min(90vw, 540px);
 
     opacity: 0;
 
-    transform:
-        translateX(
-            -50%
-        );
+    color: #e7ddef;
 
-    color:
-        #fff6d4;
+    font-family: var(--pixel-font);
 
-    font-family:
-        var(--pixel-font);
-
-    font-size:
-        clamp(
-            10px,
-            1.25vw,
-            15px
-        );
+    font-size: clamp(10px, 1.4vw, 18px);
 
     font-weight: 900;
 
-    letter-spacing:
-        0.10em;
+    letter-spacing: 0.09em;
 
     text-align: center;
 
     text-transform: uppercase;
 
     text-shadow:
-        2px 2px 0
-        #11111c;
+        3px 3px 0 #171722;
 
-    transition:
-        opacity 160ms linear;
+    animation:
+        intro-subtitle-appear
+        500ms
+        steps(6, end)
+        3.05s
+        forwards;
 }
 
+.intro-continue-message {
+    position: absolute;
+
+    left: 50%;
+    bottom: calc(7vh + var(--safe-bottom));
+
+    z-index: 3;
+
+    width: min(90vw, 650px);
+
+    opacity: 0;
+
+    transform: translateX(-50%);
+
+    color: #fff6d4;
+
+    font-family: var(--pixel-font);
+
+    font-size: clamp(10px, 1.25vw, 15px);
+
+    font-weight: 900;
+
+    letter-spacing: 0.10em;
+
+    text-align: center;
+
+    text-transform: uppercase;
+
+    text-shadow:
+        2px 2px 0 #11111c;
+
+    transition: opacity 160ms linear;
+}
 
 .intro-continue-message.visible {
     opacity: 1;
@@ -954,172 +903,70 @@ textarea:focus-visible {
     animation:
         continue-blink
         1.1s
-        steps(
-            2,
-            end
-        )
+        steps(2, end)
         infinite;
 }
-
 
 .intro-skip {
     position: absolute;
 
-    top:
-        calc(
-            18px +
-            var(
-                --safe-top
-            )
-        );
-
-    right:
-        calc(
-            18px +
-            var(
-                --safe-right
-            )
-        );
+    top: calc(18px + var(--safe-top));
+    right: calc(18px + var(--safe-right));
 
     z-index: 5;
 }
 
-
 @keyframes intro-letter-appear {
-
     from {
         opacity: 0;
-
         transform:
-            translateY(
-                16px
-            )
-            scale(
-                0.96
-            );
+            translateY(16px)
+            scale(0.96);
     }
 
     to {
         opacity: 1;
-
         transform: none;
     }
 }
 
-
-@keyframes intro-robot-travel {
-
+@keyframes intro-robot-slide {
     0% {
         opacity: 0;
-
         transform:
-            translateX(
-                55vw
-            )
-            translateY(
-                -20px
-            )
-            scale(
-                1.2
-            );
+            translateX(52vw)
+            scale(1.02);
     }
 
-    30% {
+    15% {
         opacity: 1;
-    }
-
-    65% {
-        transform:
-            translateX(
-                0
-            )
-            translateY(
-                0
-            )
-            scale(
-                1
-            );
-    }
-
-    77% {
-        transform:
-            translateY(
-                -24px
-            )
-            scale(
-                0.92
-            );
-    }
-
-    88% {
-        transform:
-            translateY(
-                0
-            )
-            scale(
-                0.82
-            );
-    }
-
-    94% {
-        transform:
-            translateY(
-                -8px
-            )
-            scale(
-                0.79
-            );
     }
 
     100% {
         opacity: 1;
-
         transform:
-            translateX(
-                0
-            )
-            translateY(
-                0
-            )
-            scale(
-                0.76
-            );
+            translateX(0)
+            scale(0.9);
     }
 }
-
 
 @keyframes intro-left-arm {
-
     to {
         transform:
-            translate(
-                6px,
-                -15px
-            )
-            rotate(
-                -48deg
-            );
+            translate(6px, -15px)
+            rotate(-48deg);
     }
 }
-
 
 @keyframes intro-right-arm {
-
     to {
         transform:
-            translate(
-                -6px,
-                -15px
-            )
-            rotate(
-                48deg
-            );
+            translate(-6px, -15px)
+            rotate(48deg);
     }
 }
 
-
 @keyframes happy-blink {
-
     0%,
     44%,
     58%,
@@ -1130,14 +977,27 @@ textarea:focus-visible {
     48%,
     54% {
         top: 7px;
-
         height: 2px;
     }
 }
 
+@keyframes intro-subtitle-appear {
+    from {
+        opacity: 0;
+        transform:
+            translateX(-50%)
+            translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform:
+            translateX(-50%)
+            translateY(0);
+    }
+}
 
 @keyframes continue-blink {
-
     0%,
     45% {
         opacity: 1;
@@ -1148,8 +1008,6 @@ textarea:focus-visible {
         opacity: 0.36;
     }
 }
-
-
 /* =========================================================
    GAME INTERFACE
 ========================================================= */

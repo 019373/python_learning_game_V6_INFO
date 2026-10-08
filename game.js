@@ -1,1706 +1,723 @@
+
 "use strict";
 
 /* =========================================================
-   PYT - game.js
+   PYT - GAME.JS
+   Moteur principal, interpréteur Python simplifié et rendu.
 
-   MOTEUR PRINCIPAL DU JEU
-
-   ---------------------------------------------------------
-
-   PRINCIPES :
-
-   - Pyt se déplace sur une grille logique.
-   - Le décor n'est PAS la grille.
-   - La grille est dessinée par-dessus le décor.
-   - 1 case ≈ 0,5 seconde de déplacement.
-   - Les actions valides sont jouées même si le programme
-     n'atteint finalement pas l'objectif.
-   - On vérifie le résultat obtenu, pas une solution exacte.
-   - Les interactions simples sont automatiques.
-
-   COMMANDES PRINCIPALES ÉLÈVE :
-
-       forward(1)
-       backward(1)
-       left(90)
-       right(90)
-
-   Compatibilité supplémentaire :
-
-       avancer(1)
-       reculer(1)
-       tourner_gauche(90)
-       tourner_droite(90)
-
-   Interactions automatiques :
-
-   - ramasser un objet
-   - déposer un objet
-   - pousser une caisse
-   - activer un bouton
-   - ouvrir une porte
-   - nettoyer une case
-   - recharger Pyt
-   - atteindre une destination
-
-========================================================= */
-
-
-/* =========================================================
-   SIGNAUX INTERNES DE L'INTERPRÉTEUR
+   - 1 case = 500 ms
+   - Interactions automatiques
+   - Les actions valides restent exécutées en cas d'erreur
+   - Compatible avec ui.js et app.js
+   - Aucun changement dans art.js
 ========================================================= */
 
 class PytReturnSignal {
-
     constructor(value) {
-
-        this.value =
-            value;
+        this.value = value;
     }
 }
 
-
-class PytBreakSignal {
-
-    constructor() {
-
-        this.isBreakSignal =
-            true;
-    }
-}
-
-
+class PytBreakSignal {}
 
 /* =========================================================
-   SCOPE PYTHON SIMPLIFIÉ
+   VARIABLES ET PORTÉE
 ========================================================= */
 
 class PytScope {
-
     constructor(parent = null) {
-
-        this.parent =
-            parent;
-
-
-        this.values =
-            Object.create(
-                null
-            );
+        this.parent = parent;
+        this.values = Object.create(null);
     }
-
 
     hasLocal(name) {
-
-        return Object.prototype
-            .hasOwnProperty
-            .call(
-                this.values,
-                name
-            );
+        return Object.prototype.hasOwnProperty.call(
+            this.values,
+            name
+        );
     }
-
 
     has(name) {
-
-        if (
-            this.hasLocal(
-                name
-            )
-        ) {
-
-            return true;
-        }
-
-
-        return Boolean(
-            this.parent &&
-            this.parent.has(
-                name
-            )
-        );
+        return this.hasLocal(name) ||
+            Boolean(this.parent && this.parent.has(name));
     }
-
 
     get(name) {
-
-        if (
-            this.hasLocal(
-                name
-            )
-        ) {
-
-            return this.values[
-                name
-            ];
+        if (this.hasLocal(name)) {
+            return this.values[name];
         }
 
-
-        if (
-            this.parent
-        ) {
-
-            return this.parent
-                .get(
-                    name
-                );
+        if (this.parent) {
+            return this.parent.get(name);
         }
 
-
-        throw new Error(
-            `Nom inconnu : ${name}`
-        );
+        throw new Error(`Nom inconnu : ${name}`);
     }
 
-
-    set(
-        name,
-        value
-    ) {
-
-        this.values[
-            name
-        ] =
-            value;
-
-
+    set(name, value) {
+        this.values[name] = value;
         return value;
+    }
+
+    assign(name, value) {
+        if (this.hasLocal(name) || !this.parent) {
+            return this.set(name, value);
+        }
+
+        if (this.parent.has(name)) {
+            return this.parent.assign(name, value);
+        }
+
+        return this.set(name, value);
     }
 }
 
-
-
 /* =========================================================
-   ANALYSEUR DES NOTIONS UTILISÉES
+   ANALYSE DES NOTIONS PYTHON
 ========================================================= */
 
 class PytCodeAnalyzer {
-
     static analyze(source) {
+        const code = String(source || "");
 
-        const code =
-            String(
-                source ||
-                ""
-            );
-
-
-        const result = {
-
-            forward:
-                /\b(?:forward|avancer)\s*\(/.test(
-                    code
-                ),
-
-            backward:
-                /\b(?:backward|reculer)\s*\(/.test(
-                    code
-                ),
-
-            left:
-                /\b(?:left|tourner_gauche)\s*\(/.test(
-                    code
-                ),
-
-            right:
-                /\b(?:right|tourner_droite)\s*\(/.test(
-                    code
-                ),
-
-            variable:
-                /^[ \t]*[A-Za-z_]\w*[ \t]*=(?!=)/m.test(
-                    code
-                ),
-
-            condition:
-                /^[ \t]*(?:if|elif)\b/m.test(
-                    code
-                ),
-
-            for:
-                /^[ \t]*for\b/m.test(
-                    code
-                ),
-
-            range:
-                /\brange\s*\(/.test(
-                    code
-                ),
-
-            while:
-                /^[ \t]*while\b/m.test(
-                    code
-                ),
-
-            list:
-                /\[[\s\S]*?\]/.test(
-                    code
-                ),
-
-            dictionary:
-                /\{[\s\S]*?:[\s\S]*?\}/.test(
-                    code
-                ),
-
-            function:
-                /^[ \t]*def\b/m.test(
-                    code
-                ),
-
-            return:
-                /^[ \t]*return\b/m.test(
-                    code
-                )
+        return {
+            forward: /\b(?:forward|avancer)\s*\(/.test(code),
+            backward: /\b(?:backward|reculer)\s*\(/.test(code),
+            left: /\b(?:left|tourner_gauche)\s*\(/.test(code),
+            right: /\b(?:right|tourner_droite)\s*\(/.test(code),
+            variable: /^[ \t]*[a-z_]\w*\s*=(?!=)/im.test(code),
+            condition: /^[ \t]*(?:if|elif)\b/m.test(code),
+            for: /^[ \t]*for\b/m.test(code),
+            range: /\brange\s*\(/.test(code),
+            while: /^[ \t]*while\b/m.test(code),
+            list: /\[[\s\S]*?\]/.test(code),
+            dictionary: /\{[\s\S]*?:[\s\S]*?\}/.test(code),
+            function: /^[ \t]*def\b/m.test(code),
+            return: /^[ \t]*return\b/m.test(code)
         };
-
-
-        return result;
     }
 
-
-    static normalizeConcept(
-        concept
-    ) {
-
-        const value =
-            String(
-                concept ||
-                ""
-            )
-                .normalize("NFD")
-                .replace(
-                    /[\u0300-\u036f]/g,
-                    ""
-                )
-                .toLowerCase()
-                .trim();
-
+    static normalizeConcept(concept) {
+        const key = String(concept || "")
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .trim();
 
         const aliases = {
-
-            variables:
-                "variable",
-
-            variable:
-                "variable",
-
-            conditions:
-                "condition",
-
-            if:
-                "condition",
-
-            elif:
-                "condition",
-
-            else:
-                "condition",
-
-            boucle_for:
-                "for",
-
-            for_loop:
-                "for",
-
-            range:
-                "range",
-
-            boucle_while:
-                "while",
-
-            while_loop:
-                "while",
-
-            listes:
-                "list",
-
-            liste:
-                "list",
-
-            list:
-                "list",
-
-            dictionnaires:
-                "dictionary",
-
-            dictionnaire:
-                "dictionary",
-
-            dict:
-                "dictionary",
-
-            functions:
-                "function",
-
-            fonctions:
-                "function",
-
-            fonction:
-                "function",
-
-            def:
-                "function",
-
-            retour:
-                "return",
-
-            reculer:
-                "backward",
-
-            avancer:
-                "forward",
-
-            gauche:
-                "left",
-
-            droite:
-                "right"
+            variables: "variable",
+            conditions: "condition",
+            if: "condition",
+            elif: "condition",
+            else: "condition",
+            boucle_for: "for",
+            for_loop: "for",
+            boucle_while: "while",
+            while_loop: "while",
+            listes: "list",
+            liste: "list",
+            dictionnaires: "dictionary",
+            dictionnaire: "dictionary",
+            dict: "dictionary",
+            fonctions: "function",
+            fonction: "function",
+            functions: "function",
+            def: "function",
+            retour: "return",
+            avancer: "forward",
+            reculer: "backward",
+            gauche: "left",
+            droite: "right"
         };
 
-
-        return aliases[
-            value
-        ] ||
-            value;
+        return aliases[key] || key;
     }
 
-
-    static missingConcepts(
-        source,
-        requiredConcepts
-    ) {
-
-        if (
-            !Array.isArray(
-                requiredConcepts
-            )
-        ) {
-
+    static missingConcepts(source, required) {
+        if (!Array.isArray(required)) {
             return [];
         }
 
+        const found = this.analyze(source);
 
-        const analysis =
-            this.analyze(
-                source
-            );
-
-
-        return requiredConcepts
-            .map(
-                concept =>
-                    this.normalizeConcept(
-                        concept
-                    )
-            )
-            .filter(
-                concept =>
-                    concept &&
-                    analysis[
-                        concept
-                    ] !==
-                        true
-            );
+        return required
+            .map(x => this.normalizeConcept(x))
+            .filter(x => x && !found[x]);
     }
 }
 
-
-
 /* =========================================================
-   PARSEUR D'EXPRESSIONS
+   PARSEUR D'EXPRESSIONS PYTHON
 ========================================================= */
 
 class PytExpressionParser {
-
-    constructor(
-        source,
-        scope,
-        interpreter
-    ) {
-
-        this.source =
-            String(
-                source ||
-                ""
-            );
-
-
-        this.scope =
-            scope;
-
-
-        this.interpreter =
-            interpreter;
-
-
-        this.tokens =
-            this.tokenize(
-                this.source
-            );
-
-
-        this.index =
-            0;
+    constructor(source, scope, interpreter) {
+        this.source = String(source || "");
+        this.scope = scope;
+        this.interpreter = interpreter;
+        this.tokens = this.tokenize(this.source);
+        this.position = 0;
     }
 
-
-
-    /* =====================================================
-       TOKENIZER
-    ===================================================== */
-
     tokenize(source) {
+        const tokens = [];
+        let i = 0;
 
-        const tokens =
-            [];
+        while (i < source.length) {
+            const ch = source[i];
 
-
-        let i =
-            0;
-
-
-        while (
-            i <
-            source.length
-        ) {
-
-            const char =
-                source[i];
-
-
-            if (
-                /\s/.test(
-                    char
-                )
-            ) {
-
-                i +=
-                    1;
-
+            if (/\s/.test(ch)) {
+                i++;
                 continue;
             }
 
+            if (ch === "'" || ch === '"') {
+                const quote = ch;
+                let value = "";
+                let closed = false;
 
-            /* =============================================
-               STRING
-            ============================================= */
+                i++;
 
-            if (
-                char ===
-                    "'" ||
-                char ===
-                    '"'
-            ) {
+                while (i < source.length) {
+                    const current = source[i++];
 
-                const quote =
-                    char;
-
-
-                let value =
-                    "";
-
-
-                i +=
-                    1;
-
-
-                while (
-                    i <
-                    source.length
-                ) {
-
-                    const current =
-                        source[i];
-
-
-                    if (
-                        current ===
-                        "\\"
-                    ) {
-
-                        i +=
-                            1;
-
-
-                        if (
-                            i <
-                            source.length
-                        ) {
-
-                            const escaped =
-                                source[i];
-
-
-                            if (
-                                escaped ===
-                                "n"
-                            ) {
-
-                                value +=
-                                    "\n";
-
-                            } else if (
-                                escaped ===
-                                "t"
-                            ) {
-
-                                value +=
-                                    "\t";
-
-                            } else {
-
-                                value +=
-                                    escaped;
-                            }
-
-
-                            i +=
-                                1;
-
-                            continue;
-                        }
-                    }
-
-
-                    if (
-                        current ===
-                        quote
-                    ) {
-
-                        i +=
-                            1;
-
+                    if (current === quote) {
+                        closed = true;
                         break;
                     }
 
+                    if (
+                        current === "\\" &&
+                        i < source.length
+                    ) {
+                        const escaped = source[i++];
 
-                    value +=
-                        current;
-
-
-                    i +=
-                        1;
+                        value += ({
+                            n: "\n",
+                            t: "\t",
+                            r: "\r"
+                        })[escaped] ?? escaped;
+                    } else {
+                        value += current;
+                    }
                 }
 
+                if (!closed) {
+                    throw new Error(
+                        "Chaîne de caractères non terminée."
+                    );
+                }
 
                 tokens.push({
-
-                    type:
-                        "string",
-
+                    type: "string",
                     value
                 });
 
-
                 continue;
             }
 
+            const number =
+                /^(?:\d+(?:\.\d*)?|\.\d+)/
+                    .exec(source.slice(i));
 
-            /* =============================================
-               NUMBER
-            ============================================= */
-
-            if (
-                /[0-9]/.test(
-                    char
-                ) ||
-                (
-                    char ===
-                        "." &&
-                    /[0-9]/.test(
-                        source[
-                            i + 1
-                        ] ||
-                        ""
-                    )
-                )
-            ) {
-
-                let raw =
-                    char;
-
-
-                i +=
-                    1;
-
-
-                while (
-                    i <
-                    source.length &&
-                    /[0-9.]/.test(
-                        source[i]
-                    )
-                ) {
-
-                    raw +=
-                        source[i];
-
-                    i +=
-                        1;
-                }
-
-
+            if (number) {
                 tokens.push({
-
-                    type:
-                        "number",
-
-                    value:
-                        Number(
-                            raw
-                        )
+                    type: "number",
+                    value: Number(number[0])
                 });
 
-
+                i += number[0].length;
                 continue;
             }
 
+            const identifier =
+                /^[a-zA-Z_]\w*/
+                    .exec(source.slice(i));
 
-            /* =============================================
-               IDENTIFIER
-            ============================================= */
-
-            if (
-                /[A-Za-z_]/.test(
-                    char
-                )
-            ) {
-
-                let name =
-                    char;
-
-
-                i +=
-                    1;
-
-
-                while (
-                    i <
-                    source.length &&
-                    /[A-Za-z0-9_]/.test(
-                        source[i]
-                    )
-                ) {
-
-                    name +=
-                        source[i];
-
-                    i +=
-                        1;
-                }
-
-
+            if (identifier) {
                 tokens.push({
-
-                    type:
-                        "identifier",
-
-                    value:
-                        name
+                    type: "id",
+                    value: identifier[0]
                 });
 
-
+                i += identifier[0].length;
                 continue;
             }
 
+            const operator = [
+                "**=",
+                "//=",
+                "==",
+                "!=",
+                "<=",
+                ">=",
+                "//",
+                "**",
+                "+=",
+                "-=",
+                "*=",
+                "/=",
+                "%="
+            ].find(x => source.startsWith(x, i));
 
-            /* =============================================
-               OPERATORS
-            ============================================= */
-
-            const three =
-                source.slice(
-                    i,
-                    i + 3
-                );
-
-
-            const two =
-                source.slice(
-                    i,
-                    i + 2
-                );
-
-
-            if (
-                [
-                    "**=",
-                    "//="
-                ].includes(
-                    three
-                )
-            ) {
-
+            if (operator) {
                 tokens.push({
-
-                    type:
-                        "operator",
-
-                    value:
-                        three
+                    type: "operator",
+                    value: operator
                 });
 
-
-                i +=
-                    3;
-
+                i += operator.length;
                 continue;
             }
 
-
-            if (
-                [
-                    "==",
-                    "!=",
-                    "<=",
-                    ">=",
-                    "//",
-                    "**",
-                    "+=",
-                    "-=",
-                    "*=",
-                    "/=",
-                    "%="
-                ].includes(
-                    two
-                )
-            ) {
-
+            if ("+-*/%<>()[]{}:,.".includes(ch)) {
                 tokens.push({
-
-                    type:
-                        "operator",
-
-                    value:
-                        two
+                    type: "operator",
+                    value: ch
                 });
 
-
-                i +=
-                    2;
-
+                i++;
                 continue;
             }
-
-
-            if (
-                "+-*/%<>()[]{}:,."
-                    .includes(
-                        char
-                    )
-            ) {
-
-                tokens.push({
-
-                    type:
-                        "operator",
-
-                    value:
-                        char
-                });
-
-
-                i +=
-                    1;
-
-                continue;
-            }
-
 
             throw new Error(
-                `Caractère non reconnu : ${char}`
+                `Caractère inconnu : ${ch}`
             );
         }
 
-
         tokens.push({
-
-            type:
-                "eof",
-
-            value:
-                null
+            type: "end",
+            value: null
         });
-
 
         return tokens;
     }
 
-
-
-    /* =====================================================
-       HELPERS
-    ===================================================== */
-
     current() {
-
-        return this.tokens[
-            this.index
-        ];
+        return this.tokens[this.position];
     }
-
 
     next() {
-
-        const token =
-            this.tokens[
-                this.index
-            ];
-
-
-        this.index +=
-            1;
-
-
-        return token;
+        return this.tokens[this.position++];
     }
 
-
-    matchValue(value) {
-
-        if (
-            this.current()
-                .value ===
-            value
-        ) {
-
-            this.index +=
-                1;
-
-
-            return true;
+    match(value) {
+        if (this.current().value !== value) {
+            return false;
         }
 
-
-        return false;
+        this.position++;
+        return true;
     }
 
-
-    matchIdentifier(value) {
-
-        const token =
-            this.current();
-
-
-        if (
-            token.type ===
-                "identifier" &&
-            token.value ===
-                value
-        ) {
-
-            this.index +=
-                1;
-
-
-            return true;
-        }
-
-
-        return false;
-    }
-
-
-    expectValue(value) {
-
-        if (
-            !this.matchValue(
-                value
-            )
-        ) {
-
+    expect(value) {
+        if (!this.match(value)) {
             throw new Error(
-                `« ${value} » attendu`
+                `« ${value} » attendu.`
             );
         }
     }
-
-
-
-    /* =====================================================
-       PARSE
-    ===================================================== */
 
     parse() {
+        const result = this.parseOr();
 
-        const value =
-            this.parseOr();
-
-
-        if (
-            this.current()
-                .type !==
-            "eof"
-        ) {
-
+        if (this.current().type !== "end") {
             throw new Error(
-                `Expression invalide près de « ${this.current().value} »`
+                "Expression incorrecte."
             );
         }
 
-
-        return value;
+        return result;
     }
 
-
+    truth(value) {
+        return this.interpreter.truth(value);
+    }
 
     parseOr() {
+        let left = this.parseAnd();
 
-        let left =
-            this.parseAnd();
+        while (this.match("or")) {
+            const right = this.parseAnd();
 
-
-        while (
-            this.matchIdentifier(
-                "or"
-            )
-        ) {
-
-            const right =
-                this.parseAnd();
-
-
-            left =
-                Boolean(
-                    left
-                ) ||
-                Boolean(
-                    right
-                );
+            left = this.truth(left)
+                ? left
+                : right;
         }
-
 
         return left;
     }
-
-
 
     parseAnd() {
+        let left = this.parseNot();
 
-        let left =
-            this.parseNot();
+        while (this.match("and")) {
+            const right = this.parseNot();
 
-
-        while (
-            this.matchIdentifier(
-                "and"
-            )
-        ) {
-
-            const right =
-                this.parseNot();
-
-
-            left =
-                Boolean(
-                    left
-                ) &&
-                Boolean(
-                    right
-                );
+            left = this.truth(left)
+                ? right
+                : left;
         }
-
 
         return left;
     }
 
-
-
     parseNot() {
-
-        if (
-            this.matchIdentifier(
-                "not"
-            )
-        ) {
-
-            return !Boolean(
+        if (this.match("not")) {
+            return !this.truth(
                 this.parseNot()
             );
         }
 
-
         return this.parseComparison();
     }
 
+    contains(container, value) {
+        if (
+            typeof container === "string" ||
+            Array.isArray(container)
+        ) {
+            return container.includes(value);
+        }
 
+        if (
+            container &&
+            typeof container === "object"
+        ) {
+            return Object.prototype
+                .hasOwnProperty
+                .call(container, value);
+        }
+
+        return false;
+    }
 
     parseComparison() {
+        let left = this.parseAdd();
 
-        let left =
-            this.parseAdditive();
-
-
-        while (
-            true
-        ) {
-
-            /*
-             * "not in"
-             */
+        while (true) {
+            let op = this.current().value;
 
             if (
-                this.current()
-                    .type ===
-                    "identifier" &&
-                this.current()
-                    .value ===
-                    "not" &&
-                this.tokens[
-                    this.index +
-                    1
-                ]?.value ===
-                    "in"
+                op === "not" &&
+                this.tokens[this.position + 1]?.value === "in"
             ) {
-
-                this.index +=
-                    2;
-
-
-                const right =
-                    this.parseAdditive();
-
-
-                left =
-                    !this.contains(
-                        right,
-                        left
-                    );
-
-
-                continue;
-            }
-
-
-            /*
-             * "in"
-             */
-
-            if (
-                this.matchIdentifier(
-                    "in"
-                )
-            ) {
-
-                const right =
-                    this.parseAdditive();
-
-
-                left =
-                    this.contains(
-                        right,
-                        left
-                    );
-
-
-                continue;
-            }
-
-
-            const operator =
-                this.current()
-                    .value;
-
-
-            if (
-                ![
+                op = "not in";
+                this.position += 2;
+            } else if (
+                [
+                    "in",
                     "==",
                     "!=",
                     "<",
                     ">",
                     "<=",
                     ">="
-                ].includes(
-                    operator
-                )
+                ].includes(op)
             ) {
-
+                this.position++;
+            } else {
                 break;
             }
 
+            const right = this.parseAdd();
 
-            this.index +=
-                1;
+            switch (op) {
+                case "in":
+                    left = this.contains(right, left);
+                    break;
 
-
-            const right =
-                this.parseAdditive();
-
-
-            switch (
-                operator
-            ) {
+                case "not in":
+                    left = !this.contains(right, left);
+                    break;
 
                 case "==":
-
-                    left =
-                        left ===
-                        right;
-
+                    left = left === right;
                     break;
-
 
                 case "!=":
-
-                    left =
-                        left !==
-                        right;
-
+                    left = left !== right;
                     break;
-
 
                 case "<":
-
-                    left =
-                        left <
-                        right;
-
+                    left = left < right;
                     break;
-
 
                 case ">":
-
-                    left =
-                        left >
-                        right;
-
+                    left = left > right;
                     break;
-
 
                 case "<=":
-
-                    left =
-                        left <=
-                        right;
-
+                    left = left <= right;
                     break;
-
 
                 case ">=":
-
-                    left =
-                        left >=
-                        right;
-
+                    left = left >= right;
                     break;
             }
         }
 
+        return left;
+    }
+
+    parseAdd() {
+        let left = this.parseMultiply();
+
+        while (
+            ["+", "-"].includes(
+                this.current().value
+            )
+        ) {
+            const op = this.next().value;
+            const right = this.parseMultiply();
+
+            left = op === "+"
+                ? left + right
+                : left - right;
+        }
 
         return left;
     }
 
-
-
-    contains(
-        container,
-        value
-    ) {
-
-        if (
-            Array.isArray(
-                container
-            ) ||
-            typeof container ===
-                "string"
-        ) {
-
-            return container
-                .includes(
-                    value
-                );
-        }
-
-
-        if (
-            container &&
-            typeof container ===
-                "object"
-        ) {
-
-            return Object.prototype
-                .hasOwnProperty
-                .call(
-                    container,
-                    value
-                );
-        }
-
-
-        return false;
-    }
-
-
-
-    parseAdditive() {
-
-        let left =
-            this.parseMultiplicative();
-
+    parseMultiply() {
+        let left = this.parseUnary();
 
         while (
-            [
-                "+",
-                "-"
-            ].includes(
-                this.current()
-                    .value
+            ["*", "/", "//", "%"].includes(
+                this.current().value
             )
         ) {
-
-            const operator =
-                this.next()
-                    .value;
-
-
-            const right =
-                this.parseMultiplicative();
-
+            const op = this.next().value;
+            const right = this.parseUnary();
 
             if (
-                operator ===
-                "+"
+                (op === "/" || op === "//" || op === "%") &&
+                right === 0
             ) {
+                throw new Error(
+                    "Division par zéro."
+                );
+            }
 
-                left =
-                    left +
-                    right;
+            if (op === "*") {
+                left *= right;
+            }
 
-            } else {
+            if (op === "/") {
+                left /= right;
+            }
 
-                left =
-                    left -
-                    right;
+            if (op === "//") {
+                left = Math.floor(left / right);
+            }
+
+            if (op === "%") {
+                left = ((left % right) + right) % right;
             }
         }
 
-
         return left;
     }
-
-
-
-    parseMultiplicative() {
-
-        let left =
-            this.parsePower();
-
-
-        while (
-            [
-                "*",
-                "/",
-                "//",
-                "%"
-            ].includes(
-                this.current()
-                    .value
-            )
-        ) {
-
-            const operator =
-                this.next()
-                    .value;
-
-
-            const right =
-                this.parsePower();
-
-
-            switch (
-                operator
-            ) {
-
-                case "*":
-
-                    left =
-                        left *
-                        right;
-
-                    break;
-
-
-                case "/":
-
-                    left =
-                        left /
-                        right;
-
-                    break;
-
-
-                case "//":
-
-                    left =
-                        Math.floor(
-                            left /
-                            right
-                        );
-
-                    break;
-
-
-                case "%":
-
-                    left =
-                        left %
-                        right;
-
-                    break;
-            }
-        }
-
-
-        return left;
-    }
-
-
-
-    parsePower() {
-
-        let left =
-            this.parseUnary();
-
-
-        if (
-            this.matchValue(
-                "**"
-            )
-        ) {
-
-            const right =
-                this.parsePower();
-
-
-            left =
-                left **
-                right;
-        }
-
-
-        return left;
-    }
-
-
 
     parseUnary() {
-
-        if (
-            this.matchValue(
-                "-"
-            )
-        ) {
-
+        if (this.match("-")) {
             return -Number(
                 this.parseUnary()
             );
         }
 
-
-        if (
-            this.matchValue(
-                "+"
-            )
-        ) {
-
+        if (this.match("+")) {
             return Number(
                 this.parseUnary()
             );
         }
 
+        let result = this.parsePostfix();
 
-        return this.parsePostfix();
+        if (this.match("**")) {
+            result **= this.parseUnary();
+        }
+
+        return result;
     }
 
-
-
     parsePostfix() {
+        let value = this.parsePrimary();
 
-        let value =
-            this.parsePrimary();
+        while (true) {
+            if (this.match("(")) {
+                const args = [];
 
-
-        while (
-            true
-        ) {
-
-            /*
-             * CALL
-             */
-
-            if (
-                this.matchValue(
-                    "("
-                )
-            ) {
-
-                const args =
-                    [];
-
-
-                if (
-                    !this.matchValue(
-                        ")"
-                    )
-                ) {
-
+                if (!this.match(")")) {
                     do {
-
                         args.push(
                             this.parseOr()
                         );
+                    } while (this.match(","));
 
-                    } while (
-                        this.matchValue(
-                            ","
-                        )
-                    );
-
-
-                    this.expectValue(
-                        ")"
-                    );
+                    this.expect(")");
                 }
 
+                value = this.interpreter.callValue(
+                    value,
+                    args
+                );
+            } else if (this.match("[")) {
+                const key = this.parseOr();
 
-                value =
-                    this.interpreter
-                        .callValue(
-                            value,
-                            args
-                        );
+                this.expect("]");
 
-
-                continue;
-            }
-
-
-            /*
-             * INDEX
-             */
-
-            if (
-                this.matchValue(
-                    "["
-                )
-            ) {
+                if (value == null) {
+                    throw new Error(
+                        "Index sur une valeur vide."
+                    );
+                }
 
                 const index =
-                    this.parseOr();
+                    typeof key === "number" &&
+                    key < 0 &&
+                    (
+                        Array.isArray(value) ||
+                        typeof value === "string"
+                    )
+                        ? value.length + key
+                        : key;
 
-
-                this.expectValue(
-                    "]"
-                );
-
+                value = value[index];
+            } else if (this.match(".")) {
+                const name = this.next();
 
                 if (
-                    value ===
-                        null ||
-                    value ===
-                        undefined
+                    !name ||
+                    name.type !== "id"
                 ) {
-
                     throw new Error(
-                        "Index utilisé sur une valeur vide."
+                        "Nom de méthode attendu."
                     );
                 }
 
+                const receiver = value;
 
-                value =
-                    value[
-                        index
-                    ];
+                const methods = {
+                    append: item => {
+                        if (!Array.isArray(receiver)) {
+                            throw new Error(
+                                "append() demande une liste."
+                            );
+                        }
 
+                        receiver.push(item);
+                        return null;
+                    },
 
-                continue;
+                    pop: () => {
+                        if (!Array.isArray(receiver)) {
+                            throw new Error(
+                                "pop() demande une liste."
+                            );
+                        }
+
+                        return receiver.pop();
+                    },
+
+                    count: item =>
+                        Array.isArray(receiver)
+                            ? receiver.filter(
+                                x => x === item
+                            ).length
+                            : 0
+                };
+
+                if (!(name.value in methods)) {
+                    throw new Error(
+                        `Méthode inconnue : ${name.value}`
+                    );
+                }
+
+                value = methods[name.value];
+            } else {
+                break;
             }
-
-
-            break;
         }
-
 
         return value;
     }
 
-
-
     parsePrimary() {
+        const token = this.next();
 
-        const token =
-            this.next();
-
+        if (!token) {
+            throw new Error(
+                "Expression incomplète."
+            );
+        }
 
         if (
-            token.type ===
-            "number"
+            token.type === "number" ||
+            token.type === "string"
         ) {
-
             return token.value;
         }
 
-
-        if (
-            token.type ===
-            "string"
-        ) {
-
-            return token.value;
-        }
-
-
-        if (
-            token.type ===
-            "identifier"
-        ) {
-
-            switch (
-                token.value
-            ) {
-
-                case "True":
-
-                    return true;
-
-
-                case "False":
-
-                    return false;
-
-
-                case "None":
-
-                    return null;
+        if (token.type === "id") {
+            if (token.value === "True") {
+                return true;
             }
 
+            if (token.value === "False") {
+                return false;
+            }
 
-            return this.scope
-                .get(
-                    token.value
-                );
-        }
+            if (token.value === "None") {
+                return null;
+            }
 
-
-        /*
-         * Parenthèses
-         */
-
-        if (
-            token.value ===
-            "("
-        ) {
-
-            const value =
-                this.parseOr();
-
-
-            this.expectValue(
-                ")"
+            return this.scope.get(
+                token.value
             );
-
-
-            return value;
         }
 
+        if (token.value === "(") {
+            const result = this.parseOr();
 
-        /*
-         * Liste
-         */
+            this.expect(")");
+            return result;
+        }
 
-        if (
-            token.value ===
-            "["
-        ) {
+        if (token.value === "[") {
+            const result = [];
 
-            const values =
-                [];
-
-
-            if (
-                !this.matchValue(
-                    "]"
-                )
-            ) {
-
+            if (!this.match("]")) {
                 do {
-
-                    values.push(
+                    result.push(
                         this.parseOr()
                     );
+                } while (this.match(","));
 
-                } while (
-                    this.matchValue(
-                        ","
-                    )
-                );
-
-
-                this.expectValue(
-                    "]"
-                );
+                this.expect("]");
             }
 
-
-            return values;
+            return result;
         }
 
+        if (token.value === "{") {
+            const result = Object.create(null);
 
-        /*
-         * Dictionnaire
-         */
-
-        if (
-            token.value ===
-            "{"
-        ) {
-
-            const object =
-                {};
-
-
-            if (
-                !this.matchValue(
-                    "}"
-                )
-            ) {
-
+            if (!this.match("}")) {
                 do {
+                    const key = this.parseOr();
 
-                    const key =
+                    this.expect(":");
+
+                    result[String(key)] =
                         this.parseOr();
+                } while (this.match(","));
 
-
-                    this.expectValue(
-                        ":"
-                    );
-
-
-                    const value =
-                        this.parseOr();
-
-
-                    object[
-                        key
-                    ] =
-                        value;
-
-                } while (
-                    this.matchValue(
-                        ","
-                    )
-                );
-
-
-                this.expectValue(
-                    "}"
-                );
+                this.expect("}");
             }
 
-
-            return object;
+            return result;
         }
-
 
         throw new Error(
             "Expression incomplète."
@@ -1708,7314 +725,994 @@ class PytExpressionParser {
     }
 }
 
-
-
 /* =========================================================
    INTERPRÉTEUR PYTHON SIMPLIFIÉ
 ========================================================= */
 
 class PytInterpreter {
+    constructor(game, source) {
+        this.game = game;
+        this.source = String(source || "");
+        this.scope = new PytScope();
 
-    constructor(
-        game,
-        source
-    ) {
-
-        this.game =
-            game;
-
-
-        this.source =
-            String(
-                source ||
-                ""
-            );
-
-
-        this.globalScope =
-            new PytScope();
-
-
-        this.currentLine =
-            0;
-
-
-        this.maxLoopIterations =
-            600;
-
+        this.currentLine = 0;
+        this.iterations = 0;
+        this.calls = 0;
 
         this.installBuiltins();
     }
 
+    truth(value) {
+        if (Array.isArray(value)) {
+            return value.length > 0;
+        }
 
+        if (
+            value &&
+            typeof value === "object"
+        ) {
+            return Object.keys(value).length > 0;
+        }
 
-    /* =====================================================
-       BUILTINS
-    ===================================================== */
+        return Boolean(value);
+    }
 
     installBuiltins() {
-
-        const bind =
-            (
-                name,
-                callback
-            ) => {
-
-                this.globalScope
-                    .set(
-                        name,
-                        callback
-                    );
-            };
-
-
-        /*
-         * Déplacement officiel.
-         */
+        const bind = (name, fn) =>
+            this.scope.set(name, fn);
 
         bind(
             "forward",
-            distance =>
-                this.game
-                    .apiForward(
-                        distance
-                    )
+            n => this.game.apiForward(n)
         );
-
 
         bind(
             "backward",
-            distance =>
-                this.game
-                    .apiBackward(
-                        distance
-                    )
+            n => this.game.apiBackward(n)
         );
-
 
         bind(
             "left",
-            degrees =>
-                this.game
-                    .apiLeft(
-                        degrees
-                    )
+            n => this.game.apiLeft(n)
         );
-
 
         bind(
             "right",
-            degrees =>
-                this.game
-                    .apiRight(
-                        degrees
-                    )
+            n => this.game.apiRight(n)
         );
-
-
-        /*
-         * Anciens alias pour ne pas casser
-         * les niveaux déjà créés.
-         */
 
         bind(
             "avancer",
-            distance =>
-                this.game
-                    .apiForward(
-                        distance
-                    )
+            n => this.game.apiForward(n)
         );
-
 
         bind(
             "reculer",
-            distance =>
-                this.game
-                    .apiBackward(
-                        distance
-                    )
+            n => this.game.apiBackward(n)
         );
-
 
         bind(
             "tourner_gauche",
-            degrees =>
-                this.game
-                    .apiLeft(
-                        degrees ??
-                        90
-                    )
+            n => this.game.apiLeft(n)
         );
-
 
         bind(
             "tourner_droite",
-            degrees =>
-                this.game
-                    .apiRight(
-                        degrees ??
-                        90
-                    )
+            n => this.game.apiRight(n)
         );
-
-
-        /*
-         * Turtle supplémentaire.
-         */
 
         bind(
             "setheading",
-            degrees =>
-                this.game
-                    .apiSetHeading(
-                        degrees
-                    )
+            n => this.game.apiSetHeading(n)
         );
-
 
         bind(
             "goto",
-            (
-                x,
-                y
-            ) =>
-                this.game
-                    .apiGoto(
-                        x,
-                        y
-                    )
+            (x, y) => this.game.apiGoto(x, y)
         );
-
-
-        /*
-         * Informations environnement.
-         */
 
         bind(
             "front_is_clear",
-            () =>
-                this.game
-                    .frontIsClear()
+            () => this.game.frontIsClear()
         );
-
 
         bind(
             "devant_libre",
-            () =>
-                this.game
-                    .frontIsClear()
+            () => this.game.frontIsClear()
         );
-
 
         bind(
             "on_object",
-            () =>
-                this.game
-                    .robotOnObject()
+            () => this.game.robotOnObject()
         );
-
 
         bind(
             "sur_objet",
-            () =>
-                this.game
-                    .robotOnObject()
+            () => this.game.robotOnObject()
         );
-
-
-        bind(
-            "position_x",
-            () =>
-                this.game
-                    .getRobotX()
-        );
-
-
-        bind(
-            "position_y",
-            () =>
-                this.game
-                    .getRobotY()
-        );
-
 
         bind(
             "xcor",
-            () =>
-                this.game
-                    .getRobotX()
+            () => this.game.robot.x
         );
-
 
         bind(
             "ycor",
-            () =>
-                this.game
-                    .getRobotY()
+            () => this.game.robot.y
         );
 
+        bind(
+            "position_x",
+            () => this.game.robot.x
+        );
+
+        bind(
+            "position_y",
+            () => this.game.robot.y
+        );
 
         bind(
             "direction",
-            () =>
-                this.game
-                    .getRobotDirection()
+            () => this.game.robot.direction
         );
-
 
         bind(
             "inventory_contains",
-            item =>
-                this.game
-                    .inventoryContains(
-                        item
-                    )
+            item => this.game.inventoryContains(item)
         );
-
 
         bind(
             "inventaire_contient",
-            item =>
-                this.game
-                    .inventoryContains(
-                        item
-                    )
+            item => this.game.inventoryContains(item)
         );
 
+        bind("print", (...items) => {
+            this.game.programOutput.push(
+                items
+                    .map(x => this.pythonString(x))
+                    .join(" ")
+            );
 
-        /*
-         * Python.
-         */
-
-        bind(
-            "range",
-            (
-                start,
-                stop,
-                step
-            ) =>
-                this.makeRange(
-                    start,
-                    stop,
-                    step
-                )
-        );
-
+            return null;
+        });
 
         bind(
             "len",
-            value => {
-
-                if (
-                    value ===
-                        null ||
-                    value ===
-                        undefined
-                ) {
-
-                    return 0;
-                }
-
-
-                if (
-                    typeof value.length ===
-                    "number"
-                ) {
-
-                    return value.length;
-                }
-
-
-                if (
-                    typeof value ===
-                    "object"
-                ) {
-
-                    return Object.keys(
-                        value
-                    ).length;
-                }
-
-
-                return 0;
-            }
+            value =>
+                value == null
+                    ? 0
+                    : (
+                        value.length ??
+                        Object.keys(value).length
+                    )
         );
-
-
-        bind(
-            "print",
-            (...values) => {
-
-                const text =
-                    values
-                        .map(
-                            value =>
-                                this.pythonString(
-                                    value
-                                )
-                        )
-                        .join(
-                            " "
-                        );
-
-
-                this.game
-                    .programOutput
-                    .push(
-                        text
-                    );
-
-
-                return null;
-            }
-        );
-
 
         bind(
             "int",
-            value =>
-                parseInt(
-                    value,
-                    10
-                )
+            value => parseInt(value, 10)
         );
-
 
         bind(
             "float",
-            value =>
-                Number(
-                    value
-                )
+            value => Number(value)
         );
-
 
         bind(
             "str",
-            value =>
-                this.pythonString(
-                    value
-                )
+            value => this.pythonString(value)
         );
-
 
         bind(
             "round",
-            (
-                value,
-                digits = 0
-            ) => {
+            (value, digits = 0) => {
+                const n = 10 ** Number(digits);
 
-                const factor =
-                    10 **
-                    Number(
-                        digits
-                    );
-
-
-                return Math.round(
-                    Number(
-                        value
-                    ) *
-                    factor
-                ) /
-                factor;
+                return Math.round(value * n) / n;
             }
         );
-
 
         bind(
             "min",
-            (...values) => {
-
-                const flattened =
-                    (
-                        values.length ===
-                            1 &&
-                        Array.isArray(
-                            values[0]
-                        )
+            (...args) =>
+                Math.min(
+                    ...(
+                        args.length === 1 &&
+                        Array.isArray(args[0])
+                            ? args[0]
+                            : args
                     )
-                        ? values[0]
-                        : values;
-
-
-                return Math.min(
-                    ...flattened
-                );
-            }
+                )
         );
-
 
         bind(
             "max",
-            (...values) => {
-
-                const flattened =
-                    (
-                        values.length ===
-                            1 &&
-                        Array.isArray(
-                            values[0]
-                        )
+            (...args) =>
+                Math.max(
+                    ...(
+                        args.length === 1 &&
+                        Array.isArray(args[0])
+                            ? args[0]
+                            : args
                     )
-                        ? values[0]
-                        : values;
+                )
+        );
 
+        bind(
+            "abs",
+            value => Math.abs(Number(value))
+        );
 
-                return Math.max(
-                    ...flattened
-                );
+        bind(
+            "sum",
+            items => items.reduce(
+                (a, b) => a + b,
+                0
+            )
+        );
+
+        bind(
+            "range",
+            (start, end, step = 1) => {
+                if (end === undefined) {
+                    end = start;
+                    start = 0;
+                }
+
+                start = Number(start);
+                end = Number(end);
+                step = Number(step);
+
+                if (
+                    ![start, end, step].every(
+                        Number.isFinite
+                    ) ||
+                    step === 0
+                ) {
+                    throw new Error(
+                        "range() invalide."
+                    );
+                }
+
+                const result = [];
+
+                for (
+                    let i = start;
+                    step > 0 ? i < end : i > end;
+                    i += step
+                ) {
+                    if (result.length >= 2000) {
+                        throw new Error(
+                            "range() est trop grand."
+                        );
+                    }
+
+                    result.push(i);
+                }
+
+                return result;
             }
         );
     }
 
-
-
-    makeRange(
-        start,
-        stop,
-        step
-    ) {
-
-        if (
-            stop ===
-            undefined
-        ) {
-
-            stop =
-                start;
-
-            start =
-                0;
-        }
-
-
-        if (
-            step ===
-                undefined ||
-            step ===
-                null
-        ) {
-
-            step =
-                1;
-        }
-
-
-        start =
-            Number(
-                start
-            );
-
-
-        stop =
-            Number(
-                stop
-            );
-
-
-        step =
-            Number(
-                step
-            );
-
-
-        if (
-            step ===
-            0
-        ) {
-
-            throw new Error(
-                "range() ne peut pas avoir un pas de 0."
-            );
-        }
-
-
-        const values =
-            [];
-
-
-        let guard =
-            0;
-
-
-        if (
-            step >
-            0
-        ) {
-
-            for (
-                let value = start;
-                value < stop;
-                value += step
-            ) {
-
-                values.push(
-                    value
-                );
-
-
-                guard +=
-                    1;
-
-
-                if (
-                    guard >
-                    10000
-                ) {
-
-                    break;
-                }
-            }
-
-        } else {
-
-            for (
-                let value = start;
-                value > stop;
-                value += step
-            ) {
-
-                values.push(
-                    value
-                );
-
-
-                guard +=
-                    1;
-
-
-                if (
-                    guard >
-                    10000
-                ) {
-
-                    break;
-                }
-            }
-        }
-
-
-        return values;
-    }
-
-
-
     pythonString(value) {
-
-        if (
-            value ===
-            true
-        ) {
-
+        if (value === true) {
             return "True";
         }
 
-
-        if (
-            value ===
-            false
-        ) {
-
+        if (value === false) {
             return "False";
         }
 
-
-        if (
-            value ===
-            null ||
-            value ===
-            undefined
-        ) {
-
+        if (value == null) {
             return "None";
         }
 
-
-        if (
-            Array.isArray(
-                value
-            )
-        ) {
-
+        if (Array.isArray(value)) {
             return `[${value
-                .map(
-                    item =>
-                        this.pythonString(
-                            item
-                        )
-                )
+                .map(x => this.pythonString(x))
                 .join(", ")}]`;
         }
 
-
-        if (
-            typeof value ===
-            "object"
-        ) {
-
-            return JSON.stringify(
-                value
-            );
+        if (typeof value === "object") {
+            return JSON.stringify(value);
         }
 
-
-        return String(
-            value
-        );
+        return String(value);
     }
 
-
-
-    /* =====================================================
-       PRÉPARATION DU CODE
-    ===================================================== */
-
     stripComment(line) {
+        let quote = null;
+        let escaped = false;
 
-        let quote =
-            null;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
 
-
-        let escaped =
-            false;
-
-
-        for (
-            let i = 0;
-            i < line.length;
-            i += 1
-        ) {
-
-            const char =
-                line[i];
-
-
-            if (
-                escaped
-            ) {
-
-                escaped =
-                    false;
-
+            if (escaped) {
+                escaped = false;
                 continue;
             }
 
-
-            if (
-                char ===
-                "\\"
-            ) {
-
-                escaped =
-                    true;
-
+            if (ch === "\\") {
+                escaped = true;
                 continue;
             }
 
-
-            if (
-                quote
-            ) {
-
-                if (
-                    char ===
-                    quote
-                ) {
-
-                    quote =
-                        null;
+            if (quote) {
+                if (ch === quote) {
+                    quote = null;
                 }
 
-
                 continue;
             }
 
-
-            if (
-                char ===
-                    "'" ||
-                char ===
-                    '"'
-            ) {
-
-                quote =
-                    char;
-
+            if (ch === "'" || ch === '"') {
+                quote = ch;
                 continue;
             }
 
-
-            if (
-                char ===
-                "#"
-            ) {
-
-                return line.slice(
-                    0,
-                    i
-                );
+            if (ch === "#") {
+                return line.slice(0, i);
             }
         }
-
 
         return line;
     }
 
-
-
     bracketDepth(text) {
+        let depth = 0;
+        let quote = null;
+        let escaped = false;
 
-        let depth =
-            0;
-
-
-        let quote =
-            null;
-
-
-        let escaped =
-            false;
-
-
-        for (
-            const char
-            of text
-        ) {
-
-            if (
-                escaped
-            ) {
-
-                escaped =
-                    false;
-
+        for (const ch of text) {
+            if (escaped) {
+                escaped = false;
                 continue;
             }
 
-
-            if (
-                char ===
-                "\\"
-            ) {
-
-                escaped =
-                    true;
-
+            if (ch === "\\") {
+                escaped = true;
                 continue;
             }
 
-
-            if (
-                quote
-            ) {
-
-                if (
-                    char ===
-                    quote
-                ) {
-
-                    quote =
-                        null;
+            if (quote) {
+                if (ch === quote) {
+                    quote = null;
                 }
 
-
                 continue;
             }
 
-
-            if (
-                char ===
-                    "'" ||
-                char ===
-                    '"'
-            ) {
-
-                quote =
-                    char;
-
+            if (ch === "'" || ch === '"') {
+                quote = ch;
                 continue;
             }
 
-
-            if (
-                "([{".includes(
-                    char
-                )
-            ) {
-
-                depth +=
-                    1;
+            if ("([{ ".includes(ch) && ch !== " ") {
+                depth++;
             }
 
-
-            if (
-                ")]}".includes(
-                    char
-                )
-            ) {
-
-                depth -=
-                    1;
+            if (")] }".includes(ch) && ch !== " ") {
+                depth--;
             }
         }
-
 
         return depth;
     }
 
-
-
     prepareLines() {
+        const raw = this.source
+            .replace(/\r\n?/g, "\n")
+            .split("\n");
 
-        const raw =
-            this.source
-                .replace(
-                    /\r\n?/g,
-                    "\n"
-                )
-                .split(
-                    "\n"
+        const lines = [];
+
+        let buffer = "";
+        let firstLine = 0;
+        let indent = 0;
+
+        raw.forEach((line, index) => {
+            const clean = this.stripComment(line);
+            const content = clean.trim();
+
+            if (!content && !buffer) {
+                return;
+            }
+
+            if (!buffer) {
+                firstLine = index + 1;
+
+                indent = clean
+                    .match(/^[ \t]*/)[0]
+                    .replace(/\t/g, "    ")
+                    .length;
+            }
+
+            buffer += (
+                buffer ? " " : ""
+            ) + content;
+
+            if (this.bracketDepth(buffer) > 0) {
+                return;
+            }
+
+            if (this.bracketDepth(buffer) < 0) {
+                throw new Error(
+                    `Parenthèses incorrectes à la ligne ${firstLine}.`
                 );
+            }
 
-
-        const prepared =
-            [];
-
-
-        let buffer =
-            null;
-
-
-        let bufferLine =
-            0;
-
-
-        let bufferIndent =
-            0;
-
-
-        raw.forEach(
-            (
-                rawLine,
-                index
-            ) => {
-
-                const withoutComment =
-                    this.stripComment(
-                        rawLine
-                    );
-
-
-                if (
-                    buffer !==
-                    null
-                ) {
-
-                    buffer +=
-                        " " +
-                        withoutComment
-                            .trim();
-
-
-                    if (
-                        this.bracketDepth(
-                            buffer
-                        ) <=
-                        0
-                    ) {
-
-                        prepared.push({
-
-                            line:
-                                bufferLine,
-
-                            indent:
-                                bufferIndent,
-
-                            text:
-                                buffer.trim()
-                        });
-
-
-                        buffer =
-                            null;
-                    }
-
-
-                    return;
-                }
-
-
-                const trimmed =
-                    withoutComment
-                        .trim();
-
-
-                if (
-                    trimmed ===
-                    ""
-                ) {
-
-                    continue;
-                }
-
-
-                const spaces =
-                    withoutComment
-                        .match(
-                            /^[ \t]*/
-                        )[0]
-                        .replace(
-                            /\t/g,
-                            "    "
-                        )
-                        .length;
-
-
-                if (
-                    this.bracketDepth(
-                        trimmed
-                    ) >
-                    0
-                ) {
-
-                    buffer =
-                        trimmed;
-
-
-                    bufferLine =
-                        index +
-                        1;
-
-
-                    bufferIndent =
-                        spaces;
-
-
-                    return;
-                }
-
-
-                prepared.push({
-
-                    line:
-                        index +
-                        1,
-
-                    indent:
-                        spaces,
-
-                    text:
-                        trimmed
+            if (buffer.trim()) {
+                lines.push({
+                    line: firstLine,
+                    indent,
+                    text: buffer.trim(),
+                    children: []
                 });
             }
-        );
 
+            buffer = "";
+        });
 
-        if (
-            buffer !==
-            null
-        ) {
-
+        if (buffer) {
             throw new Error(
-                "Parenthèse, liste ou dictionnaire non terminé."
+                `Parenthèse non fermée à la ligne ${firstLine}.`
             );
         }
 
-
-        return prepared;
+        return lines;
     }
 
-
-
-    /* =====================================================
-       ARBRE D'INDENTATION
-    ===================================================== */
-
     buildTree() {
+        const root = {
+            indent: -1,
+            children: []
+        };
 
-        const lines =
-            this.prepareLines();
+        const stack = [root];
 
-
-        const root =
-            {
-
-                indent:
-                    -1,
-
-                children:
-                    []
-            };
-
-
-        const stack =
-            [
-                root
-            ];
-
-
-        for (
-            const line
-            of lines
-        ) {
-
+        for (const node of this.prepareLines()) {
             while (
-                stack.length >
-                    1 &&
-                line.indent <=
-                    stack[
-                        stack.length -
-                        1
-                    ].indent
+                stack.length > 1 &&
+                node.indent <=
+                    stack[stack.length - 1].indent
             ) {
-
                 stack.pop();
             }
 
-
             const parent =
-                stack[
-                    stack.length -
-                    1
-                ];
+                stack[stack.length - 1];
 
+            parent.children.push(node);
 
-            const node =
-                {
-
-                    ...line,
-
-                    children:
-                        []
-                };
-
-
-            parent.children.push(
-                node
-            );
-
-
-            if (
-                line.text.endsWith(
-                    ":"
-                )
-            ) {
-
-                stack.push(
-                    node
-                );
+            if (node.text.endsWith(":")) {
+                stack.push(node);
             }
         }
-
 
         return root.children;
     }
 
-
-
-    /* =====================================================
-       EXÉCUTION
-    ===================================================== */
-
-    execute() {
-
-        const nodes =
-            this.buildTree();
-
-
-        this.executeNodes(
-            nodes,
-            this.globalScope
-        );
-
-
-        return {
-
-            output:
-                this.game
-                    .programOutput
-                    .slice()
-        };
-    }
-
-
-
-    executeNodes(
-        nodes,
-        scope
-    ) {
-
-        for (
-            let index = 0;
-            index < nodes.length;
-            index += 1
-        ) {
-
-            const node =
-                nodes[
-                    index
-                ];
-
-
-            this.currentLine =
-                node.line;
-
-
-            const text =
-                node.text;
-
-
-            /*
-             * IF / ELIF / ELSE
-             */
-
-            if (
-                /^if\b/.test(
-                    text
-                )
-            ) {
-
-                const chain =
-                    [
-                        node
-                    ];
-
-
-                let nextIndex =
-                    index +
-                    1;
-
-
-                while (
-                    nextIndex <
-                        nodes.length &&
-                    /^(?:elif\b|else\s*:)/.test(
-                        nodes[
-                            nextIndex
-                        ].text
-                    )
-                ) {
-
-                    chain.push(
-                        nodes[
-                            nextIndex
-                        ]
-                    );
-
-
-                    nextIndex +=
-                        1;
-                }
-
-
-                this.executeIfChain(
-                    chain,
-                    scope
-                );
-
-
-                index =
-                    nextIndex -
-                    1;
-
-
-                continue;
-            }
-
-
-            /*
-             * ELIF / ELSE isolé
-             */
-
-            if (
-                /^(?:elif\b|else\s*:)/.test(
-                    text
-                )
-            ) {
-
-                continue;
-            }
-
-
-            /*
-             * FOR
-             */
-
-            if (
-                /^for\b/.test(
-                    text
-                )
-            ) {
-
-                this.executeFor(
-                    node,
-                    scope
-                );
-
-
-                continue;
-            }
-
-
-            /*
-             * WHILE
-             */
-
-            if (
-                /^while\b/.test(
-                    text
-                )
-            ) {
-
-                this.executeWhile(
-                    node,
-                    scope
-                );
-
-
-                continue;
-            }
-
-
-            /*
-             * DEF
-             */
-
-            if (
-                /^def\b/.test(
-                    text
-                )
-            ) {
-
-                this.executeDefinition(
-                    node,
-                    scope
-                );
-
-
-                continue;
-            }
-
-
-            /*
-             * RETURN
-             */
-
-            if (
-                /^return(?:\s|$)/.test(
-                    text
-                )
-            ) {
-
-                const expression =
-                    text
-                        .replace(
-                            /^return\b/,
-                            ""
-                        )
-                        .trim();
-
-
-                const value =
-                    expression
-                        ? this.evaluate(
-                            expression,
-                            scope
-                        )
-                        : null;
-
-
-                throw new PytReturnSignal(
-                    value
-                );
-            }
-
-
-            /*
-             * BREAK
-             */
-
-            if (
-                text ===
-                "break"
-            ) {
-
-                throw new PytBreakSignal();
-            }
-
-
-            /*
-             * PASS
-             */
-
-            if (
-                text ===
-                "pass"
-            ) {
-
-                continue;
-            }
-
-
-            this.executeSimpleStatement(
-                text,
-                scope
-            );
-        }
-    }
-
-
-
-    executeIfChain(
-        chain,
-        scope
-    ) {
-
-        for (
-            const node
-            of chain
-        ) {
-
-            const text =
-                node.text;
-
-
-            if (
-                /^if\b/.test(
-                    text
-                )
-            ) {
-
-                const expression =
-                    text
-                        .replace(
-                            /^if\b/,
-                            ""
-                        )
-                        .replace(
-                            /:\s*$/,
-                            ""
-                        )
-                        .trim();
-
-
-                if (
-                    Boolean(
-                        this.evaluate(
-                            expression,
-                            scope
-                        )
-                    )
-                ) {
-
-                    this.executeNodes(
-                        node.children,
-                        scope
-                    );
-
-
-                    return;
-                }
-
-
-                continue;
-            }
-
-
-            if (
-                /^elif\b/.test(
-                    text
-                )
-            ) {
-
-                const expression =
-                    text
-                        .replace(
-                            /^elif\b/,
-                            ""
-                        )
-                        .replace(
-                            /:\s*$/,
-                            ""
-                        )
-                        .trim();
-
-
-                if (
-                    Boolean(
-                        this.evaluate(
-                            expression,
-                            scope
-                        )
-                    )
-                ) {
-
-                    this.executeNodes(
-                        node.children,
-                        scope
-                    );
-
-
-                    return;
-                }
-
-
-                continue;
-            }
-
-
-            if (
-                /^else\s*:/.test(
-                    text
-                )
-            ) {
-
-                this.executeNodes(
-                    node.children,
-                    scope
-                );
-
-
-                return;
-            }
-        }
-    }
-
-
-
-    executeFor(
-        node,
-        scope
-    ) {
-
-        const match =
-            node.text.match(
-                /^for\s+([A-Za-z_]\w*)\s+in\s+(.+):$/
-            );
-
-
-        if (
-            !match
-        ) {
-
-            throw new Error(
-                "Boucle for invalide."
-            );
-        }
-
-
-        const variable =
-            match[1];
-
-
-        const iterable =
-            this.evaluate(
-                match[2],
-                scope
-            );
-
-
-        if (
-            iterable ===
-                null ||
-            iterable ===
-                undefined ||
-            typeof iterable[
-                Symbol.iterator
-            ] !==
-                "function"
-        ) {
-
-            throw new Error(
-                "La valeur utilisée dans for n'est pas parcourable."
-            );
-        }
-
-
-        let iterations =
-            0;
-
-
-        for (
-            const value
-            of iterable
-        ) {
-
-            iterations +=
-                1;
-
-
-            if (
-                iterations >
-                this.maxLoopIterations
-            ) {
-
-                throw new Error(
-                    "La boucle for effectue trop d'itérations."
-                );
-            }
-
-
-            scope.set(
-                variable,
-                value
-            );
-
-
-            try {
-
-                this.executeNodes(
-                    node.children,
-                    scope
-                );
-
-            } catch (
-                signal
-            ) {
-
-                if (
-                    signal instanceof
-                    PytBreakSignal
-                ) {
-
-                    break;
-                }
-
-
-                throw signal;
-            }
-        }
-    }
-
-
-
-    executeWhile(
-        node,
-        scope
-    ) {
-
-        const expression =
-            node.text
-                .replace(
-                    /^while\b/,
-                    ""
-                )
-                .replace(
-                    /:\s*$/,
-                    ""
-                )
-                .trim();
-
-
-        let iterations =
-            0;
-
-
-        while (
-            Boolean(
-                this.evaluate(
-                    expression,
-                    scope
-                )
-            )
-        ) {
-
-            iterations +=
-                1;
-
-
-            if (
-                iterations >
-                this.maxLoopIterations
-            ) {
-
-                throw new Error(
-                    "La boucle while semble infinie."
-                );
-            }
-
-
-            try {
-
-                this.executeNodes(
-                    node.children,
-                    scope
-                );
-
-            } catch (
-                signal
-            ) {
-
-                if (
-                    signal instanceof
-                    PytBreakSignal
-                ) {
-
-                    break;
-                }
-
-
-                throw signal;
-            }
-        }
-    }
-
-
-
-    executeDefinition(
-        node,
-        scope
-    ) {
-
-        const match =
-            node.text.match(
-                /^def\s+([A-Za-z_]\w*)\s*\((.*?)\)\s*:$/
-            );
-
-
-        if (
-            !match
-        ) {
-
-            throw new Error(
-                "Définition de fonction invalide."
-            );
-        }
-
-
-        const name =
-            match[1];
-
-
-        const params =
-            match[2]
-                .split(
-                    ","
-                )
-                .map(
-                    param =>
-                        param.trim()
-                )
-                .filter(
-                    Boolean
-                );
-
-
-        scope.set(
-            name,
-            {
-
-                __pytFunction:
-                    true,
-
-                name,
-
-                params,
-
-                body:
-                    node.children,
-
-                closure:
-                    scope
-            }
-        );
-    }
-
-
-
-    executeSimpleStatement(
-        text,
-        scope
-    ) {
-
-        /*
-         * Affectation augmentée.
-         */
-
-        const augmented =
-            text.match(
-                /^([A-Za-z_]\w*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/
-            );
-
-
-        if (
-            augmented
-        ) {
-
-            const name =
-                augmented[1];
-
-
-            const operator =
-                augmented[2];
-
-
-            const right =
-                this.evaluate(
-                    augmented[3],
-                    scope
-                );
-
-
-            const left =
-                scope.get(
-                    name
-                );
-
-
-            switch (
-                operator
-            ) {
-
-                case "+=":
-
-                    scope.set(
-                        name,
-                        left +
-                        right
-                    );
-
-                    return;
-
-
-                case "-=":
-
-                    scope.set(
-                        name,
-                        left -
-                        right
-                    );
-
-                    return;
-
-
-                case "*=":
-
-                    scope.set(
-                        name,
-                        left *
-                        right
-                    );
-
-                    return;
-
-
-                case "/=":
-
-                    scope.set(
-                        name,
-                        left /
-                        right
-                    );
-
-                    return;
-
-
-                case "%=":
-
-                    scope.set(
-                        name,
-                        left %
-                        right
-                    );
-
-                    return;
-            }
-        }
-
-
-        /*
-         * Affectation simple.
-         */
-
-        const assignment =
-            text.match(
-                /^([A-Za-z_]\w*)\s*=(?!=)\s*(.+)$/
-            );
-
-
-        if (
-            assignment
-        ) {
-
-            const name =
-                assignment[1];
-
-
-            const value =
-                this.evaluate(
-                    assignment[2],
-                    scope
-                );
-
-
-            scope.set(
-                name,
-                value
-            );
-
-
-            return;
-        }
-
-
-        /*
-         * Expression / appel.
-         */
-
-        this.evaluate(
+    evaluate(text, scope) {
+        return new PytExpressionParser(
             text,
-            scope
-        );
+            scope,
+            this
+        ).parse();
     }
 
-
-
-    evaluate(
-        expression,
-        scope
-    ) {
-
-        const parser =
-            new PytExpressionParser(
-                expression,
-                scope,
-                this
-            );
-
-
-        return parser.parse();
-    }
-
-
-
-    callValue(
-        value,
-        args
-    ) {
-
-        if (
-            typeof value ===
-            "function"
-        ) {
-
-            return value(
-                ...args
-            );
+    callValue(value, args) {
+        if (typeof value === "function") {
+            return value(...args);
         }
-
 
         if (
             value &&
             value.__pytFunction
         ) {
+            if (++this.calls > 200) {
+                throw new Error(
+                    "Trop d'appels de fonction."
+                );
+            }
 
-            return this.callUserFunction(
-                value,
-                args
-            );
+            const scope =
+                new PytScope(value.closure);
+
+            value.params.forEach((p, i) => {
+                scope.set(p, args[i]);
+            });
+
+            try {
+                this.executeNodes(
+                    value.body,
+                    scope
+                );
+            } catch (signal) {
+                if (
+                    signal instanceof PytReturnSignal
+                ) {
+                    return signal.value;
+                }
+
+                throw signal;
+            }
+
+            return null;
         }
-
 
         throw new Error(
             "Cette valeur n'est pas une fonction."
         );
     }
 
+    execute() {
+        this.executeNodes(
+            this.buildTree(),
+            this.scope
+        );
+    }
 
+    executeNodes(nodes, scope) {
+        for (
+            let i = 0;
+            i < nodes.length;
+            i++
+        ) {
+            const node = nodes[i];
 
-    callUserFunction(
-        definition,
-        args
-    ) {
+            this.currentLine = node.line;
 
-        const scope =
-            new PytScope(
-                definition.closure
-            );
+            const text = node.text;
 
+            if (/^if\b/.test(text)) {
+                const chain = [node];
 
-        definition.params
-            .forEach(
-                (
-                    param,
-                    index
-                ) => {
+                while (
+                    i + 1 < nodes.length &&
+                    /^(elif\b|else\s*:)/.test(
+                        nodes[i + 1].text
+                    )
+                ) {
+                    chain.push(nodes[++i]);
+                }
 
-                    scope.set(
-                        param,
-                        args[
-                            index
-                        ]
+                for (const part of chain) {
+                    this.currentLine = part.line;
+
+                    if (
+                        /^else\s*:/.test(part.text) ||
+                        this.truth(
+                            this.evaluate(
+                                part.text
+                                    .replace(
+                                        /^(if|elif)\b/,
+                                        ""
+                                    )
+                                    .replace(
+                                        /:\s*$/,
+                                        ""
+                                    )
+                                    .trim(),
+                                scope
+                            )
+                        )
+                    ) {
+                        this.executeNodes(
+                            part.children,
+                            scope
+                        );
+
+                        break;
+                    }
+                }
+            } else if (
+                /^(elif\b|else\s*:)/.test(text)
+            ) {
+                throw new Error(
+                    "elif/else sans if."
+                );
+            } else if (/^for\b/.test(text)) {
+                const match =
+                    /^for\s+([a-zA-Z_]\w*)\s+in\s+(.+):$/
+                        .exec(text);
+
+                if (!match) {
+                    throw new Error(
+                        "Boucle for invalide."
                     );
                 }
-            );
 
+                const values =
+                    this.evaluate(match[2], scope);
 
-        try {
+                if (
+                    values == null ||
+                    typeof values[Symbol.iterator] !==
+                        "function"
+                ) {
+                    throw new Error(
+                        "for attend une liste ou range()."
+                    );
+                }
 
-            this.executeNodes(
-                definition.body,
-                scope
-            );
+                for (const value of values) {
+                    if (++this.iterations > 2000) {
+                        throw new Error(
+                            "Boucle trop longue."
+                        );
+                    }
 
-        } catch (
-            signal
-        ) {
+                    scope.assign(
+                        match[1],
+                        value
+                    );
 
-            if (
-                signal instanceof
-                PytReturnSignal
+                    try {
+                        this.executeNodes(
+                            node.children,
+                            scope
+                        );
+                    } catch (signal) {
+                        if (
+                            signal instanceof
+                                PytBreakSignal
+                        ) {
+                            break;
+                        }
+
+                        throw signal;
+                    }
+                }
+            } else if (/^while\b/.test(text)) {
+                const condition = text
+                    .replace(/^while\b/, "")
+                    .replace(/:\s*$/, "")
+                    .trim();
+
+                while (
+                    this.truth(
+                        this.evaluate(
+                            condition,
+                            scope
+                        )
+                    )
+                ) {
+                    if (++this.iterations > 2000) {
+                        throw new Error(
+                            "La boucle while semble infinie."
+                        );
+                    }
+
+                    try {
+                        this.executeNodes(
+                            node.children,
+                            scope
+                        );
+                    } catch (signal) {
+                        if (
+                            signal instanceof
+                                PytBreakSignal
+                        ) {
+                            break;
+                        }
+
+                        throw signal;
+                    }
+                }
+            } else if (/^def\b/.test(text)) {
+                const match =
+                    /^def\s+([a-zA-Z_]\w*)\s*\((.*?)\)\s*:$/
+                        .exec(text);
+
+                if (!match) {
+                    throw new Error(
+                        "Définition de fonction invalide."
+                    );
+                }
+
+                const params = match[2]
+                    .split(",")
+                    .map(x => x.trim())
+                    .filter(Boolean);
+
+                scope.set(match[1], {
+                    __pytFunction: true,
+                    params,
+                    body: node.children,
+                    closure: scope
+                });
+            } else if (
+                /^return(?:\s|$)/.test(text)
             ) {
+                const expression = text
+                    .replace(/^return\b/, "")
+                    .trim();
 
-                return signal.value;
+                throw new PytReturnSignal(
+                    expression
+                        ? this.evaluate(
+                            expression,
+                            scope
+                        )
+                        : null
+                );
+            } else if (text === "break") {
+                throw new PytBreakSignal();
+            } else if (text !== "pass") {
+                const augmented =
+                    /^([a-zA-Z_]\w*)\s*(\+=|-=|\*=|\/=|%=)\s*(.+)$/
+                        .exec(text);
+
+                if (augmented) {
+                    const left =
+                        scope.get(augmented[1]);
+
+                    const right =
+                        this.evaluate(
+                            augmented[3],
+                            scope
+                        );
+
+                    const op = augmented[2];
+
+                    const result =
+                        op === "+="
+                            ? left + right
+                            : op === "-="
+                                ? left - right
+                                : op === "*="
+                                    ? left * right
+                                    : op === "/="
+                                        ? left / right
+                                        : left % right;
+
+                    scope.assign(
+                        augmented[1],
+                        result
+                    );
+                } else {
+                    const assignment =
+                        /^([a-zA-Z_]\w*)\s*=(?!=)\s*(.+)$/
+                            .exec(text);
+
+                    if (assignment) {
+                        scope.assign(
+                            assignment[1],
+                            this.evaluate(
+                                assignment[2],
+                                scope
+                            )
+                        );
+                    } else {
+                        this.evaluate(
+                            text,
+                            scope
+                        );
+                    }
+                }
             }
-
-
-            throw signal;
         }
-
-
-        return null;
     }
 }
 
-
-
 /* =========================================================
-   MOTEUR DE JEU
+   MOTEUR PRINCIPAL PYT
 ========================================================= */
 
 class PytGame {
-
     constructor() {
-
         this.canvas =
-            null;
-
+            document.getElementById("game-canvas");
 
         this.ctx =
-            null;
+            this.canvas?.getContext("2d") || null;
 
+        this.levelData = null;
+        this.robot = null;
+        this.visualRobot = null;
 
-        this.levelData =
-            null;
+        this.mapWidth = 8;
+        this.mapHeight = 6;
 
+        this.actionQueue = [];
+        this.programOutput = [];
 
-        this.mapWidth =
-            8;
+        this.logicalObjects = [];
+        this.logicalTargets = [];
 
+        this.visualObjects = [];
+        this.visualTargets = [];
 
-        this.mapHeight =
-            6;
+        this.runtimeIssues = [];
 
+        this.executing = false;
+        this.playbackId = 0;
 
-        this.robot =
-            null;
+        this.animationFrame = null;
+        this.animationFinish = null;
 
+        this.boardLayout = null;
+        this.artWarningShown = false;
 
-        this.startState =
-            null;
-
-
-        this.logicalObjects =
-            [];
-
-
-        this.logicalTargets =
-            [];
-
-
-        this.visualObjects =
-            [];
-
-
-        this.visualTargets =
-            [];
-
-
-        this.visualRobot =
-            null;
-
-
-        this.actionQueue =
-            [];
-
-
-        this.programOutput =
-            [];
-
-
-        this.runtimeIssues =
-            [];
-
-
-        this.stats =
-            {};
-
-
-        this.executing =
-            false;
-
-
-        this.animationFrame =
-            null;
-
-
-        this.boardLayout =
-            null;
-
-
+        this.resetStats();
+        this.ensureArtCompatibility();
         this.bindEvents();
 
-        this.initCanvas();
-    }
-
-
-
-    /* =====================================================
-       INITIALISATION
-    ===================================================== */
-
-    initCanvas() {
-
-        this.canvas =
-            document.getElementById(
-                "game-canvas"
-            );
-
-
-        if (
-            !this.canvas
-        ) {
-
-            return;
-        }
-
-
-        this.ctx =
-            this.canvas.getContext(
-                "2d"
-            );
-
-
-        this.ctx.imageSmoothingEnabled =
-            false;
-
-
+        this.resizeCanvas();
         this.render();
     }
 
+    /* =====================================================
+       COMPATIBILITÉ GRAPHIQUE
+    ===================================================== */
 
+    ensureArtCompatibility() {
+        const palette =
+            window.PYTArt?.palette;
+
+        if (!palette) {
+            return;
+        }
+
+        if (
+            typeof palette.glassBlue !==
+            "function"
+        ) {
+            const color =
+                typeof palette.glassBlue === "string"
+                    ? palette.glassBlue
+                    : "#74c9dd";
+
+            palette.glassBlue = () => color;
+        }
+
+        if (
+            typeof palette.glassSteel !==
+            "function"
+        ) {
+            const color =
+                typeof palette.glassSteel === "string"
+                    ? palette.glassSteel
+                    : "#9fc5ca";
+
+            palette.glassSteel = () => color;
+        }
+    }
+
+    /* =====================================================
+       ÉVÉNEMENTS
+    ===================================================== */
 
     bindEvents() {
-
         window.addEventListener(
             "pyt:load-level",
             event => {
-
                 this.loadLevel(
-                    event.detail
-                        ?.data ||
+                    event.detail?.data ||
                     event.detail ||
                     {}
                 );
             }
         );
 
-
         window.addEventListener(
             "pyt:reload-world",
             event => {
-
-                this.loadLevel(
-                    event.detail
-                        ?.data ||
-                    this.levelData ||
-                    {}
+                this.restartLevel(
+                    event.detail?.data
                 );
             }
         );
 
+        window.addEventListener(
+            "pyt:restart-level",
+            () => {
+                this.restartLevel();
+            }
+        );
 
         window.addEventListener(
             "pyt:run-code",
             event => {
+                const detail =
+                    event.detail || {};
 
                 this.executeSource(
-                    event.detail
-                        ?.code ||
+                    detail.source ??
+                    detail.code ??
+                    detail.value ??
                     ""
                 );
             }
         );
 
-
-        /*
-         * Correction du branchement visuel
-         * des lignes d'erreur.
-         */
-
-        window.addEventListener(
-            "pyt:code-error-line",
-            event => {
-
-                const line =
-                    Number(
-                        event.detail
-                            ?.line
-                    );
-
-
-                if (
-                    line >
-                    0
-                ) {
-
-                    window.pytUI
-                        ?.renderCodeError(
-                            line
-                        );
-                }
-            }
-        );
-
-
         window.addEventListener(
             "resize",
             () => {
-
+                this.resizeCanvas();
                 this.render();
-            }
-        );
-    }
-
-
-
-    /* =====================================================
-       CHARGEMENT NIVEAU
-    ===================================================== */
-
-    loadLevel(data) {
-
-        this.stopAnimation();
-
-
-        this.levelData =
-            this.clone(
-                data ||
-                {}
-            );
-
-
-        this.mapWidth =
-            Number(
-                this.levelData
-                    ?.map
-                    ?.width ??
-                this.levelData
-                    ?.width ??
-                8
-            );
-
-
-        this.mapHeight =
-            Number(
-                this.levelData
-                    ?.map
-                    ?.height ??
-                this.levelData
-                    ?.height ??
-                6
-            );
-
-
-        if (
-            !Number.isFinite(
-                this.mapWidth
-            ) ||
-            this.mapWidth <
-                1
-        ) {
-
-            this.mapWidth =
-                8;
-        }
-
-
-        if (
-            !Number.isFinite(
-                this.mapHeight
-            ) ||
-            this.mapHeight <
-                1
-        ) {
-
-            this.mapHeight =
-                6;
-        }
-
-
-        this.startState =
-            this.extractStart(
-                this.levelData
-            );
-
-
-        this.robot =
-            this.createRobot(
-                this.startState
-            );
-
-
-        this.logicalObjects =
-            this.extractObjects(
-                this.levelData
-            );
-
-
-        this.logicalTargets =
-            this.extractTargets(
-                this.levelData
-            );
-
-
-        this.visualObjects =
-            this.clone(
-                this.logicalObjects
-            );
-
-
-        this.visualTargets =
-            this.clone(
-                this.logicalTargets
-            );
-
-
-        this.visualRobot =
+            },
             {
-
-                x:
-                    this.robot.x,
-
-                y:
-                    this.robot.y,
-
-                direction:
-                    this.robot.direction,
-
-                inventory:
-                    []
-            };
-
-
-        this.resetStats();
-
-
-        this.actionQueue =
-            [];
-
-
-        this.programOutput =
-            [];
-
-
-        this.runtimeIssues =
-            [];
-
-
-        this.executing =
-            false;
-
-
-        this.updateStatus(
-            "Prêt"
-        );
-
-
-        this.render();
-    }
-
-
-
-    extractStart(data) {
-
-        const candidates = [
-
-            data.robotStart,
-
-            data.start,
-
-            data.robot?.start,
-
-            data.robot,
-
-            data.map?.start,
-
-            data.map?.robotStart
-        ];
-
-
-        let source =
-            {};
-
-
-        for (
-            const candidate
-            of candidates
-        ) {
-
-            if (
-                candidate &&
-                typeof candidate ===
-                    "object"
-            ) {
-
-                source =
-                    candidate;
-
-                break;
+                passive: true
             }
-        }
-
-
-        return {
-
-            x:
-                Number(
-                    source.x ??
-                    source.col ??
-                    source.column ??
-                    0
-                ),
-
-            y:
-                Number(
-                    source.y ??
-                    source.row ??
-                    source.line ??
-                    0
-                ),
-
-            direction:
-                this.normalizeDirection(
-                    source.direction ??
-                    source.heading ??
-                    "E"
-                )
-        };
-    }
-
-
-
-    extractObjects(data) {
-
-        const source =
-            data.objects ??
-            data.map?.objects ??
-            [];
-
-
-        if (
-            !Array.isArray(
-                source
-            )
-        ) {
-
-            return [];
-        }
-
-
-        return source.map(
-            (
-                object,
-                index
-            ) => ({
-
-                ...this.clone(
-                    object
-                ),
-
-                id:
-                    object.id ??
-                    `object-${index + 1}`,
-
-                x:
-                    Number(
-                        object.x ??
-                        object.col ??
-                        0
-                    ),
-
-                y:
-                    Number(
-                        object.y ??
-                        object.row ??
-                        0
-                    )
-            })
-        );
-    }
-
-
-
-    extractTargets(data) {
-
-        const source =
-            data.targets ??
-            data.map?.targets ??
-            [];
-
-
-        if (
-            !Array.isArray(
-                source
-            )
-        ) {
-
-            return [];
-        }
-
-
-        return source.map(
-            (
-                target,
-                index
-            ) => ({
-
-                ...this.clone(
-                    target
-                ),
-
-                id:
-                    target.id ??
-                    `target-${index + 1}`,
-
-                x:
-                    Number(
-                        target.x ??
-                        target.col ??
-                        0
-                    ),
-
-                y:
-                    Number(
-                        target.y ??
-                        target.row ??
-                        0
-                    )
-            })
-        );
-    }
-
-
-
-    createRobot(start) {
-
-        let robot =
-            null;
-
-
-        /*
-         * On conserve robot.js comme objet principal
-         * lorsque PytRobot existe.
-         */
-
-        if (
-            typeof window.PytRobot ===
-            "function"
-        ) {
-
-            try {
-
-                robot =
-                    new window.PytRobot(
-                        {
-
-                            x:
-                                start.x,
-
-                            y:
-                                start.y,
-
-                            direction:
-                                start.direction
-                        }
-                    );
-
-            } catch (
-                firstError
-            ) {
-
-                try {
-
-                    robot =
-                        new window.PytRobot(
-                            start.x,
-                            start.y,
-                            start.direction
-                        );
-
-                } catch (
-                secondError
-                ) {
-
-                    robot =
-                        null;
-                }
-            }
-        }
-
-
-        if (
-            !robot
-        ) {
-
-            robot =
-                {};
-        }
-
-
-        /*
-         * Normalisation de l'état.
-         */
-
-        robot.x =
-            start.x;
-
-
-        robot.y =
-            start.y;
-
-
-        robot.direction =
-            start.direction;
-
-
-        robot.inventory =
-            [];
-
-
-        robot.visited =
-            [
-                {
-                    x:
-                        start.x,
-
-                    y:
-                        start.y
-                }
-            ];
-
-
-        return robot;
-    }
-
-
-
-    resetStats() {
-
-        this.stats = {
-
-            moves:
-                0,
-
-            forward:
-                0,
-
-            backward:
-                0,
-
-            turns:
-                0,
-
-            collisions:
-                0,
-
-            picked:
-                [],
-
-            deposited:
-                [],
-
-            pushed:
-                [],
-
-            buttons:
-                [],
-
-            doors:
-                [],
-
-            cleaned:
-                [],
-
-            recharged:
-                false
-        };
-    }
-
-
-
-    /* =====================================================
-       PROGRAMME
-    ===================================================== */
-
-    async executeSource(source) {
-
-        if (
-            this.executing ||
-            !this.levelData
-        ) {
-
-            return;
-        }
-
-
-        this.executing =
-            true;
-
-
-        this.updateStatus(
-            "Analyse du programme..."
         );
 
-
-        /*
-         * Repartir du monde initial.
-         */
-
-        this.resetLogicalWorld();
-
-
-        this.programOutput =
-            [];
-
-
-        this.actionQueue =
-            [];
-
-
-        this.runtimeIssues =
-            [];
-
-
-        let syntaxError =
-            null;
-
-
-        let errorLine =
-            0;
-
-
-        try {
-
-            const interpreter =
-                new PytInterpreter(
-                    this,
-                    source
-                );
-
-
-            interpreter.execute();
-
-        } catch (
-            error
-        ) {
-
-            syntaxError =
-                error;
-
-
-            errorLine =
-                Number(
-                    error?.line ??
-                    error?.lineNumber ??
-                    0
-                );
-
-
-            /*
-             * Si le parser connaît la ligne actuelle.
-             */
-
-            if (
-                errorLine ===
-                0
-            ) {
-
-                try {
-
-                    const interpreterLine =
-                        /ligne\s+(\d+)/i
-                            .exec(
-                                String(
-                                    error.message
-                                )
-                            );
-
-
-                    if (
-                        interpreterLine
-                    ) {
-
-                        errorLine =
-                            Number(
-                                interpreterLine[1]
-                            );
-                    }
-
-                } catch (
-                ignored
-                ) {
-
-                    /*
-                     * Rien.
-                     */
-                }
-            }
-        }
-
-
-        /*
-         * Important :
-         * même avec une erreur tardive,
-         * les actions déjà créées seront jouées.
-         */
-
-        this.prepareVisualPlayback();
-
-
-        this.updateStatus(
-            "Exécution..."
-        );
-
-
-        await this.playActionQueue();
-
-
-        /*
-         * Une erreur de syntaxe/runtime
-         * reste un échec après les actions déjà valides.
-         */
-
-        if (
-            syntaxError
-        ) {
-
-            this.finishExecution({
-
-                success:
-                    false,
-
-                reason:
-                    "runtime_error",
-
-                message:
-                    syntaxError.message ||
-                    "Le programme contient une erreur.",
-
-                error:
-                    syntaxError.message ||
-                    String(
-                        syntaxError
-                    ),
-
-                errorLine,
-
-                output:
-                    this.programOutput
-                        .slice()
-            });
-
-
-            return;
-        }
-
-
-        /*
-         * Validation du résultat.
-         */
-
-        const validation =
-            this.validateLevel(
-                source
-            );
-
-
-        this.finishExecution({
-
-            ...validation,
-
-            output:
-                this.programOutput
-                    .slice()
-        });
-    }
-
-
-
-    resetLogicalWorld() {
-
-        this.robot.x =
-            this.startState.x;
-
-
-        this.robot.y =
-            this.startState.y;
-
-
-        this.robot.direction =
-            this.startState.direction;
-
-
-        this.robot.inventory =
-            [];
-
-
-        this.robot.visited =
-            [
-                {
-
-                    x:
-                        this.robot.x,
-
-                    y:
-                        this.robot.y
-                }
-            ];
-
-
-        this.logicalObjects =
-            this.extractObjects(
-                this.levelData
-            );
-
-
-        this.logicalTargets =
-            this.extractTargets(
-                this.levelData
-            );
-
-
-        this.resetStats();
-    }
-
-
-
-    prepareVisualPlayback() {
-
-        this.visualRobot = {
-
-            x:
-                this.startState.x,
-
-            y:
-                this.startState.y,
-
-            direction:
-                this.startState.direction,
-
-            inventory:
-                []
-        };
-
-
-        this.visualObjects =
-            this.extractObjects(
-                this.levelData
-            );
-
-
-        this.visualTargets =
-            this.extractTargets(
-                this.levelData
-            );
-
-
-        this.render();
-    }
-
-
-
-    finishExecution(result) {
-
-        this.executing =
-            false;
-
-
-        this.updateStatus(
-            result.success
-                ? "Mission réussie"
-                : "À corriger"
-        );
-
-
-        this.render();
-
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "pyt:execution-result",
-                {
-
-                    detail:
-                        result
-                }
-            )
-        );
-    }
-
-
-
-    /* =====================================================
-       API MOUVEMENT
-    ===================================================== */
-
-    apiForward(distance = 1) {
-
-        const count =
-            this.normalizeDistance(
-                distance
-            );
-
-
-        for (
-            let i = 0;
-            i < count;
-            i += 1
-        ) {
-
-            this.tryMove(
-                1,
-                "forward"
-            );
-        }
-
-
-        return null;
-    }
-
-
-
-    apiBackward(distance = 1) {
-
-        const count =
-            this.normalizeDistance(
-                distance
-            );
-
-
-        for (
-            let i = 0;
-            i < count;
-            i += 1
-        ) {
-
-            this.tryMove(
-                -1,
-                "backward"
-            );
-        }
-
-
-        return null;
-    }
-
-
-
-    normalizeDistance(value) {
-
-        const number =
-            Number(
-                value ??
-                1
-            );
-
-
-        if (
-            !Number.isFinite(
-                number
-            )
-        ) {
-
-            throw new Error(
-                "La distance doit être un nombre."
-            );
-        }
-
-
-        if (
-            number <
-            0
-        ) {
-
-            throw new Error(
-                "Utilise backward() pour reculer."
-            );
-        }
-
-
-        if (
-            !Number.isInteger(
-                number
-            )
-        ) {
-
-            throw new Error(
-                "Les déplacements se font case par case avec un nombre entier."
-            );
-        }
-
-
-        if (
-            number >
-            100
-        ) {
-
-            throw new Error(
-                "Déplacement trop long."
-            );
-        }
-
-
-        return number;
-    }
-
-
-
-    apiLeft(degrees = 90) {
-
-        return this.turnBy(
-            -Number(
-                degrees ??
-                90
-            )
-        );
-    }
-
-
-
-    apiRight(degrees = 90) {
-
-        return this.turnBy(
-            Number(
-                degrees ??
-                90
-            )
-        );
-    }
-
-
-
-    turnBy(degrees) {
-
-        if (
-            !Number.isFinite(
-                degrees
-            )
-        ) {
-
-            throw new Error(
-                "L'angle doit être un nombre."
-            );
-        }
-
-
-        if (
-            degrees %
-            90 !==
-            0
-        ) {
-
-            throw new Error(
-                "Dans PYT, les rotations doivent être des multiples de 90°."
-            );
-        }
-
-
-        const turns =
-            Math.abs(
-                degrees /
-                90
-            );
-
-
-        const direction =
-            degrees >=
-                0
-                ? 1
-                : -1;
-
-
-        for (
-            let i = 0;
-            i < turns;
-            i += 1
-        ) {
-
-            const from =
-                this.robot.direction;
-
-
-            const to =
-                this.rotateDirection(
-                    from,
-                    direction
-                );
-
-
-            this.robot.direction =
-                to;
-
-
-            this.actionQueue.push({
-
-                type:
-                    "turn",
-
-                from,
-
-                to,
-
-                direction
-            });
-
-
-            this.stats.turns +=
-                1;
-        }
-
-
-        return null;
-    }
-
-
-
-    apiSetHeading(degrees) {
-
-        const normalized =
-            (
-                Number(
-                    degrees
-                ) %
-                360 +
-                360
-            ) %
-            360;
-
-
-        const map = {
-
-            0:
-                "E",
-
-            90:
-                "S",
-
-            180:
-                "W",
-
-            270:
-                "N"
-        };
-
-
-        if (
-            !Object.prototype
-                .hasOwnProperty
-                .call(
-                    map,
-                    normalized
-                )
-        ) {
-
-            throw new Error(
-                "setheading() utilise ici 0, 90, 180 ou 270."
-            );
-        }
-
-
-        const from =
-            this.robot.direction;
-
-
-        const to =
-            map[
-                normalized
-            ];
-
-
-        this.robot.direction =
-            to;
-
-
-        this.actionQueue.push({
-
-            type:
-                "turn",
-
-            from,
-
-            to,
-
-            direction:
-                0
-        });
-
-
-        return null;
-    }
-
-
-
-    apiGoto(
-        targetX,
-        targetY
-    ) {
-
-        targetX =
-            Number(
-                targetX
-            );
-
-
-        targetY =
-            Number(
-                targetY
-            );
-
-
-        if (
-            !Number.isInteger(
-                targetX
-            ) ||
-            !Number.isInteger(
-                targetY
-            )
-        ) {
-
-            throw new Error(
-                "goto() utilise des coordonnées entières."
-            );
-        }
-
-
-        /*
-         * Déplacement grille simple :
-         * horizontal puis vertical.
-         */
-
-        while (
-            this.robot.x !==
-            targetX
-        ) {
-
-            const desired =
-                this.robot.x <
-                targetX
-                    ? "E"
-                    : "W";
-
-
-            this.turnToDirection(
-                desired
-            );
-
-
-            if (
-                !this.tryMove(
-                    1,
-                    "forward"
-                )
-            ) {
-
-                break;
-            }
-        }
-
-
-        while (
-            this.robot.y !==
-            targetY
-        ) {
-
-            const desired =
-                this.robot.y <
-                targetY
-                    ? "S"
-                    : "N";
-
-
-            this.turnToDirection(
-                desired
-            );
-
-
-            if (
-                !this.tryMove(
-                    1,
-                    "forward"
-                )
-            ) {
-
-                break;
-            }
-        }
-
-
-        return null;
-    }
-
-
-
-    turnToDirection(direction) {
-
-        let guard =
-            0;
-
-
-        while (
-            this.robot.direction !==
-                direction &&
-            guard <
-                4
-        ) {
-
-            this.turnBy(
-                90
-            );
-
-
-            guard +=
-                1;
-        }
-    }
-
-
-
-    /* =====================================================
-       DÉPLACEMENT LOGIQUE
-    ===================================================== */
-
-    tryMove(
-        sign,
-        mode
-    ) {
-
-        const vector =
-            this.getDirectionVector(
-                this.robot.direction
-            );
-
-
-        const dx =
-            vector.x *
-            sign;
-
-
-        const dy =
-            vector.y *
-            sign;
-
-
-        const from = {
-
-            x:
-                this.robot.x,
-
-            y:
-                this.robot.y
-        };
-
-
-        const target = {
-
-            x:
-                from.x +
-                dx,
-
-            y:
-                from.y +
-                dy
-        };
-
-
-        /*
-         * Hors carte.
-         */
-
-        if (
-            !this.inBounds(
-                target.x,
-                target.y
-            )
-        ) {
-
-            this.registerCollision(
-                from,
-                target
-            );
-
-
-            return false;
-        }
-
-
-        /*
-         * Objet poussable.
-         */
-
-        const pushable =
-            this.findPushableAt(
-                target.x,
-                target.y
-            );
-
-
-        if (
-            pushable
-        ) {
-
-            const objectTarget = {
-
-                x:
-                    target.x +
-                    dx,
-
-                y:
-                    target.y +
-                    dy
-            };
-
-
-            if (
-                !this.inBounds(
-                    objectTarget.x,
-                    objectTarget.y
-                ) ||
-                this.isBlockedCell(
-                    objectTarget.x,
-                    objectTarget.y,
-                    pushable.id
-                )
-            ) {
-
-                this.registerCollision(
-                    from,
-                    target
-                );
-
-
-                return false;
-            }
-
-
-            const oldObject = {
-
-                x:
-                    pushable.x,
-
-                y:
-                    pushable.y
-            };
-
-
-            pushable.x =
-                objectTarget.x;
-
-
-            pushable.y =
-                objectTarget.y;
-
-
-            this.stats.pushed
-                .push(
-                    pushable.id
-                );
-
-
-            this.actionQueue.push({
-
-                type:
-                    "push",
-
-                objectId:
-                    pushable.id,
-
-                from:
-                    oldObject,
-
-                to:
-                    {
-
-                        x:
-                            pushable.x,
-
-                        y:
-                            pushable.y
-                    }
-            });
-        }
-
-
-        /*
-         * Mur / obstacle.
-         */
-
-        if (
-            this.isBlockedCell(
-                target.x,
-                target.y
-            )
-        ) {
-
-            this.registerCollision(
-                from,
-                target
-            );
-
-
-            return false;
-        }
-
-
-        /*
-         * Mouvement logique.
-         */
-
-        this.robot.x =
-            target.x;
-
-
-        this.robot.y =
-            target.y;
-
-
-        this.robot.visited
-            .push(
-                {
-
-                    x:
-                        target.x,
-
-                    y:
-                        target.y
-                }
-            );
-
-
-        this.stats.moves +=
-            1;
-
-
-        if (
-            mode ===
-            "backward"
-        ) {
-
-            this.stats.backward +=
-                1;
-
-        } else {
-
-            this.stats.forward +=
-                1;
-        }
-
-
-        this.actionQueue.push({
-
-            type:
-                "move",
-
-            mode,
-
-            from,
-
-            to:
-                target,
-
-            direction:
-                this.robot.direction
-        });
-
-
-        /*
-         * Interactions automatiques.
-         */
-
-        this.applyAutomaticInteractions();
-
-
-        return true;
-    }
-
-
-
-    registerCollision(
-        from,
-        target
-    ) {
-
-        this.stats.collisions +=
-            1;
-
-
-        this.runtimeIssues
-            .push({
-
-                type:
-                    "collision",
-
-                x:
-                    target.x,
-
-                y:
-                    target.y
-            });
-
-
-        this.actionQueue.push({
-
-            type:
-                "bump",
-
-            from,
-
-            target,
-
-            direction:
-                this.robot.direction
-        });
-    }
-
-
-
-    /* =====================================================
-       INTERACTIONS AUTOMATIQUES
-    ===================================================== */
-
-    applyAutomaticInteractions() {
-
-        const x =
-            this.robot.x;
-
-
-        const y =
-            this.robot.y;
-
-
-        /*
-         * Objets présents sur la case.
-         */
-
-        const objects =
-            this.logicalObjects
-                .filter(
-                    object =>
-                        object.x ===
-                            x &&
-                        object.y ===
-                            y
-                );
-
-
-        for (
-            const object
-            of objects
-        ) {
-
-            const type =
-                this.normalize(
-                    object.type ??
-                    object.id
-                );
-
-
-            /*
-             * Bouton.
-             */
-
-            if (
-                this.isButtonType(
-                    type
-                )
-            ) {
-
-                if (
-                    !object.activated
-                ) {
-
-                    object.activated =
-                        true;
-
-
-                    this.stats.buttons
-                        .push(
-                            object.id
-                        );
-
-
-                    this.actionQueue.push({
-
-                        type:
-                            "button",
-
-                        objectId:
-                            object.id,
-
-                        x,
-
-                        y
-                    });
-                }
-
-
-                continue;
-            }
-
-
-            /*
-             * Recharge.
-             */
-
-            if (
-                this.isChargerType(
-                    type
-                )
-            ) {
-
-                this.stats.recharged =
-                    true;
-
-
-                this.actionQueue.push({
-
-                    type:
-                        "recharge",
-
-                    objectId:
-                        object.id,
-
-                    x,
-
-                    y
-                });
-
-
-                continue;
-            }
-
-
-            /*
-             * Nettoyage.
-             */
-
-            if (
-                object.cleanable ===
-                    true ||
-                this.isDirtyType(
-                    type
-                )
-            ) {
-
-                if (
-                    !object.cleaned
-                ) {
-
-                    object.cleaned =
-                        true;
-
-
-                    this.stats.cleaned
-                        .push(
-                            object.id
-                        );
-
-
-                    this.actionQueue.push({
-
-                        type:
-                            "clean",
-
-                        objectId:
-                            object.id,
-
-                        x,
-
-                        y
-                    });
-                }
-
-
-                continue;
-            }
-
-
-            /*
-             * Porte.
-             */
-
-            if (
-                this.isDoorType(
-                    type
-                )
-            ) {
-
-                if (
-                    !object.open
-                ) {
-
-                    object.open =
-                        true;
-
-
-                    this.stats.doors
-                        .push(
-                            object.id
-                        );
-
-
-                    this.actionQueue.push({
-
-                        type:
-                            "door",
-
-                        objectId:
-                            object.id,
-
-                        x,
-
-                        y
-                    });
-                }
-
-
-                continue;
-            }
-
-
-            /*
-             * Ramassage.
-             */
-
-            if (
-                this.isAutoPickupObject(
-                    object
-                )
-            ) {
-
-                object.collected =
-                    true;
-
-
-                const inventoryItem = {
-
-                    id:
-                        object.id,
-
-                    type:
-                        object.type ??
-                        object.id,
-
-                    original:
-                        this.clone(
-                            object
-                        )
-                };
-
-
-                this.robot.inventory
-                    .push(
-                        inventoryItem
-                    );
-
-
-                this.stats.picked
-                    .push(
-                        object.id
-                    );
-
-
-                this.actionQueue.push({
-
-                    type:
-                        "pickup",
-
-                    objectId:
-                        object.id,
-
-                    item:
-                        inventoryItem,
-
-                    x,
-
-                    y
-                });
-            }
-        }
-
-
-        /*
-         * Retirer les objets ramassés.
-         */
-
-        this.logicalObjects =
-            this.logicalObjects
-                .filter(
-                    object =>
-                        !object.collected
-                );
-
-
-        /*
-         * Dépôt automatique.
-         */
-
-        this.tryAutomaticDeposit();
-    }
-
-
-
-    tryAutomaticDeposit() {
-
-        if (
-            !Array.isArray(
-                this.robot.inventory
-            ) ||
-            this.robot.inventory
-                .length ===
-                0
-        ) {
-
-            return;
-        }
-
-
-        const target =
-            this.logicalTargets
-                .find(
-                    item =>
-                        item.x ===
-                            this.robot.x &&
-                        item.y ===
-                            this.robot.y &&
-                        this.isDepositTarget(
-                            item
-                        )
-                );
-
-
-        if (
-            !target
-        ) {
-
-            return;
-        }
-
-
-        const expected =
-            target.object ??
-            target.objectId ??
-            target.requiredObject ??
-            target.accepts ??
-            null;
-
-
-        let index =
-            0;
-
-
-        if (
-            expected
-        ) {
-
-            index =
-                this.robot.inventory
-                    .findIndex(
-                        item =>
-                            this.objectMatches(
-                                item,
-                                expected
-                            )
-                    );
-
-
-            if (
-                index <
-                0
-            ) {
-
-                return;
-            }
-        }
-
-
-        const item =
-            this.robot.inventory
-                .splice(
-                    index,
-                    1
-                )[0];
-
-
-        this.stats.deposited
-            .push(
-                {
-
-                    object:
-                        item.id,
-
-                    target:
-                        target.id
-                }
-            );
-
-
-        target.completed =
-            true;
-
-
-        this.actionQueue.push({
-
-            type:
-                "deposit",
-
-            item,
-
-            targetId:
-                target.id,
-
-            x:
-                target.x,
-
-            y:
-                target.y
-        });
-    }
-
-
-
-    /* =====================================================
-       TYPES D'OBJETS
-    ===================================================== */
-
-    isPushableObject(object) {
-
-        const type =
-            this.normalize(
-                object.type ??
-                object.id
-            );
-
-
-        if (
-            object.pushable ===
-            true
-        ) {
-
-            return true;
-        }
-
-
-        if (
-            object.pushable ===
-            false
-        ) {
-
-            return false;
-        }
-
-
-        return [
-            "caisse",
-            "box",
-            "crate",
-            "caisse_bois"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    isAutoPickupObject(object) {
-
-        if (
-            object.pickable ===
-            false
-        ) {
-
-            return false;
-        }
-
-
-        if (
-            this.isPushableObject(
-                object
-            )
-        ) {
-
-            return false;
-        }
-
-
-        const type =
-            this.normalize(
-                object.type ??
-                object.id
-            );
-
-
-        const pickableTypes = [
-
-            "book",
-            "livre",
-            "livre_rouge",
-            "livre_bleu",
-
-            "key",
-            "cle",
-
-            "apple",
-            "pomme",
-
-            "cup",
-            "tasse",
-
-            "plate",
-            "assiette",
-
-            "bottle",
-            "bouteille",
-            "bouteille_rouge",
-            "bouteille_bleue",
-            "bouteille_verte",
-            "bouteille_jaune",
-
-            "watering_can",
-            "arrosoir",
-
-            "toy",
-            "jouet",
-
-            "charger_item",
-            "chargeur",
-
-            "float",
-            "bouee",
-
-            "toolbox",
-            "boite_outils"
-        ];
-
-
-        return (
-            object.pickable ===
-                true ||
-            pickableTypes.includes(
-                type
-            )
-        );
-    }
-
-
-
-    isButtonType(type) {
-
-        return [
-            "button",
-            "bouton",
-            "switch",
-            "interrupteur"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    isDoorType(type) {
-
-        return [
-            "door",
-            "porte"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    isChargerType(type) {
-
-        return [
-            "charger",
-            "recharge",
-            "station_recharge",
-            "charging_station"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    isDirtyType(type) {
-
-        return [
-            "dirty",
-            "salete",
-            "mud",
-            "boue",
-            "tache"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    isDepositTarget(target) {
-
-        const type =
-            this.normalize(
-                target.type ??
-                target.id
-            );
-
-
-        return [
-            "deposit",
-            "depot",
-            "drop",
-            "destination_objet"
-        ].includes(
-            type
-        );
-    }
-
-
-
-    /* =====================================================
-       COLLISIONS
-    ===================================================== */
-
-    getBlockedCells() {
-
-        const source =
-            this.levelData
-                ?.blocked ??
-            this.levelData
-                ?.map
-                ?.blocked ??
-            [];
-
-
-        return Array.isArray(
-            source
-        )
-            ? source
-            : [];
-    }
-
-
-
-    cellMatches(
-        cell,
-        x,
-        y
-    ) {
-
-        if (
-            Array.isArray(
-                cell
-            )
-        ) {
-
-            return (
-                Number(
-                    cell[0]
-                ) ===
-                    x &&
-                Number(
-                    cell[1]
-                ) ===
-                    y
-            );
-        }
-
-
-        if (
-            cell &&
-            typeof cell ===
-                "object"
-        ) {
-
-            return (
-                Number(
-                    cell.x ??
-                    cell.col
-                ) ===
-                    x &&
-                Number(
-                    cell.y ??
-                    cell.row
-                ) ===
-                    y
-            );
-        }
-
-
-        return false;
-    }
-
-
-
-    isBlockedCell(
-        x,
-        y,
-        ignoreObjectId = null
-    ) {
-
-        if (
-            !this.inBounds(
-                x,
-                y
-            )
-        ) {
-
-            return true;
-        }
-
-
-        if (
-            this.getBlockedCells()
-                .some(
-                    cell =>
-                        this.cellMatches(
-                            cell,
-                            x,
-                            y
-                        )
-                )
-        ) {
-
-            return true;
-        }
-
-
-        const solidObject =
-            this.logicalObjects
-                .find(
-                    object => {
-
-                        if (
-                            object.id ===
-                            ignoreObjectId
-                        ) {
-
-                            return false;
-                        }
-
-
-                        if (
-                            object.x !==
-                                x ||
-                            object.y !==
-                                y
-                        ) {
-
-                            return false;
-                        }
-
-
-                        const type =
-                            this.normalize(
-                                object.type ??
-                                object.id
-                            );
-
-
-                        /*
-                         * Ces objets n'empêchent pas
-                         * Pyt d'entrer sur la case.
-                         */
-
-                        if (
-                            this.isAutoPickupObject(
-                                object
-                            ) ||
-                            this.isButtonType(
-                                type
-                            ) ||
-                            this.isDoorType(
-                                type
-                            ) ||
-                            this.isChargerType(
-                                type
-                            ) ||
-                            this.isDirtyType(
-                                type
-                            )
-                        ) {
-
-                            return false;
-                        }
-
-
-                        if (
-                            this.isPushableObject(
-                                object
-                            )
-                        ) {
-
-                            return true;
-                        }
-
-
-                        return (
-                            object.solid ===
-                            true
-                        );
-                    }
-                );
-
-
-        return Boolean(
-            solidObject
-        );
-    }
-
-
-
-    findPushableAt(
-        x,
-        y
-    ) {
-
-        return this.logicalObjects
-            .find(
-                object =>
-                    object.x ===
-                        x &&
-                    object.y ===
-                        y &&
-                    this.isPushableObject(
-                        object
-                    )
-            ) ||
-            null;
-    }
-
-
-
-    frontIsClear() {
-
-        const vector =
-            this.getDirectionVector(
-                this.robot.direction
-            );
-
-
-        const x =
-            this.robot.x +
-            vector.x;
-
-
-        const y =
-            this.robot.y +
-            vector.y;
-
-
-        if (
-            !this.inBounds(
-                x,
-                y
-            )
-        ) {
-
-            return false;
-        }
-
-
-        const pushable =
-            this.findPushableAt(
-                x,
-                y
-            );
-
-
-        if (
-            pushable
-        ) {
-
-            return !this.isBlockedCell(
-                x +
-                    vector.x,
-                y +
-                    vector.y,
-                pushable.id
-            );
-        }
-
-
-        return !this.isBlockedCell(
-            x,
-            y
-        );
-    }
-
-
-
-    robotOnObject() {
-
-        return this.logicalObjects
-            .some(
-                object =>
-                    object.x ===
-                        this.robot.x &&
-                    object.y ===
-                        this.robot.y
-            );
-    }
-
-
-
-    inventoryContains(value) {
-
-        return this.robot.inventory
-            .some(
-                item =>
-                    this.objectMatches(
-                        item,
-                        value
-                    )
-            );
-    }
-
-
-
-    objectMatches(
-        item,
-        expected
-    ) {
-
-        const expectedValue =
-            this.normalize(
-                expected
-            );
-
-
-        return [
-
-            item.id,
-
-            item.type,
-
-            item.original?.id,
-
-            item.original?.type
-
-        ]
-            .filter(
-                Boolean
-            )
-            .map(
-                value =>
-                    this.normalize(
-                        value
-                    )
-            )
-            .includes(
-                expectedValue
-            );
-    }
-
-
-
-    /* =====================================================
-       ROBOT INFOS
-    ===================================================== */
-
-    getRobotX() {
-
-        return this.robot.x;
-    }
-
-
-    getRobotY() {
-
-        return this.robot.y;
-    }
-
-
-    getRobotDirection() {
-
-        return this.robot.direction;
-    }
-
-
-
-    /* =====================================================
-       DIRECTIONS
-    ===================================================== */
-
-    normalizeDirection(direction) {
-
-        const value =
-            String(
-                direction ||
-                "E"
-            )
-                .toUpperCase();
-
-
-        const aliases = {
-
-            NORTH:
-                "N",
-
-            NORD:
-                "N",
-
-            UP:
-                "N",
-
-            EAST:
-                "E",
-
-            EST:
-                "E",
-
-            RIGHT:
-                "E",
-
-            SOUTH:
-                "S",
-
-            SUD:
-                "S",
-
-            DOWN:
-                "S",
-
-            WEST:
-                "W",
-
-            OUEST:
-                "W",
-
-            LEFT:
-                "W"
-        };
-
-
-        const normalized =
-            aliases[
-                value
-            ] ||
-            value;
-
-
-        return [
-            "N",
-            "E",
-            "S",
-            "W"
-        ].includes(
-            normalized
-        )
-            ? normalized
-            : "E";
-    }
-
-
-
-    rotateDirection(
-        direction,
-        amount
-    ) {
-
-        const directions = [
-            "N",
-            "E",
-            "S",
-            "W"
-        ];
-
-
-        let index =
-            directions.indexOf(
-                this.normalizeDirection(
-                    direction
-                )
-            );
-
-
-        index =
-            (
-                index +
-                amount +
-                directions.length
-            ) %
-            directions.length;
-
-
-        return directions[
-            index
-        ];
-    }
-
-
-
-    getDirectionVector(direction) {
-
-        switch (
-            this.normalizeDirection(
-                direction
-            )
-        ) {
-
-            case "N":
-
-                return {
-
-                    x:
-                        0,
-
-                    y:
-                        -1
-                };
-
-
-            case "S":
-
-                return {
-
-                    x:
-                        0,
-
-                    y:
-                        1
-                };
-
-
-            case "W":
-
-                return {
-
-                    x:
-                        -1,
-
-                    y:
-                        0
-                };
-
-
-            default:
-
-                return {
-
-                    x:
-                        1,
-
-                    y:
-                        0
-                };
-        }
-    }
-
-
-
-    inBounds(
-        x,
-        y
-    ) {
-
-        return (
-            x >=
-                0 &&
-            y >=
-                0 &&
-            x <
-                this.mapWidth &&
-            y <
-                this.mapHeight
-        );
-    }
-
-
-
-    /* =====================================================
-       ANIMATION
-    ===================================================== */
-
-    async playActionQueue() {
-
-        for (
-            const action
-            of this.actionQueue
-        ) {
-
-            switch (
-                action.type
-            ) {
-
-                case "move":
-
-                    await this.animateMove(
-                        action
-                    );
-
-                    break;
-
-
-                case "turn":
-
-                    await this.animateTurn(
-                        action
-                    );
-
-                    break;
-
-
-                case "bump":
-
-                    await this.animateBump(
-                        action
-                    );
-
-                    break;
-
-
-                case "pickup":
-
-                    await this.animatePickup(
-                        action
-                    );
-
-                    break;
-
-
-                case "push":
-
-                    await this.animatePush(
-                        action
-                    );
-
-                    break;
-
-
-                case "deposit":
-
-                    await this.animateDeposit(
-                        action
-                    );
-
-                    break;
-
-
-                case "button":
-
-                    await this.animateSimpleInteraction(
-                        action,
-                        "button"
-                    );
-
-                    break;
-
-
-                case "door":
-
-                    await this.animateSimpleInteraction(
-                        action,
-                        "door"
-                    );
-
-                    break;
-
-
-                case "clean":
-
-                    await this.animateClean(
-                        action
-                    );
-
-                    break;
-
-
-                case "recharge":
-
-                    await this.animateSimpleInteraction(
-                        action,
-                        "recharge"
-                    );
-
-                    break;
-            }
-        }
-
-
-        /*
-         * Synchronisation visuelle finale.
-         */
-
-        this.visualRobot = {
-
-            x:
-                this.robot.x,
-
-            y:
-                this.robot.y,
-
-            direction:
-                this.robot.direction,
-
-            inventory:
-                this.clone(
-                    this.robot.inventory
-                )
-        };
-
-
-        this.visualObjects =
-            this.clone(
-                this.logicalObjects
-            );
-
-
-        this.visualTargets =
-            this.clone(
-                this.logicalTargets
-            );
-
-
-        this.render();
-    }
-
-
-
-    animateMove(action) {
-
-        const duration =
-            500;
-
-
-        const from =
-            action.from;
-
-
-        const to =
-            action.to;
-
-
-        this.visualRobot.direction =
-            action.direction;
-
-
-        window.pytApp
-            ?.playSfx(
-                "step"
-            );
-
-
-        return this.animate(
-            duration,
-            progress => {
-
-                const eased =
-                    this.easeInOut(
-                        progress
-                    );
-
-
-                this.visualRobot.x =
-                    from.x +
-                    (
-                        to.x -
-                        from.x
-                    ) *
-                    eased;
-
-
-                this.visualRobot.y =
-                    from.y +
-                    (
-                        to.y -
-                        from.y
-                    ) *
-                    eased;
-
-
-                this.render(
-                    {
-
-                        moving:
-                            true
-                    }
-                );
-            }
-        ).then(
+        window.addEventListener(
+            "orientationchange",
             () => {
-
-                this.visualRobot.x =
-                    to.x;
-
-
-                this.visualRobot.y =
-                    to.y;
-
-
-                this.render();
+                setTimeout(() => {
+                    this.resizeCanvas();
+                    this.render();
+                }, 120);
             }
         );
     }
-
-
-
-    animateTurn(action) {
-
-        window.pytApp
-            ?.playSfx(
-                "turn"
-            );
-
-
-        return this.wait(
-            170
-        ).then(
-            () => {
-
-                this.visualRobot.direction =
-                    action.to;
-
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animateBump(action) {
-
-        window.pytApp
-            ?.playSfx(
-                "bump"
-            );
-
-
-        const vector =
-            this.getDirectionVector(
-                action.direction
-            );
-
-
-        return this.animate(
-            180,
-            progress => {
-
-                const amount =
-                    Math.sin(
-                        progress *
-                        Math.PI
-                    ) *
-                    0.12;
-
-
-                this.visualRobot.x =
-                    action.from.x +
-                    vector.x *
-                    amount;
-
-
-                this.visualRobot.y =
-                    action.from.y +
-                    vector.y *
-                    amount;
-
-
-                this.render();
-
-            }
-        ).then(
-            () => {
-
-                this.visualRobot.x =
-                    action.from.x;
-
-
-                this.visualRobot.y =
-                    action.from.y;
-
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animatePickup(action) {
-
-        window.pytApp
-            ?.playSfx(
-                "pickup"
-            );
-
-
-        const object =
-            this.visualObjects
-                .find(
-                    item =>
-                        item.id ===
-                        action.objectId
-                );
-
-
-        if (
-            object
-        ) {
-
-            object._pickup =
-                true;
-        }
-
-
-        return this.animate(
-            260,
-            progress => {
-
-                if (
-                    object
-                ) {
-
-                    object._pickupProgress =
-                        progress;
-                }
-
-
-                this.render();
-
-            }
-        ).then(
-            () => {
-
-                this.visualObjects =
-                    this.visualObjects
-                        .filter(
-                            item =>
-                                item.id !==
-                                action.objectId
-                        );
-
-
-                this.visualRobot.inventory
-                    .push(
-                        this.clone(
-                            action.item
-                        )
-                    );
-
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animatePush(action) {
-
-        window.pytApp
-            ?.playSfx(
-                "push"
-            );
-
-
-        const object =
-            this.visualObjects
-                .find(
-                    item =>
-                        item.id ===
-                        action.objectId
-                );
-
-
-        if (
-            !object
-        ) {
-
-            return Promise.resolve();
-        }
-
-
-        return this.animate(
-            360,
-            progress => {
-
-                const eased =
-                    this.easeInOut(
-                        progress
-                    );
-
-
-                object.x =
-                    action.from.x +
-                    (
-                        action.to.x -
-                        action.from.x
-                    ) *
-                    eased;
-
-
-                object.y =
-                    action.from.y +
-                    (
-                        action.to.y -
-                        action.from.y
-                    ) *
-                    eased;
-
-
-                this.render();
-
-            }
-        ).then(
-            () => {
-
-                object.x =
-                    action.to.x;
-
-
-                object.y =
-                    action.to.y;
-
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animateDeposit(action) {
-
-        window.pytApp
-            ?.playSfx(
-                "drop"
-            );
-
-
-        this.visualRobot.inventory =
-            this.visualRobot.inventory
-                .filter(
-                    item =>
-                        item.id !==
-                        action.item.id
-                );
-
-
-        this.visualObjects.push({
-
-            ...this.clone(
-                action.item.original
-            ),
-
-            id:
-                `${action.item.id}-deposited`,
-
-            x:
-                action.x,
-
-            y:
-                action.y,
-
-            deposited:
-                true,
-
-            pickable:
-                false
-        });
-
-
-        return this.animate(
-            250,
-            () => {
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animateSimpleInteraction(
-        action,
-        sound
-    ) {
-
-        window.pytApp
-            ?.playSfx(
-                sound
-            );
-
-
-        return this.animate(
-            220,
-            progress => {
-
-                this.render(
-                    {
-
-                        interaction:
-                            progress
-                    }
-                );
-            }
-        );
-    }
-
-
-
-    animateClean(action) {
-
-        const object =
-            this.visualObjects
-                .find(
-                    item =>
-                        item.id ===
-                        action.objectId
-                );
-
-
-        return this.animate(
-            260,
-            progress => {
-
-                if (
-                    object
-                ) {
-
-                    object._cleanProgress =
-                        progress;
-                }
-
-
-                this.render();
-
-            }
-        ).then(
-            () => {
-
-                this.visualObjects =
-                    this.visualObjects
-                        .filter(
-                            item =>
-                                item.id !==
-                                action.objectId
-                        );
-
-
-                this.render();
-            }
-        );
-    }
-
-
-
-    animate(
-        duration,
-        update
-    ) {
-
-        return new Promise(
-            resolve => {
-
-                const start =
-                    performance.now();
-
-
-                const frame =
-                    now => {
-
-                        const progress =
-                            Math.min(
-                                1,
-                                (
-                                    now -
-                                    start
-                                ) /
-                                duration
-                            );
-
-
-                        update(
-                            progress
-                        );
-
-
-                        if (
-                            progress >=
-                            1
-                        ) {
-
-                            this.animationFrame =
-                                null;
-
-
-                            resolve();
-
-                            return;
-                        }
-
-
-                        this.animationFrame =
-                            requestAnimationFrame(
-                                frame
-                            );
-                    };
-
-
-                this.animationFrame =
-                    requestAnimationFrame(
-                        frame
-                    );
-            }
-        );
-    }
-
-
-
-    wait(duration) {
-
-        return new Promise(
-            resolve => {
-
-                window.setTimeout(
-                    resolve,
-                    duration
-                );
-            }
-        );
-    }
-
-
-
-    easeInOut(value) {
-
-        return value <
-            0.5
-            ? 2 *
-                value *
-                value
-            : 1 -
-                Math.pow(
-                    -2 *
-                        value +
-                        2,
-                    2
-                ) /
-                2;
-    }
-
-
-
-    stopAnimation() {
-
-        if (
-            this.animationFrame
-        ) {
-
-            cancelAnimationFrame(
-                this.animationFrame
-            );
-
-
-            this.animationFrame =
-                null;
-        }
-    }
-
-
 
     /* =====================================================
-       VALIDATION
+       CANVAS / RESPONSIVE
     ===================================================== */
 
-    validateLevel(source) {
-
-        const goal =
-            this.levelData
-                ?.goal ||
-            {};
-
-
-        /*
-         * 1. Concepts obligatoires.
-         */
-
-        const missingConcepts =
-            PytCodeAnalyzer
-                .missingConcepts(
-                    source,
-                    this.levelData
-                        ?.requiredConcepts
-                );
-
-
-        if (
-            missingConcepts.length >
-            0
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "concept_missing",
-
-                message:
-                    "Ton programme atteint peut-être une partie de l’objectif, mais il n’utilise pas encore toutes les notions demandées dans ce chapitre.",
-
-                missingConcepts
-            };
-        }
-
-
-        /*
-         * 2. Destination finale.
-         */
-
-        const destination =
-            this.extractGoalPosition(
-                goal
-            ) ||
-            this.findDestinationTarget();
-
-
-        if (
-            destination &&
-            (
-                this.robot.x !==
-                    destination.x ||
-                this.robot.y !==
-                    destination.y
-            )
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "wrong_destination",
-
-                wrongDestination:
-                    true,
-
-                message:
-                    "Pyt n’est pas arrivé à la bonne destination."
-            };
-        }
-
-
-        /*
-         * 3. Objet à ramasser.
-         */
-
-        const requiredObject =
-            goal.requiredObject ??
-            goal.required_object ??
-            goal.pickup ??
-            null;
-
-
-        if (
-            requiredObject
-        ) {
-
-            const picked =
-                this.stats.picked
-                    .some(
-                        id =>
-                            this.normalize(
-                                id
-                            ) ===
-                            this.normalize(
-                                requiredObject
-                            )
-                    ) ||
-                this.robot.inventory
-                    .some(
-                        item =>
-                            this.objectMatches(
-                                item,
-                                requiredObject
-                            )
-                    ) ||
-                this.stats.deposited
-                    .some(
-                        entry =>
-                            this.normalize(
-                                entry.object
-                            ) ===
-                            this.normalize(
-                                requiredObject
-                            )
-                    );
-
-
-            if (
-                !picked
-            ) {
-
-                return {
-
-                    success:
-                        false,
-
-                    reason:
-                        "object_missing",
-
-                    message:
-                        "Il manque encore un objet important pour terminer la mission."
-                };
-            }
-        }
-
-
-        /*
-         * 4. Dépôts.
-         */
-
-        const depositTargets =
-            this.logicalTargets
-                .filter(
-                    target =>
-                        this.isDepositTarget(
-                            target
-                        )
-                );
-
-
-        const unfinishedDeposit =
-            depositTargets
-                .find(
-                    target => {
-
-                        if (
-                            target.optional ===
-                            true
-                        ) {
-
-                            return false;
-                        }
-
-
-                        return !target.completed;
-                    }
-                );
-
-
-        if (
-            unfinishedDeposit
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "deposit_missing",
-
-                message:
-                    "Un objet n’a pas encore été déposé au bon endroit."
-            };
-        }
-
-
-        /*
-         * 5. Boutons.
-         */
-
-        const requiredButtons =
-            Number(
-                goal.buttons ??
-                goal.requiredButtons ??
-                0
-            );
-
-
-        if (
-            requiredButtons >
-                0 &&
-            this.stats.buttons.length <
-                requiredButtons
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "objective_incomplete",
-
-                message:
-                    "Il reste encore un mécanisme à activer."
-            };
-        }
-
-
-        /*
-         * 6. Nettoyage.
-         */
-
-        const requiredCleaned =
-            Number(
-                goal.cleaned ??
-                goal.requiredCleaned ??
-                0
-            );
-
-
-        if (
-            requiredCleaned >
-                0 &&
-            this.stats.cleaned.length <
-                requiredCleaned
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "objective_incomplete",
-
-                message:
-                    "La mission de nettoyage n’est pas encore terminée."
-            };
-        }
-
-
-        /*
-         * 7. Recharge.
-         */
-
-        if (
-            goal.recharge ===
-                true &&
-            !this.stats.recharged
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "objective_incomplete",
-
-                message:
-                    "Pyt doit encore atteindre sa station de recharge."
-            };
-        }
-
-
-        /*
-         * 8. Nombre minimum de déplacements.
-         *
-         * Utilisable lorsqu'un niveau doit empêcher
-         * un raccourci pédagogique.
-         */
-
-        const minimumMoves =
-            Number(
-                goal.minimum_moves ??
-                goal.minimumMoves ??
-                0
-            );
-
-
-        if (
-            minimumMoves >
-                0 &&
-            this.stats.moves <
-                minimumMoves
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "objective_incomplete",
-
-                message:
-                    "Le trajet n’est pas encore complet."
-            };
-        }
-
-
-        /*
-         * 9. Pas de collision si demandé.
-         */
-
-        if (
-            goal.noCollisions ===
-                true &&
-            this.stats.collisions >
-                0
-        ) {
-
-            return {
-
-                success:
-                    false,
-
-                reason:
-                    "objective_incomplete",
-
-                message:
-                    "Pyt a bien avancé, mais il a rencontré un obstacle pendant son trajet."
-            };
-        }
-
-
-        /*
-         * 10. Succès.
-         */
-
-        return {
-
-            success:
-                true,
-
-            reason:
-                "success",
-
-            message:
-                "Mission réussie !"
-        };
-    }
-
-
-
-    extractGoalPosition(goal) {
-
-        const candidates = [
-
-            goal.position,
-
-            goal.destination,
-
-            goal.target,
-
-            (
-                Number.isFinite(
-                    Number(
-                        goal.x
-                    )
-                ) &&
-                Number.isFinite(
-                    Number(
-                        goal.y
-                    )
-                )
-                    ? goal
-                    : null
-            )
-        ];
-
-
-        for (
-            const candidate
-            of candidates
-        ) {
-
-            if (
-                !candidate
-            ) {
-
-                continue;
-            }
-
-
-            const x =
-                Number(
-                    candidate.x ??
-                    candidate.col
-                );
-
-
-            const y =
-                Number(
-                    candidate.y ??
-                    candidate.row
-                );
-
-
-            if (
-                Number.isFinite(
-                    x
-                ) &&
-                Number.isFinite(
-                    y
-                )
-            ) {
-
-                return {
-
-                    x,
-
-                    y
-                };
-            }
-        }
-
-
-        return null;
-    }
-
-
-
-    findDestinationTarget() {
-
-        const target =
-            this.logicalTargets
-                .find(
-                    item => {
-
-                        const type =
-                            this.normalize(
-                                item.type ??
-                                item.id
-                            );
-
-
-                        return [
-                            "goal",
-                            "objectif",
-                            "destination",
-                            "finish",
-                            "arrivee"
-                        ].includes(
-                            type
-                        );
-                    }
-                );
-
-
-        if (
-            !target
-        ) {
-
-            return null;
-        }
-
-
-        return {
-
-            x:
-                target.x,
-
-            y:
-                target.y
-        };
-    }
-
-
-
-    /* =====================================================
-       RENDU
-    ===================================================== */
-
-    render(options = {}) {
-
-        if (
-            !this.ctx ||
-            !this.canvas
-        ) {
-
+    resizeCanvas() {
+        if (!this.canvas) {
             return;
         }
 
+        if (!this.canvas.width) {
+            this.canvas.width = 960;
+        }
 
-        const ctx =
-            this.ctx;
+        if (!this.canvas.height) {
+            this.canvas.height = 640;
+        }
 
-
-        const width =
-            this.canvas.width;
-
-
-        const height =
-            this.canvas.height;
-
-
-        ctx.save();
-
-        ctx.imageSmoothingEnabled =
-            false;
-
-
-        ctx.clearRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        /*
-         * Fond global.
-         */
-
-        this.drawRoomBackground(
-            ctx,
-            width,
-            height
-        );
-
+        const rect =
+            this.canvas.parentElement
+                ?.getBoundingClientRect();
 
         if (
-            !this.levelData
+            !rect ||
+            rect.width <= 0 ||
+            rect.height <= 0
         ) {
-
-            ctx.restore();
-
             return;
         }
 
-
-        this.boardLayout =
-            this.calculateBoardLayout(
-                width,
-                height
-            );
-
-
-        /*
-         * Plateau logique.
-         */
-
-        this.drawBoardFloor(
-            ctx
-        );
-
-
-        /*
-         * Grille claire.
-         */
-
-        this.drawGrid(
-            ctx
-        );
-
-
-        /*
-         * Zones objectif / dépôt.
-         */
-
-        this.drawTargets(
-            ctx
-        );
-
-
-        /*
-         * Décor défini dans levels.js.
-         */
-
-        this.drawDecorations(
-            ctx
-        );
-
-
-        /*
-         * Obstacles logiques.
-         */
-
-        this.drawBlockedCells(
-            ctx
-        );
-
-
-        /*
-         * Objets interactifs.
-         */
-
-        this.drawObjects(
-            ctx
-        );
-
-
-        /*
-         * Robot.
-         */
-
-        this.drawRobot(
-            ctx,
-            options
-        );
-
-
-        /*
-         * Bord du plateau.
-         */
-
-        this.drawBoardBorder(
-            ctx
-        );
-
-
-        ctx.restore();
-    }
-
-
-
-    drawRoomBackground(
-        ctx,
-        width,
-        height
-    ) {
-
-        const room =
-            this.normalize(
-                this.levelData
-                    ?.room ||
-                window.pytUI
-                    ?.getChapterData(
-                        window.pytApp
-                            ?.currentChapter ||
-                        1
-                    )
-                    ?.room ||
-                "entree"
-            );
-
-
-        /*
-         * Bord extérieur.
-         */
-
-        ctx.fillStyle =
-            "#10111a";
-
-
-        ctx.fillRect(
-            0,
-            0,
-            width,
-            height
-        );
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            /*
-             * Grande pièce complète.
-             *
-             * furniture:false :
-             * on laisse les vraies décorations de levels.js
-             * définir les obstacles du niveau.
-             */
-
-            window.PYTArt
-                .drawRoomScene(
-                    ctx,
-                    room,
-                    16,
-                    16,
-                    width -
-                        32,
-                    height -
-                        32,
-                    {
-
-                        furniture:
-                            false
-                    }
-                );
-        }
-    }
-
-
-
-    calculateBoardLayout(
-        canvasWidth,
-        canvasHeight
-    ) {
-
-        /*
-         * On laisse une vraie bordure de pièce
-         * autour du plateau.
-         */
-
-        const marginX =
-            78;
-
-
-        const marginTop =
-            78;
-
-
-        const marginBottom =
-            60;
-
-
-        const availableWidth =
-            canvasWidth -
-            marginX *
-                2;
-
-
-        const availableHeight =
-            canvasHeight -
-            marginTop -
-            marginBottom;
-
-
-        const tileSize =
-            Math.floor(
-                Math.min(
-                    availableWidth /
-                        this.mapWidth,
-                    availableHeight /
-                        this.mapHeight
-                )
-            );
-
-
-        const boardWidth =
-            tileSize *
-            this.mapWidth;
-
-
-        const boardHeight =
-            tileSize *
-            this.mapHeight;
-
-
-        return {
-
-            tileSize,
-
-            width:
-                boardWidth,
-
-            height:
-                boardHeight,
-
-            x:
-                Math.round(
-                    (
-                        canvasWidth -
-                        boardWidth
-                    ) /
-                    2
-                ),
-
-            y:
-                Math.round(
-                    marginTop +
-                    (
-                        availableHeight -
-                        boardHeight
-                    ) /
-                    2
-                )
-        };
-    }
-
-
-
-    drawBoardFloor(ctx) {
-
-        const layout =
-            this.boardLayout;
-
-
-        const room =
-            this.normalize(
-                this.levelData
-                    ?.room ||
-                "entree"
-            );
-
-
-        /*
-         * Ombre plateau.
-         */
-
-        ctx.fillStyle =
-            "rgba(0,0,0,0.28)";
-
-
-        ctx.fillRect(
-            layout.x +
-                8,
-            layout.y +
-                9,
-            layout.width,
-            layout.height
-        );
-
-
-        /*
-         * Une légère couche claire sous la grille
-         * rend chaque case beaucoup plus lisible.
-         */
-
-        ctx.save();
-
-        ctx.globalAlpha =
-            0.18;
-
-
-        ctx.fillStyle =
-            room ===
-                "garage"
-                ? "#e1e2e4"
-                : room ===
-                    "cave_a_vin"
-                    ? "#d6d1d6"
-                    : "#fff0cd";
-
-
-        ctx.fillRect(
-            layout.x,
-            layout.y,
-            layout.width,
-            layout.height
-        );
-
-
-        ctx.restore();
-
-
-        /*
-         * Légère alternance de cases.
-         */
-
-        for (
-            let row = 0;
-            row < this.mapHeight;
-            row += 1
-        ) {
-
-            for (
-                let column = 0;
-                column < this.mapWidth;
-                column += 1
-            ) {
-
-                if (
-                    (
-                        row +
-                        column
-                    ) %
-                    2 ===
-                    0
-                ) {
-
-                    continue;
-                }
-
-
-                const cell =
-                    this.cellRect(
-                        column,
-                        row
-                    );
-
-
-                ctx.save();
-
-                ctx.globalAlpha =
-                    0.055;
-
-
-                ctx.fillStyle =
-                    "#000000";
-
-
-                ctx.fillRect(
-                    cell.x,
-                    cell.y,
-                    cell.size,
-                    cell.size
-                );
-
-
-                ctx.restore();
-            }
-        }
-    }
-
-
-
-    drawGrid(ctx) {
-
-        if (
-            !window.PYTArt
-        ) {
-
-            return;
+        let width = rect.width;
+        let height = width * (640 / 960);
+
+        if (height > rect.height) {
+            height = rect.height;
+            width = height * (960 / 640);
         }
 
-
-        for (
-            let row = 0;
-            row < this.mapHeight;
-            row += 1
-        ) {
-
-            for (
-                let column = 0;
-                column < this.mapWidth;
-                column += 1
-            ) {
-
-                const cell =
-                    this.cellRect(
-                        column,
-                        row
-                    );
-
-
-                window.PYTArt
-                    .drawGridCell(
-                        ctx,
-                        cell.x,
-                        cell.y,
-                        cell.size,
-                        {
-
-                            alpha:
-                                0.48,
-
-                            color:
-                                "#fff3d7"
-                        }
-                    );
-            }
-        }
-    }
-
-
-
-    drawTargets(ctx) {
-
-        const targets =
-            this.executing
-                ? this.visualTargets
-                : this.logicalTargets;
-
-
-        for (
-            const target
-            of targets
-        ) {
-
-            const cell =
-                this.cellRect(
-                    target.x,
-                    target.y
-                );
-
-
-            const type =
-                this.normalize(
-                    target.type ??
-                    target.id
-                );
-
-
-            if (
-                this.isDepositTarget(
-                    target
-                )
-            ) {
-
-                window.PYTArt
-                    ?.drawDeposit(
-                        ctx,
-                        cell.x,
-                        cell.y,
-                        cell.size
-                    );
-
-            } else if (
-                [
-                    "goal",
-                    "objectif",
-                    "destination",
-                    "finish",
-                    "arrivee"
-                ].includes(
-                    type
-                )
-            ) {
-
-                window.PYTArt
-                    ?.drawGoal(
-                        ctx,
-                        cell.x,
-                        cell.y,
-                        cell.size
-                    );
-            }
-        }
-
-
-        /*
-         * Goal défini directement dans goal.position.
-         */
-
-        const position =
-            this.extractGoalPosition(
-                this.levelData
-                    ?.goal ||
-                {}
-            );
-
-
-        if (
-            position &&
-            !targets.some(
-                target =>
-                    target.x ===
-                        position.x &&
-                    target.y ===
-                        position.y
-            )
-        ) {
-
-            const cell =
-                this.cellRect(
-                    position.x,
-                    position.y
-                );
-
-
-            window.PYTArt
-                ?.drawGoal(
-                    ctx,
-                    cell.x,
-                    cell.y,
-                    cell.size
-                );
-        }
-    }
-
-
-
-    drawDecorations(ctx) {
-
-        const decorations =
-            this.levelData
-                ?.decorations ??
-            this.levelData
-                ?.map
-                ?.decorations ??
-            [];
-
-
-        if (
-            !Array.isArray(
-                decorations
-            )
-        ) {
-
-            return;
-        }
-
-
-        for (
-            const decoration
-            of decorations
-        ) {
-
-            const x =
-                Number(
-                    decoration.x ??
-                    decoration.col
-                );
-
-
-            const y =
-                Number(
-                    decoration.y ??
-                    decoration.row
-                );
-
-
-            if (
-                !Number.isFinite(
-                    x
-                ) ||
-                !Number.isFinite(
-                    y
-                )
-            ) {
-
-                continue;
-            }
-
-
-            const cell =
-                this.cellRect(
-                    x,
-                    y
-                );
-
-
-            const scale =
-                Number(
-                    decoration.scale ??
-                    0.94
-                );
-
-
-            const size =
-                cell.size *
-                scale;
-
-
-            const offset =
-                (
-                    cell.size -
-                    size
-                ) /
-                2;
-
-
-            window.PYTArt
-                ?.draw(
-                    ctx,
-                    decoration.type ??
-                    decoration.id ??
-                    "unknown",
-                    cell.x +
-                        offset,
-                    cell.y +
-                        offset,
-                    size,
-                    decoration
-                );
-        }
-    }
-
-
-
-    drawBlockedCells(ctx) {
-
-        const blocked =
-            this.getBlockedCells();
-
-
-        blocked.forEach(
-            cell => {
-
-                let x;
-                let y;
-
-
-                if (
-                    Array.isArray(
-                        cell
-                    )
-                ) {
-
-                    x =
-                        Number(
-                            cell[0]
-                        );
-
-                    y =
-                        Number(
-                            cell[1]
-                        );
-
-                } else {
-
-                    x =
-                        Number(
-                            cell.x ??
-                            cell.col
-                        );
-
-                    y =
-                        Number(
-                            cell.y ??
-                            cell.row
-                        );
-                }
-
-
-                if (
-                    !Number.isFinite(
-                        x
-                    ) ||
-                    !Number.isFinite(
-                        y
-                    )
-                ) {
-
-                    return;
-                }
-
-
-                const rect =
-                    this.cellRect(
-                        x,
-                        y
-                    );
-
-
-                /*
-                 * Très léger indicateur.
-                 * Le décor doit rester visible.
-                 */
-
-                window.PYTArt
-                    ?.drawBlocked(
-                        ctx,
-                        rect.x,
-                        rect.y,
-                        rect.size
-                    );
+        Object.assign(
+            this.canvas.style,
+            {
+                display: "block",
+                width: `${Math.floor(width)}px`,
+                height: `${Math.floor(height)}px`,
+                maxWidth: "100%",
+                maxHeight: "100%",
+                margin: "auto",
+                imageRendering: "pixelated"
             }
         );
     }
-
-
-
-    drawObjects(ctx) {
-
-        const objects =
-            this.executing
-                ? this.visualObjects
-                : this.logicalObjects;
-
-
-        for (
-            const object
-            of objects
-        ) {
-
-            if (
-                object.hidden ===
-                true
-            ) {
-
-                continue;
-            }
-
-
-            const cell =
-                this.cellRect(
-                    object.x,
-                    object.y
-                );
-
-
-            let size =
-                cell.size *
-                0.74;
-
-
-            let offset =
-                (
-                    cell.size -
-                    size
-                ) /
-                2;
-
-
-            if (
-                this.isPushableObject(
-                    object
-                )
-            ) {
-
-                size =
-                    cell.size *
-                    0.83;
-
-
-                offset =
-                    (
-                        cell.size -
-                        size
-                    ) /
-                    2;
-            }
-
-
-            /*
-             * Petit halo pour les objets ramassables.
-             */
-
-            if (
-                this.isAutoPickupObject(
-                    object
-                )
-            ) {
-
-                ctx.save();
-
-
-                const centerX =
-                    cell.x +
-                    cell.size /
-                    2;
-
-
-                const centerY =
-                    cell.y +
-                    cell.size /
-                    2;
-
-
-                const gradient =
-                    ctx.createRadialGradient(
-                        centerX,
-                        centerY,
-                        0,
-                        centerX,
-                        centerY,
-                        cell.size *
-                            0.48
-                    );
-
-
-                gradient.addColorStop(
-                    0,
-                    "rgba(255,238,150,0.18)"
-                );
-
-
-                gradient.addColorStop(
-                    1,
-                    "rgba(255,238,150,0)"
-                );
-
-
-                ctx.fillStyle =
-                    gradient;
-
-
-                ctx.fillRect(
-                    cell.x,
-                    cell.y,
-                    cell.size,
-                    cell.size
-                );
-
-
-                ctx.restore();
-            }
-
-
-            let artType =
-                this.getObjectArtType(
-                    object
-                );
-
-
-            let drawY =
-                cell.y +
-                offset;
-
-
-            let drawSize =
-                size;
-
-
-            if (
-                object._pickup
-            ) {
-
-                const progress =
-                    Number(
-                        object._pickupProgress ||
-                        0
-                    );
-
-
-                drawY -=
-                    cell.size *
-                    progress *
-                    0.3;
-
-
-                drawSize *=
-                    1 -
-                    progress *
-                    0.55;
-            }
-
-
-            if (
-                object._cleanProgress
-            ) {
-
-                ctx.save();
-
-                ctx.globalAlpha =
-                    1 -
-                    object._cleanProgress;
-            }
-
-
-            window.PYTArt
-                ?.draw(
-                    ctx,
-                    artType,
-                    cell.x +
-                        (
-                            cell.size -
-                            drawSize
-                        ) /
-                        2,
-                    drawY,
-                    drawSize,
-                    object
-                );
-
-
-            if (
-                object._cleanProgress
-            ) {
-
-                ctx.restore();
-            }
-        }
-    }
-
-
-
-    getObjectArtType(object) {
-
-        const raw =
-            this.normalize(
-                object.art ??
-                object.type ??
-                object.id ??
-                ""
-            );
-
-
-        /*
-         * IDs particuliers.
-         */
-
-        if (
-            raw.includes(
-                "livre_rouge"
-            )
-        ) {
-
-            return "livre_rouge";
-        }
-
-
-        if (
-            raw.includes(
-                "livre_bleu"
-            )
-        ) {
-
-            return "livre_bleu";
-        }
-
-
-        if (
-            raw.includes(
-                "bouteille_rouge"
-            )
-        ) {
-
-            return "bouteille_rouge";
-        }
-
-
-        if (
-            raw.includes(
-                "bouteille_bleue"
-            )
-        ) {
-
-            return "bouteille_bleue";
-        }
-
-
-        if (
-            raw.includes(
-                "bouteille_verte"
-            )
-        ) {
-
-            return "bouteille_verte";
-        }
-
-
-        if (
-            raw.includes(
-                "bouteille_jaune"
-            )
-        ) {
-
-            return "bouteille_jaune";
-        }
-
-
-        if (
-            raw.includes(
-                "boite_outils"
-            )
-        ) {
-
-            return "boite_outils";
-        }
-
-
-        /*
-         * Suppression d'un numéro final :
-         * jouet_1 → jouet
-         */
-
-        return raw
-            .replace(
-                /_\d+$/,
-                ""
-            );
-    }
-
-
-
-    drawRobot(
-        ctx,
-        options = {}
-    ) {
-
-        const robot =
-            this.visualRobot ||
-            this.robot;
-
-
-        if (
-            !robot
-        ) {
-
-            return;
-        }
-
-
-        const cell =
-            this.cellRect(
-                robot.x,
-                robot.y
-            );
-
-
-        const size =
-            cell.size *
-            0.76;
-
-
-        const offset =
-            (
-                cell.size -
-                size
-            ) /
-                2;
-
-
-        if (
-            window.PYTArt
-        ) {
-
-            window.PYTArt
-                .drawPyt(
-                    ctx,
-                    cell.x +
-                        offset,
-                    cell.y +
-                        offset -
-                        cell.size *
-                        0.06,
-                    size,
-                    robot.direction,
-                    {
-
-                        bob:
-                            Boolean(
-                                options.moving
-                            ),
-
-                        happy:
-                            false
-                    }
-                );
-        }
-    }
-
-
-
-    drawBoardBorder(ctx) {
-
-        const layout =
-            this.boardLayout;
-
-
-        ctx.save();
-
-
-        /*
-         * Bord sombre.
-         */
-
-        ctx.strokeStyle =
-            "rgba(15,13,24,0.78)";
-
-
-        ctx.lineWidth =
-            5;
-
-
-        ctx.strokeRect(
-            layout.x -
-                3,
-            layout.y -
-                3,
-            layout.width +
-                6,
-            layout.height +
-                6
-        );
-
-
-        /*
-         * Petit highlight.
-         */
-
-        ctx.strokeStyle =
-            "rgba(255,239,205,0.30)";
-
-
-        ctx.lineWidth =
-            2;
-
-
-        ctx.strokeRect(
-            layout.x,
-            layout.y,
-            layout.width,
-            layout.height
-        );
-
-
-        ctx.restore();
-    }
-
-
 
     /* =====================================================
-       CASES
+       OUTILS
     ===================================================== */
 
-    cellRect(
-        x,
-        y
-    ) {
-
-        const layout =
-            this.boardLayout ||
-            this.calculateBoardLayout(
-                this.canvas?.width ||
-                960,
-                this.canvas?.height ||
-                640
+    clone(value) {
+        return value === undefined
+            ? undefined
+            : JSON.parse(
+                JSON.stringify(value)
             );
-
-
-        const size =
-            layout.tileSize;
-
-
-        return {
-
-            x:
-                layout.x +
-                Number(
-                    x
-                ) *
-                size,
-
-            y:
-                layout.y +
-                Number(
-                    y
-                ) *
-                size,
-
-            size
-        };
     }
-
-
-
-    /* =====================================================
-       STATUS
-    ===================================================== */
-
-    updateStatus(text) {
-
-        const status =
-            document.getElementById(
-                "game-status"
-            );
-
-
-        if (
-            status
-        ) {
-
-            status.textContent =
-                text;
-        }
-    }
-
-
-
-    /* =====================================================
-       UTILS
-    ===================================================== */
 
     normalize(value) {
-
-        return String(
-            value ??
-            ""
-        )
+        return String(value ?? "")
             .normalize("NFD")
             .replace(
                 /[\u0300-\u036f]/g,
@@ -9029,66 +1726,2780 @@ class PytGame {
             );
     }
 
+    normalizeDirection(direction) {
+        const key =
+            String(direction ?? "E")
+                .toUpperCase();
 
+        return ({
+            NORTH: "N",
+            NORD: "N",
+            UP: "N",
 
-    clone(value) {
+            EAST: "E",
+            EST: "E",
+            RIGHT: "E",
 
-        if (
-            value ===
-                undefined
-        ) {
+            SOUTH: "S",
+            SUD: "S",
+            DOWN: "S",
 
-            return undefined;
+            WEST: "W",
+            OUEST: "W",
+            LEFT: "W"
+        })[key] || (
+            ["N", "E", "S", "W"].includes(key)
+                ? key
+                : "E"
+        );
+    }
+
+    /* =====================================================
+       CHARGEMENT DES DONNÉES
+    ===================================================== */
+
+    extractStart(data) {
+        const start = [
+            data.robotStart,
+            data.start,
+            data.robot?.start,
+            data.robot,
+            data.map?.start,
+            data.map?.robotStart
+        ].find(
+            x =>
+                x &&
+                typeof x === "object"
+        ) || {};
+
+        return {
+            x: Number(
+                start.x ??
+                start.col ??
+                start.column ??
+                0
+            ),
+
+            y: Number(
+                start.y ??
+                start.row ??
+                start.line ??
+                0
+            ),
+
+            direction:
+                this.normalizeDirection(
+                    start.direction ??
+                    start.heading ??
+                    "E"
+                )
+        };
+    }
+
+    extractObjects(data) {
+        const objects =
+            data.objects ??
+            data.map?.objects ??
+            [];
+
+        if (!Array.isArray(objects)) {
+            return [];
         }
 
+        return objects.map(
+            (item, i) => ({
+                ...this.clone(item),
 
-        return JSON.parse(
-            JSON.stringify(
-                value
+                id:
+                    item.id ??
+                    `object-${i + 1}`,
+
+                x: Number(
+                    item.x ??
+                    item.col ??
+                    0
+                ),
+
+                y: Number(
+                    item.y ??
+                    item.row ??
+                    0
+                )
+            })
+        );
+    }
+
+    extractTargets(data) {
+        const targets =
+            data.targets ??
+            data.map?.targets ??
+            [];
+
+        if (!Array.isArray(targets)) {
+            return [];
+        }
+
+        return targets.map(
+            (item, i) => ({
+                ...this.clone(item),
+
+                id:
+                    item.id ??
+                    `target-${i + 1}`,
+
+                x: Number(
+                    item.x ??
+                    item.col ??
+                    0
+                ),
+
+                y: Number(
+                    item.y ??
+                    item.row ??
+                    0
+                )
+            })
+        );
+    }
+
+    createRobot(start) {
+        let robot;
+
+        try {
+            robot =
+                typeof window.PytRobot === "function"
+                    ? new window.PytRobot(start)
+                    : {};
+        } catch (_) {
+            try {
+                robot = new window.PytRobot(
+                    start.x,
+                    start.y,
+                    start.direction
+                );
+            } catch (_) {
+                robot = {};
+            }
+        }
+
+        Object.assign(robot, {
+            x: start.x,
+            y: start.y,
+            direction: start.direction,
+            inventory: [],
+            visited: [
+                {
+                    x: start.x,
+                    y: start.y
+                }
+            ]
+        });
+
+        return robot;
+    }
+
+    resetStats() {
+        this.stats = {
+            moves: 0,
+            forward: 0,
+            backward: 0,
+            turns: 0,
+            collisions: 0,
+            picked: [],
+            deposited: [],
+            pushed: [],
+            buttons: [],
+            doors: [],
+            cleaned: [],
+            recharged: false
+        };
+    }
+
+    /* =====================================================
+       OUVERTURE D'EXERCICE
+    ===================================================== */
+
+    loadLevel(data) {
+        this.stopAnimation();
+
+        this.levelData =
+            this.clone(data || {});
+
+        this.mapWidth = Math.max(
+            1,
+            Math.min(
+                30,
+                Number(
+                    this.levelData.map?.width ??
+                    this.levelData.width ??
+                    8
+                ) || 8
+            )
+        );
+
+        this.mapHeight = Math.max(
+            1,
+            Math.min(
+                30,
+                Number(
+                    this.levelData.map?.height ??
+                    this.levelData.height ??
+                    6
+                ) || 6
+            )
+        );
+
+        this.startState =
+            this.extractStart(
+                this.levelData
+            );
+
+        this.robot =
+            this.createRobot(
+                this.startState
+            );
+
+        this.logicalObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+        this.logicalTargets =
+            this.extractTargets(
+                this.levelData
+            );
+
+        this.resetStats();
+
+        this.actionQueue = [];
+        this.programOutput = [];
+        this.runtimeIssues = [];
+        this.executing = false;
+
+        this.prepareVisualPlayback();
+
+        this.updateStatus("Prêt");
+
+        this.resizeCanvas();
+        this.render();
+
+        requestAnimationFrame(() => {
+            this.resizeCanvas();
+            this.render();
+        });
+    }
+
+    restartLevel(data = null) {
+        if (data || this.levelData) {
+            this.loadLevel(
+                data ||
+                this.levelData
+            );
+        }
+    }
+
+    resetLevel() {
+        this.restartLevel();
+    }
+
+    resetLogicalWorld() {
+        Object.assign(
+            this.robot,
+            {
+                x: this.startState.x,
+                y: this.startState.y,
+                direction:
+                    this.startState.direction,
+
+                inventory: [],
+
+                visited: [
+                    {
+                        x: this.startState.x,
+                        y: this.startState.y
+                    }
+                ]
+            }
+        );
+
+        this.logicalObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+        this.logicalTargets =
+            this.extractTargets(
+                this.levelData
+            );
+
+        this.resetStats();
+    }
+
+    prepareVisualPlayback() {
+        this.visualRobot = {
+            x: this.startState.x,
+            y: this.startState.y,
+            direction:
+                this.startState.direction,
+            inventory: []
+        };
+
+        this.visualObjects =
+            this.extractObjects(
+                this.levelData
+            );
+
+        this.visualTargets =
+            this.extractTargets(
+                this.levelData
+            );
+    }
+
+    /* =====================================================
+       EXÉCUTION DU CODE
+    ===================================================== */
+
+    async executeSource(source) {
+        if (
+            this.executing ||
+            !this.levelData
+        ) {
+            return;
+        }
+
+        this.executing = true;
+
+        const playbackId =
+            ++this.playbackId;
+
+        this.resetLogicalWorld();
+
+        this.programOutput = [];
+        this.actionQueue = [];
+        this.runtimeIssues = [];
+
+        this.updateStatus(
+            "Analyse du programme..."
+        );
+
+        let problem = null;
+        let errorLine = 0;
+        let interpreter = null;
+
+        try {
+            interpreter = new PytInterpreter(
+                this,
+                String(source)
+            );
+
+            interpreter.execute();
+        } catch (error) {
+            problem = error;
+
+            errorLine = Number(
+                error.line ??
+                error.lineNumber ??
+                interpreter?.currentLine ??
+                0
+            );
+
+            if (!errorLine) {
+                errorLine = Number(
+                    /ligne\s+(\d+)/i
+                        .exec(error.message)?.[1] ||
+                    0
+                );
+            }
+        }
+
+        this.prepareVisualPlayback();
+
+        this.updateStatus("Exécution...");
+
+        try {
+            await this.playActionQueue(
+                playbackId
+            );
+
+            if (
+                playbackId !==
+                this.playbackId
+            ) {
+                return;
+            }
+
+            const result = problem
+                ? {
+                    success: false,
+                    reason: "runtime_error",
+                    message:
+                        problem.message ||
+                        "Erreur dans le programme.",
+                    errorLine
+                }
+                : this.validateLevel(
+                    String(source)
+                );
+
+            this.finishExecution({
+                ...result,
+                output:
+                    this.programOutput.slice()
+            });
+        } catch (error) {
+            if (
+                playbackId !==
+                this.playbackId
+            ) {
+                return;
+            }
+
+            this.finishExecution({
+                success: false,
+                reason: "engine_error",
+                message:
+                    error.message ||
+                    "Erreur pendant l'exécution."
+            });
+        }
+    }
+
+    finishExecution(result) {
+        this.executing = false;
+
+        const line = Number(
+            result.errorLine ??
+            result.line ??
+            0
+        );
+
+        const detail = {
+            ...result,
+            errorLine: line,
+            line,
+            lineNumber: line,
+            levelData:
+                this.clone(this.levelData)
+        };
+
+        this.updateStatus(
+            detail.success
+                ? "Mission réussie"
+                : "À corriger"
+        );
+
+        this.render();
+
+        window.dispatchEvent(
+            new CustomEvent(
+                "pyt:execution-result",
+                {
+                    detail
+                }
+            )
+        );
+
+        window.dispatchEvent(
+            new CustomEvent(
+                detail.success
+                    ? "pyt:level-complete"
+                    : "pyt:level-failed",
+                {
+                    detail
+                }
             )
         );
     }
+
+    /* =====================================================
+       FILE D'ACTIONS
+    ===================================================== */
+
+    ensureQueueCapacity() {
+        if (
+            this.actionQueue.length >=
+            1500
+        ) {
+            throw new Error(
+                "Programme trop long : limite de 1500 actions."
+            );
+        }
+    }
+
+    queue(action) {
+        this.ensureQueueCapacity();
+        this.actionQueue.push(action);
+    }
+
+    /* =====================================================
+       DIRECTIONS
+    ===================================================== */
+
+    rotateDirection(direction, turns) {
+        const order = [
+            "N",
+            "E",
+            "S",
+            "W"
+        ];
+
+        return order[
+            (
+                order.indexOf(
+                    this.normalizeDirection(direction)
+                ) +
+                turns +
+                8
+            ) % 4
+        ];
+    }
+
+    getDirectionVector(direction) {
+        return {
+            N: {
+                x: 0,
+                y: -1
+            },
+
+            E: {
+                x: 1,
+                y: 0
+            },
+
+            S: {
+                x: 0,
+                y: 1
+            },
+
+            W: {
+                x: -1,
+                y: 0
+            }
+        }[
+            this.normalizeDirection(direction)
+        ];
+    }
+
+    inBounds(x, y) {
+        return (
+            x >= 0 &&
+            y >= 0 &&
+            x < this.mapWidth &&
+            y < this.mapHeight
+        );
+    }
+
+    /* =====================================================
+       COMMANDES DE DÉPLACEMENT
+    ===================================================== */
+
+    normalizeDistance(value = 1) {
+        const n = Number(value ?? 1);
+
+        if (
+            !Number.isInteger(n) ||
+            n < 0 ||
+            n > 100
+        ) {
+            throw new Error(
+                "Le nombre de cases doit être entier entre 0 et 100."
+            );
+        }
+
+        return n;
+    }
+
+    apiForward(distance = 1) {
+        const count =
+            this.normalizeDistance(distance);
+
+        for (let i = 0; i < count; i++) {
+            this.tryMove(1, "forward");
+        }
+
+        return null;
+    }
+
+    apiBackward(distance = 1) {
+        const count =
+            this.normalizeDistance(distance);
+
+        for (let i = 0; i < count; i++) {
+            this.tryMove(-1, "backward");
+        }
+
+        return null;
+    }
+
+    apiLeft(degrees = 90) {
+        return this.turnBy(
+            -Number(degrees ?? 90)
+        );
+    }
+
+    apiRight(degrees = 90) {
+        return this.turnBy(
+            Number(degrees ?? 90)
+        );
+    }
+
+    turnBy(degrees) {
+        if (
+            !Number.isFinite(degrees) ||
+            degrees % 90 !== 0 ||
+            Math.abs(degrees) > 3600
+        ) {
+            throw new Error(
+                "Utilise des rotations par multiples de 90 degrés."
+            );
+        }
+
+        const count =
+            Math.abs(degrees / 90);
+
+        for (let i = 0; i < count; i++) {
+            const from =
+                this.robot.direction;
+
+            const to =
+                this.rotateDirection(
+                    from,
+                    degrees > 0 ? 1 : -1
+                );
+
+            this.robot.direction = to;
+            this.stats.turns++;
+
+            this.queue({
+                type: "turn",
+                from,
+                to
+            });
+        }
+
+        return null;
+    }
+
+    apiSetHeading(degrees) {
+        const angle =
+            (
+                (Number(degrees) % 360) +
+                360
+            ) % 360;
+
+        const to = {
+            0: "E",
+            90: "S",
+            180: "W",
+            270: "N"
+        }[angle];
+
+        if (!to) {
+            throw new Error(
+                "setheading() : utilise 0, 90, 180 ou 270."
+            );
+        }
+
+        const from =
+            this.robot.direction;
+
+        this.robot.direction = to;
+
+        this.queue({
+            type: "turn",
+            from,
+            to
+        });
+
+        return null;
+    }
+
+    apiGoto(x, y) {
+        x = Number(x);
+        y = Number(y);
+
+        if (
+            !Number.isInteger(x) ||
+            !Number.isInteger(y) ||
+            !this.inBounds(x, y)
+        ) {
+            throw new Error(
+                "Coordonnées goto() hors de la grille."
+            );
+        }
+
+        let guard = 0;
+
+        while (
+            this.robot.x !== x &&
+            guard++ < 100
+        ) {
+            this.turnToDirection(
+                this.robot.x < x
+                    ? "E"
+                    : "W"
+            );
+
+            if (!this.tryMove(1, "forward")) {
+                break;
+            }
+        }
+
+        guard = 0;
+
+        while (
+            this.robot.y !== y &&
+            guard++ < 100
+        ) {
+            this.turnToDirection(
+                this.robot.y < y
+                    ? "S"
+                    : "N"
+            );
+
+            if (!this.tryMove(1, "forward")) {
+                break;
+            }
+        }
+
+        return null;
+    }
+
+    turnToDirection(direction) {
+        for (
+            let i = 0;
+            i < 4 &&
+                this.robot.direction !== direction;
+            i++
+        ) {
+            this.turnBy(90);
+        }
+    }
+
+    /* =====================================================
+       COLLISIONS ET OBJETS
+    ===================================================== */
+
+    getBlockedCells() {
+        const source =
+            this.levelData?.blocked ??
+            this.levelData?.map?.blocked ??
+            [];
+
+        return Array.isArray(source)
+            ? source
+            : [];
+    }
+
+    cellMatches(item, x, y) {
+        if (Array.isArray(item)) {
+            return (
+                Number(item[0]) === x &&
+                Number(item[1]) === y
+            );
+        }
+
+        return Boolean(
+            item &&
+            Number(item.x ?? item.col) === x &&
+            Number(item.y ?? item.row) === y
+        );
+    }
+
+    isPushableObject(item) {
+        if (item.pushable != null) {
+            return item.pushable === true;
+        }
+
+        return [
+            "caisse",
+            "box",
+            "crate",
+            "caisse_bois"
+        ].includes(
+            this.normalize(
+                item.type ??
+                item.id
+            )
+        );
+    }
+
+    isButtonType(type) {
+        return [
+            "button",
+            "bouton",
+            "switch",
+            "interrupteur"
+        ].includes(type);
+    }
+
+    isDoorType(type) {
+        return [
+            "door",
+            "porte"
+        ].includes(type);
+    }
+
+    isDirtyType(type) {
+        return [
+            "dirty",
+            "salete",
+            "mud",
+            "boue",
+            "tache"
+        ].includes(type);
+    }
+
+    isChargerType(type) {
+        return [
+            "charger",
+            "recharge",
+            "station_recharge",
+            "charging_station"
+        ].includes(type);
+    }
+
+    isDepositTarget(item) {
+        return [
+            "deposit",
+            "depot",
+            "drop",
+            "destination_objet"
+        ].includes(
+            this.normalize(
+                item.type ??
+                item.id
+            )
+        );
+    }
+
+    isAutoPickupObject(item) {
+        if (
+            item.pickable === false ||
+            this.isPushableObject(item)
+        ) {
+            return false;
+        }
+
+        const types = [
+            "book",
+            "livre",
+            "livre_rouge",
+            "livre_bleu",
+            "key",
+            "cle",
+            "apple",
+            "pomme",
+            "cup",
+            "tasse",
+            "plate",
+            "assiette",
+            "bottle",
+            "bouteille",
+            "bouteille_rouge",
+            "bouteille_bleue",
+            "bouteille_verte",
+            "bouteille_jaune",
+            "watering_can",
+            "arrosoir",
+            "toy",
+            "jouet",
+            "charger_item",
+            "chargeur",
+            "float",
+            "bouee",
+            "toolbox",
+            "boite_outils"
+        ];
+
+        return (
+            item.pickable === true ||
+            types.includes(
+                this.normalize(
+                    item.type ??
+                    item.id
+                )
+            )
+        );
+    }
+
+    findPushableAt(x, y) {
+        return this.logicalObjects.find(
+            object =>
+                object.x === x &&
+                object.y === y &&
+                this.isPushableObject(object)
+        ) || null;
+    }
+
+    isBlockedCell(
+        x,
+        y,
+        ignoreId = null
+    ) {
+        if (!this.inBounds(x, y)) {
+            return true;
+        }
+
+        if (
+            this.getBlockedCells().some(
+                cell =>
+                    this.cellMatches(
+                        cell,
+                        x,
+                        y
+                    )
+            )
+        ) {
+            return true;
+        }
+
+        return this.logicalObjects.some(
+            object => {
+                if (
+                    object.id === ignoreId ||
+                    object.x !== x ||
+                    object.y !== y
+                ) {
+                    return false;
+                }
+
+                const type =
+                    this.normalize(
+                        object.type ??
+                        object.id
+                    );
+
+                if (
+                    this.isAutoPickupObject(object) ||
+                    this.isButtonType(type) ||
+                    this.isDoorType(type) ||
+                    this.isDirtyType(type) ||
+                    this.isChargerType(type)
+                ) {
+                    return false;
+                }
+
+                return (
+                    this.isPushableObject(object) ||
+                    object.solid === true
+                );
+            }
+        );
+    }
+
+    registerCollision(from, target) {
+        this.stats.collisions++;
+
+        this.runtimeIssues.push({
+            type: "collision",
+            ...target
+        });
+
+        this.queue({
+            type: "bump",
+            from,
+            target,
+            direction:
+                this.robot.direction
+        });
+    }
+
+    /* =====================================================
+       MOUVEMENT LOGIQUE
+    ===================================================== */
+
+    tryMove(sign, mode) {
+        const vector =
+            this.getDirectionVector(
+                this.robot.direction
+            );
+
+        const dx = vector.x * sign;
+        const dy = vector.y * sign;
+
+        const from = {
+            x: this.robot.x,
+            y: this.robot.y
+        };
+
+        const target = {
+            x: from.x + dx,
+            y: from.y + dy
+        };
+
+        if (
+            !this.inBounds(
+                target.x,
+                target.y
+            )
+        ) {
+            this.registerCollision(
+                from,
+                target
+            );
+
+            return false;
+        }
+
+        const box =
+            this.findPushableAt(
+                target.x,
+                target.y
+            );
+
+        if (box) {
+            const destination = {
+                x: target.x + dx,
+                y: target.y + dy
+            };
+
+            if (
+                this.isBlockedCell(
+                    destination.x,
+                    destination.y,
+                    box.id
+                )
+            ) {
+                this.registerCollision(
+                    from,
+                    target
+                );
+
+                return false;
+            }
+
+            const oldPosition = {
+                x: box.x,
+                y: box.y
+            };
+
+            box.x = destination.x;
+            box.y = destination.y;
+
+            this.stats.pushed.push(
+                box.id
+            );
+
+            this.queue({
+                type: "push",
+                objectId: box.id,
+                from: oldPosition,
+                to: destination
+            });
+        }
+
+        if (
+            this.isBlockedCell(
+                target.x,
+                target.y
+            )
+        ) {
+            this.registerCollision(
+                from,
+                target
+            );
+
+            return false;
+        }
+
+        this.robot.x = target.x;
+        this.robot.y = target.y;
+
+        this.robot.visited.push(target);
+
+        this.stats.moves++;
+
+        this.stats[
+            mode === "backward"
+                ? "backward"
+                : "forward"
+        ]++;
+
+        this.queue({
+            type: "move",
+            from,
+            to: target,
+            mode,
+            direction:
+                this.robot.direction
+        });
+
+        this.applyAutomaticInteractions();
+
+        return true;
+    }
+
+    frontIsClear() {
+        const vector =
+            this.getDirectionVector(
+                this.robot.direction
+            );
+
+        const x =
+            this.robot.x +
+            vector.x;
+
+        const y =
+            this.robot.y +
+            vector.y;
+
+        const box =
+            this.findPushableAt(
+                x,
+                y
+            );
+
+        if (box) {
+            return !this.isBlockedCell(
+                x + vector.x,
+                y + vector.y,
+                box.id
+            );
+        }
+
+        return !this.isBlockedCell(x, y);
+    }
+
+    robotOnObject() {
+        return this.logicalObjects.some(
+            object =>
+                object.x === this.robot.x &&
+                object.y === this.robot.y
+        );
+    }
+
+    objectMatches(item, expected) {
+        const key =
+            this.normalize(expected);
+
+        return [
+            item.id,
+            item.type,
+            item.original?.id,
+            item.original?.type
+        ].some(
+            value =>
+                this.normalize(value) === key
+        );
+    }
+
+    inventoryContains(value) {
+        return this.robot.inventory.some(
+            item =>
+                this.objectMatches(
+                    item,
+                    value
+                )
+        );
+    }
+
+    /* =====================================================
+       INTERACTIONS AUTOMATIQUES
+    ===================================================== */
+
+    applyAutomaticInteractions() {
+        const { x, y } = this.robot;
+
+        const objects =
+            this.logicalObjects.filter(
+                object =>
+                    object.x === x &&
+                    object.y === y
+            );
+
+        for (const object of objects) {
+            const type =
+                this.normalize(
+                    object.type ??
+                    object.id
+                );
+
+            if (this.isButtonType(type)) {
+                if (!object.activated) {
+                    object.activated = true;
+
+                    this.stats.buttons.push(
+                        object.id
+                    );
+
+                    this.queue({
+                        type: "button",
+                        objectId: object.id,
+                        x,
+                        y
+                    });
+                }
+            } else if (
+                this.isChargerType(type)
+            ) {
+                this.stats.recharged = true;
+
+                this.queue({
+                    type: "recharge",
+                    objectId: object.id,
+                    x,
+                    y
+                });
+            } else if (
+                object.cleanable === true ||
+                this.isDirtyType(type)
+            ) {
+                if (!object.cleaned) {
+                    object.cleaned = true;
+
+                    this.stats.cleaned.push(
+                        object.id
+                    );
+
+                    this.queue({
+                        type: "clean",
+                        objectId: object.id,
+                        x,
+                        y
+                    });
+                }
+            } else if (
+                this.isDoorType(type)
+            ) {
+                if (!object.open) {
+                    object.open = true;
+
+                    this.stats.doors.push(
+                        object.id
+                    );
+
+                    this.queue({
+                        type: "door",
+                        objectId: object.id,
+                        x,
+                        y
+                    });
+                }
+            } else if (
+                this.isAutoPickupObject(object) &&
+                !object.collected
+            ) {
+                object.collected = true;
+
+                const item = {
+                    id: object.id,
+                    type:
+                        object.type ??
+                        object.id,
+                    original:
+                        this.clone(object)
+                };
+
+                this.robot.inventory.push(
+                    item
+                );
+
+                this.stats.picked.push(
+                    object.id
+                );
+
+                this.queue({
+                    type: "pickup",
+                    objectId: object.id,
+                    item,
+                    x,
+                    y
+                });
+            }
+        }
+
+        this.logicalObjects =
+            this.logicalObjects.filter(
+                object =>
+                    !object.collected
+            );
+
+        this.tryAutomaticDeposit();
+    }
+
+    tryAutomaticDeposit() {
+        if (
+            !this.robot.inventory.length
+        ) {
+            return;
+        }
+
+        const target =
+            this.logicalTargets.find(
+                item =>
+                    item.x === this.robot.x &&
+                    item.y === this.robot.y &&
+                    this.isDepositTarget(item) &&
+                    !item.completed
+            );
+
+        if (!target) {
+            return;
+        }
+
+        const expected =
+            target.object ??
+            target.objectId ??
+            target.requiredObject ??
+            target.accepts ??
+            null;
+
+        const index =
+            expected == null
+                ? 0
+                : this.robot.inventory.findIndex(
+                    item =>
+                        this.objectMatches(
+                            item,
+                            expected
+                        )
+                );
+
+        if (index < 0) {
+            return;
+        }
+
+        const item =
+            this.robot.inventory.splice(
+                index,
+                1
+            )[0];
+
+        target.completed = true;
+
+        this.stats.deposited.push({
+            object: item.id,
+            target: target.id
+        });
+
+        this.queue({
+            type: "deposit",
+            item,
+            targetId: target.id,
+            x: target.x,
+            y: target.y
+        });
+    }
+
+    /* =====================================================
+       OBJECTIFS ET VALIDATION
+    ===================================================== */
+
+    extractGoalPosition(goal = {}) {
+        const choices = [
+            goal.position,
+            goal.destination,
+            goal.target
+        ];
+
+        if (
+            goal.x != null &&
+            goal.y != null
+        ) {
+            choices.push(goal);
+        }
+
+        for (const item of choices) {
+            if (
+                !item ||
+                (
+                    item.x == null &&
+                    item.col == null
+                )
+            ) {
+                continue;
+            }
+
+            const x = Number(
+                item.x ??
+                item.col
+            );
+
+            const y = Number(
+                item.y ??
+                item.row
+            );
+
+            if (
+                Number.isFinite(x) &&
+                Number.isFinite(y)
+            ) {
+                return { x, y };
+            }
+        }
+
+        return null;
+    }
+
+    findDestinationTarget() {
+        const target =
+            this.logicalTargets.find(
+                item =>
+                    [
+                        "goal",
+                        "objectif",
+                        "destination",
+                        "finish",
+                        "arrivee"
+                    ].includes(
+                        this.normalize(
+                            item.type ??
+                            item.id
+                        )
+                    )
+            );
+
+        return target
+            ? {
+                x: target.x,
+                y: target.y
+            }
+            : null;
+    }
+
+    validateLevel(source) {
+        const goal =
+            this.levelData.goal || {};
+
+        const missing =
+            PytCodeAnalyzer.missingConcepts(
+                source,
+                this.levelData.requiredConcepts
+            );
+
+        const fail = (reason, message) => ({
+            success: false,
+            reason,
+            message
+        });
+
+        if (missing.length) {
+            return {
+                ...fail(
+                    "concept_missing",
+                    "Utilise les notions Python demandées."
+                ),
+
+                missingConcepts: missing
+            };
+        }
+
+        const destination =
+            this.extractGoalPosition(goal) ||
+            this.findDestinationTarget();
+
+        if (
+            destination &&
+            (
+                this.robot.x !== destination.x ||
+                this.robot.y !== destination.y
+            )
+        ) {
+            return fail(
+                "wrong_destination",
+                "Pyt n'est pas arrivé à la destination."
+            );
+        }
+
+        const required =
+            goal.requiredObject ??
+            goal.required_object ??
+            goal.pickup;
+
+        if (required) {
+            const items =
+                Array.isArray(required)
+                    ? required
+                    : [required];
+
+            for (const item of items) {
+                const wasPicked =
+                    this.stats.picked.some(
+                        id =>
+                            this.normalize(id) ===
+                            this.normalize(item)
+                    );
+
+                const inInventory =
+                    this.robot.inventory.some(
+                        object =>
+                            this.objectMatches(
+                                object,
+                                item
+                            )
+                    );
+
+                const wasDeposited =
+                    this.stats.deposited.some(
+                        object =>
+                            this.normalize(
+                                object.object
+                            ) ===
+                            this.normalize(item)
+                    );
+
+                if (
+                    !wasPicked &&
+                    !inInventory &&
+                    !wasDeposited
+                ) {
+                    return fail(
+                        "object_missing",
+                        "Un objet important manque encore."
+                    );
+                }
+            }
+        }
+
+        const unfinishedDeposit =
+            this.logicalTargets.some(
+                target =>
+                    this.isDepositTarget(target) &&
+                    !target.optional &&
+                    !target.completed
+            );
+
+        if (unfinishedDeposit) {
+            return fail(
+                "deposit_missing",
+                "Tous les dépôts ne sont pas terminés."
+            );
+        }
+
+        const requiredButtons = Number(
+            goal.buttons ??
+            goal.requiredButtons ??
+            0
+        );
+
+        if (
+            this.stats.buttons.length <
+            requiredButtons
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Il reste un mécanisme à activer."
+            );
+        }
+
+        const requiredCleaned = Number(
+            goal.cleaned ??
+            goal.requiredCleaned ??
+            0
+        );
+
+        if (
+            this.stats.cleaned.length <
+            requiredCleaned
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Il reste des cases à nettoyer."
+            );
+        }
+
+        if (
+            goal.recharge &&
+            !this.stats.recharged
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Pyt doit encore se recharger."
+            );
+        }
+
+        const minimumMoves = Number(
+            goal.minimum_moves ??
+            goal.minimumMoves ??
+            0
+        );
+
+        if (
+            this.stats.moves <
+            minimumMoves
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Le trajet est incomplet."
+            );
+        }
+
+        if (
+            goal.noCollisions &&
+            this.stats.collisions
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Pyt a heurté un obstacle."
+            );
+        }
+
+        if (
+            Array.isArray(goal.visit) &&
+            goal.visit.some(
+                point =>
+                    !this.robot.visited.some(
+                        visited =>
+                            this.cellMatches(
+                                point,
+                                visited.x,
+                                visited.y
+                            )
+                    )
+            )
+        ) {
+            return fail(
+                "objective_incomplete",
+                "Toutes les étapes du parcours doivent être visitées."
+            );
+        }
+
+        if (
+            Array.isArray(goal.visitInOrder)
+        ) {
+            let lastIndex = -1;
+
+            for (
+                const checkpoint
+                of goal.visitInOrder
+            ) {
+                lastIndex =
+                    this.robot.visited.findIndex(
+                        (point, index) =>
+                            index > lastIndex &&
+                            this.cellMatches(
+                                checkpoint,
+                                point.x,
+                                point.y
+                            )
+                    );
+
+                if (lastIndex < 0) {
+                    return fail(
+                        "objective_incomplete",
+                        "Les étapes doivent être parcourues dans l'ordre."
+                    );
+                }
+            }
+        }
+
+        return {
+            success: true,
+            reason: "success",
+            message: "Mission réussie !"
+        };
+    }
+
+    /* =====================================================
+       APPELS À ART.JS
+    ===================================================== */
+
+    safeArt(method, ...args) {
+        const fn =
+            window.PYTArt?.[method];
+
+        if (typeof fn !== "function") {
+            return false;
+        }
+
+        try {
+            this.ensureArtCompatibility();
+
+            fn.call(
+                window.PYTArt,
+                ...args
+            );
+
+            return true;
+        } catch (error) {
+            if (!this.artWarningShown) {
+                this.artWarningShown = true;
+
+                console.warn(
+                    "[PYT] Erreur de dessin (le jeu continue) :",
+                    error
+                );
+            }
+
+            return false;
+        }
+    }
+
+    /* =====================================================
+       RENDU
+    ===================================================== */
+
+    render(options = {}) {
+        if (
+            !this.ctx ||
+            !this.canvas
+        ) {
+            return;
+        }
+
+        const ctx = this.ctx;
+
+        const width =
+            this.canvas.width;
+
+        const height =
+            this.canvas.height;
+
+        ctx.save();
+
+        try {
+            ctx.imageSmoothingEnabled = false;
+
+            ctx.clearRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            ctx.fillStyle = "#10111a";
+
+            ctx.fillRect(
+                0,
+                0,
+                width,
+                height
+            );
+
+            const room =
+                this.normalize(
+                    this.levelData?.room ||
+                    "entree"
+                );
+
+            this.safeArt(
+                "drawRoomScene",
+                ctx,
+                room,
+                16,
+                16,
+                width - 32,
+                height - 32,
+                {
+                    furniture: false
+                }
+            );
+
+            if (!this.levelData) {
+                return;
+            }
+
+            this.boardLayout =
+                this.calculateBoardLayout(
+                    width,
+                    height
+                );
+
+            this.drawBoardFloor(ctx);
+            this.drawGrid(ctx);
+            this.drawTargets(ctx);
+            this.drawDecorations(ctx);
+            this.drawBlockedCells(ctx);
+            this.drawObjects(ctx);
+            this.drawRobot(ctx, options);
+            this.drawBoardBorder(ctx);
+        } catch (error) {
+            console.error(
+                "[PYT] Rendu de l'exercice :",
+                error
+            );
+        } finally {
+            ctx.restore();
+        }
+    }
+
+    calculateBoardLayout(width, height) {
+        const marginX = 78;
+        const marginTop = 78;
+        const marginBottom = 60;
+
+        const availableWidth = Math.max(
+            1,
+            width - marginX * 2
+        );
+
+        const availableHeight = Math.max(
+            1,
+            height - marginTop - marginBottom
+        );
+
+        const tileSize = Math.max(
+            1,
+            Math.floor(
+                Math.min(
+                    availableWidth / this.mapWidth,
+                    availableHeight / this.mapHeight
+                )
+            )
+        );
+
+        const boardWidth =
+            tileSize * this.mapWidth;
+
+        const boardHeight =
+            tileSize * this.mapHeight;
+
+        return {
+            tileSize,
+            width: boardWidth,
+            height: boardHeight,
+
+            x: Math.round(
+                (width - boardWidth) / 2
+            ),
+
+            y: Math.round(
+                marginTop +
+                (
+                    availableHeight -
+                    boardHeight
+                ) / 2
+            )
+        };
+    }
+
+    cellRect(x, y) {
+        const layout =
+            this.boardLayout ||
+            this.calculateBoardLayout(
+                this.canvas?.width || 960,
+                this.canvas?.height || 640
+            );
+
+        return {
+            x:
+                layout.x +
+                Number(x) * layout.tileSize,
+
+            y:
+                layout.y +
+                Number(y) * layout.tileSize,
+
+            size:
+                layout.tileSize
+        };
+    }
+
+    /* =====================================================
+       SOL DU PLATEAU
+    ===================================================== */
+
+    drawBoardFloor(ctx) {
+        const p = this.boardLayout;
+
+        ctx.fillStyle =
+            "rgba(0,0,0,0.28)";
+
+        ctx.fillRect(
+            p.x + 8,
+            p.y + 9,
+            p.width,
+            p.height
+        );
+
+        ctx.fillStyle =
+            "rgba(255,240,205,0.18)";
+
+        ctx.fillRect(
+            p.x,
+            p.y,
+            p.width,
+            p.height
+        );
+
+        for (
+            let y = 0;
+            y < this.mapHeight;
+            y++
+        ) {
+            for (
+                let x = 0;
+                x < this.mapWidth;
+                x++
+            ) {
+                if ((x + y) % 2) {
+                    const cell =
+                        this.cellRect(x, y);
+
+                    ctx.fillStyle =
+                        "rgba(0,0,0,0.055)";
+
+                    ctx.fillRect(
+                        cell.x,
+                        cell.y,
+                        cell.size,
+                        cell.size
+                    );
+                }
+            }
+        }
+    }
+
+    /* =====================================================
+       GRILLE
+    ===================================================== */
+
+    drawGrid(ctx) {
+        for (
+            let y = 0;
+            y < this.mapHeight;
+            y++
+        ) {
+            for (
+                let x = 0;
+                x < this.mapWidth;
+                x++
+            ) {
+                const cell =
+                    this.cellRect(x, y);
+
+                const drawn = this.safeArt(
+                    "drawGridCell",
+                    ctx,
+                    cell.x,
+                    cell.y,
+                    cell.size,
+                    {
+                        alpha: 0.48,
+                        color: "#fff3d7"
+                    }
+                );
+
+                if (!drawn) {
+                    ctx.strokeStyle =
+                        "rgba(255,243,215,0.40)";
+
+                    ctx.lineWidth = 1;
+
+                    ctx.strokeRect(
+                        cell.x,
+                        cell.y,
+                        cell.size,
+                        cell.size
+                    );
+                }
+            }
+        }
+    }
+
+    /* =====================================================
+       OBJECTIFS VISUELS
+    ===================================================== */
+
+    drawTargets(ctx) {
+        const targets =
+            this.executing
+                ? this.visualTargets
+                : this.logicalTargets;
+
+        for (const target of targets) {
+            const cell =
+                this.cellRect(
+                    target.x,
+                    target.y
+                );
+
+            const type =
+                this.normalize(
+                    target.type ??
+                    target.id
+                );
+
+            if (
+                this.isDepositTarget(target)
+            ) {
+                this.safeArt(
+                    "drawDeposit",
+                    ctx,
+                    cell.x,
+                    cell.y,
+                    cell.size
+                );
+            } else if (
+                [
+                    "goal",
+                    "objectif",
+                    "destination",
+                    "finish",
+                    "arrivee"
+                ].includes(type)
+            ) {
+                this.safeArt(
+                    "drawGoal",
+                    ctx,
+                    cell.x,
+                    cell.y,
+                    cell.size
+                );
+            }
+        }
+
+        const goal =
+            this.extractGoalPosition(
+                this.levelData.goal || {}
+            );
+
+        if (
+            goal &&
+            !targets.some(
+                target =>
+                    target.x === goal.x &&
+                    target.y === goal.y
+            )
+        ) {
+            const cell =
+                this.cellRect(
+                    goal.x,
+                    goal.y
+                );
+
+            this.safeArt(
+                "drawGoal",
+                ctx,
+                cell.x,
+                cell.y,
+                cell.size
+            );
+        }
+    }
+
+    /* =====================================================
+       DÉCORATIONS
+    ===================================================== */
+
+    drawDecorations(ctx) {
+        const decorations =
+            this.levelData?.decorations ??
+            this.levelData?.map?.decorations ??
+            [];
+
+        if (
+            !Array.isArray(decorations)
+        ) {
+            return;
+        }
+
+        for (
+            const item of decorations
+        ) {
+            const x = Number(
+                item.x ??
+                item.col
+            );
+
+            const y = Number(
+                item.y ??
+                item.row
+            );
+
+            if (
+                !Number.isFinite(x) ||
+                !Number.isFinite(y)
+            ) {
+                continue;
+            }
+
+            const cell =
+                this.cellRect(x, y);
+
+            const size =
+                cell.size *
+                Number(item.scale ?? 0.94);
+
+            const offset =
+                (cell.size - size) / 2;
+
+            this.safeArt(
+                "draw",
+                ctx,
+                item.type ??
+                    item.id ??
+                    "unknown",
+                cell.x + offset,
+                cell.y + offset,
+                size,
+                item
+            );
+        }
+    }
+
+    /* =====================================================
+       OBSTACLES VISUELS
+    ===================================================== */
+
+    drawBlockedCells(ctx) {
+        for (
+            const item
+            of this.getBlockedCells()
+        ) {
+            const x = Number(
+                Array.isArray(item)
+                    ? item[0]
+                    : item.x ?? item.col
+            );
+
+            const y = Number(
+                Array.isArray(item)
+                    ? item[1]
+                    : item.y ?? item.row
+            );
+
+            if (
+                !Number.isFinite(x) ||
+                !Number.isFinite(y)
+            ) {
+                continue;
+            }
+
+            const cell =
+                this.cellRect(x, y);
+
+            this.safeArt(
+                "drawBlocked",
+                ctx,
+                cell.x,
+                cell.y,
+                cell.size
+            );
+        }
+    }
+
+    /* =====================================================
+       APPARENCE DES OBJETS
+    ===================================================== */
+
+    getObjectArtType(object) {
+        const key =
+            this.normalize(
+                object.art ??
+                object.type ??
+                object.id ??
+                ""
+            );
+
+        const specialTypes = [
+            "livre_rouge",
+            "livre_bleu",
+            "bouteille_rouge",
+            "bouteille_bleue",
+            "bouteille_verte",
+            "bouteille_jaune",
+            "boite_outils"
+        ];
+
+        for (const name of specialTypes) {
+            if (key.includes(name)) {
+                return name;
+            }
+        }
+
+        return key.replace(
+            /_\d+$/,
+            ""
+        );
+    }
+
+    drawObjects(ctx) {
+        const objects =
+            this.executing
+                ? this.visualObjects
+                : this.logicalObjects;
+
+        for (const object of objects) {
+            if (object.hidden) {
+                continue;
+            }
+
+            const cell =
+                this.cellRect(
+                    object.x,
+                    object.y
+                );
+
+            let size =
+                cell.size *
+                (
+                    this.isPushableObject(object)
+                        ? 0.83
+                        : 0.74
+                );
+
+            if (
+                this.isAutoPickupObject(object)
+            ) {
+                const gradient =
+                    ctx.createRadialGradient(
+                        cell.x + cell.size / 2,
+                        cell.y + cell.size / 2,
+                        0,
+                        cell.x + cell.size / 2,
+                        cell.y + cell.size / 2,
+                        cell.size * 0.48
+                    );
+
+                gradient.addColorStop(
+                    0,
+                    "rgba(255,238,150,0.18)"
+                );
+
+                gradient.addColorStop(
+                    1,
+                    "rgba(255,238,150,0)"
+                );
+
+                ctx.fillStyle = gradient;
+
+                ctx.fillRect(
+                    cell.x,
+                    cell.y,
+                    cell.size,
+                    cell.size
+                );
+            }
+
+            let drawY =
+                cell.y +
+                (cell.size - size) / 2;
+
+            if (object._pickup) {
+                const progress = Number(
+                    object._pickupProgress || 0
+                );
+
+                drawY -=
+                    cell.size *
+                    progress *
+                    0.3;
+
+                size *=
+                    1 - progress * 0.55;
+            }
+
+            ctx.save();
+
+            if (object._cleanProgress) {
+                ctx.globalAlpha =
+                    1 -
+                    object._cleanProgress;
+            }
+
+            this.safeArt(
+                "draw",
+                ctx,
+                this.getObjectArtType(object),
+                cell.x +
+                    (cell.size - size) / 2,
+                drawY,
+                size,
+                object
+            );
+
+            ctx.restore();
+        }
+    }
+
+    /* =====================================================
+       ROBOT DU JEU
+       Aspect fourni par art.js, sans modification.
+    ===================================================== */
+
+    drawRobot(ctx, options = {}) {
+        const robot =
+            this.visualRobot ||
+            this.robot;
+
+        if (!robot) {
+            return;
+        }
+
+        const cell =
+            this.cellRect(
+                robot.x,
+                robot.y
+            );
+
+        const size =
+            cell.size * 0.76;
+
+        const offset =
+            (cell.size - size) / 2;
+
+        this.safeArt(
+            "drawPyt",
+            ctx,
+            cell.x + offset,
+            cell.y + offset -
+                cell.size * 0.06,
+            size,
+            robot.direction,
+            {
+                bob: Boolean(options.moving),
+                happy: false
+            }
+        );
+    }
+
+    /* =====================================================
+       BORDURE DU PLATEAU
+    ===================================================== */
+
+    drawBoardBorder(ctx) {
+        const p =
+            this.boardLayout;
+
+        ctx.strokeStyle =
+            "rgba(15,13,24,0.78)";
+
+        ctx.lineWidth = 5;
+
+        ctx.strokeRect(
+            p.x - 3,
+            p.y - 3,
+            p.width + 6,
+            p.height + 6
+        );
+
+        ctx.strokeStyle =
+            "rgba(255,239,205,0.30)";
+
+        ctx.lineWidth = 2;
+
+        ctx.strokeRect(
+            p.x,
+            p.y,
+            p.width,
+            p.height
+        );
+    }
+
+    /* =====================================================
+       STATUS ET SON
+    ===================================================== */
+
+    updateStatus(text) {
+        const element =
+            document.getElementById(
+                "game-status"
+            );
+
+        if (element) {
+            element.textContent = text;
+        }
+    }
+
+    playSfx(name) {
+        if (
+            typeof window.pytApp?.playSfx ===
+            "function"
+        ) {
+            window.pytApp.playSfx(name);
+        }
+    }
+
+    /* =====================================================
+       ANNULATION D'ANIMATION
+    ===================================================== */
+
+    stopAnimation() {
+        this.playbackId++;
+
+        if (
+            this.animationFrame != null
+        ) {
+            cancelAnimationFrame(
+                this.animationFrame
+            );
+        }
+
+        this.animationFrame = null;
+
+        if (this.animationFinish) {
+            const finish =
+                this.animationFinish;
+
+            this.animationFinish = null;
+            finish();
+        }
+    }
+
+    /* =====================================================
+       ANIMATION GÉNÉRIQUE
+    ===================================================== */
+
+    animate(duration, update) {
+        return new Promise(resolve => {
+            const start =
+                performance.now();
+
+            let finished = false;
+
+            const finish = () => {
+                if (!finished) {
+                    finished = true;
+                    this.animationFinish = null;
+                    resolve();
+                }
+            };
+
+            this.animationFinish = finish;
+
+            const frame = now => {
+                if (finished) {
+                    return;
+                }
+
+                const t = Math.min(
+                    1,
+                    (now - start) / duration
+                );
+
+                update(t);
+
+                if (t >= 1) {
+                    this.animationFrame = null;
+                    finish();
+                } else {
+                    this.animationFrame =
+                        requestAnimationFrame(
+                            frame
+                        );
+                }
+            };
+
+            this.animationFrame =
+                requestAnimationFrame(
+                    frame
+                );
+        });
+    }
+
+    easeInOut(t) {
+        return t < 0.5
+            ? 2 * t * t
+            : 1 -
+                (
+                    (-2 * t + 2) ** 2
+                ) / 2;
+    }
+
+    wait(duration) {
+        return this.animate(
+            duration,
+            () => {}
+        );
+    }
+
+    /* =====================================================
+       LECTURE DES ACTIONS
+    ===================================================== */
+
+    async playActionQueue(id) {
+        for (
+            const action
+            of this.actionQueue
+        ) {
+            if (
+                id !== this.playbackId
+            ) {
+                return;
+            }
+
+            switch (action.type) {
+                case "move": {
+                    this.playSfx("step");
+
+                    this.visualRobot.direction =
+                        action.direction;
+
+                    await this.animate(
+                        500,
+                        t => {
+                            const k =
+                                this.easeInOut(t);
+
+                            this.visualRobot.x =
+                                action.from.x +
+                                (
+                                    action.to.x -
+                                    action.from.x
+                                ) * k;
+
+                            this.visualRobot.y =
+                                action.from.y +
+                                (
+                                    action.to.y -
+                                    action.from.y
+                                ) * k;
+
+                            this.render({
+                                moving: true
+                            });
+                        }
+                    );
+
+                    break;
+                }
+
+                case "turn": {
+                    this.playSfx("turn");
+
+                    await this.wait(170);
+
+                    this.visualRobot.direction =
+                        action.to;
+
+                    this.render();
+                    break;
+                }
+
+                case "bump": {
+                    this.playSfx("bump");
+
+                    const v =
+                        this.getDirectionVector(
+                            action.direction
+                        );
+
+                    await this.animate(
+                        180,
+                        t => {
+                            const amount =
+                                Math.sin(
+                                    t * Math.PI
+                                ) * 0.12;
+
+                            this.visualRobot.x =
+                                action.from.x +
+                                v.x * amount;
+
+                            this.visualRobot.y =
+                                action.from.y +
+                                v.y * amount;
+
+                            this.render();
+                        }
+                    );
+
+                    this.visualRobot.x =
+                        action.from.x;
+
+                    this.visualRobot.y =
+                        action.from.y;
+
+                    break;
+                }
+
+                case "pickup": {
+                    this.playSfx("pickup");
+
+                    const item =
+                        this.visualObjects.find(
+                            x =>
+                                x.id ===
+                                action.objectId
+                        );
+
+                    if (item) {
+                        item._pickup = true;
+                    }
+
+                    await this.animate(
+                        260,
+                        t => {
+                            if (item) {
+                                item._pickupProgress = t;
+                            }
+
+                            this.render();
+                        }
+                    );
+
+                    this.visualObjects =
+                        this.visualObjects.filter(
+                            x =>
+                                x.id !==
+                                action.objectId
+                        );
+
+                    this.visualRobot.inventory.push(
+                        this.clone(action.item)
+                    );
+
+                    break;
+                }
+
+                case "push": {
+                    this.playSfx("push");
+
+                    const item =
+                        this.visualObjects.find(
+                            x =>
+                                x.id ===
+                                action.objectId
+                        );
+
+                    if (item) {
+                        await this.animate(
+                            360,
+                            t => {
+                                const k =
+                                    this.easeInOut(t);
+
+                                item.x =
+                                    action.from.x +
+                                    (
+                                        action.to.x -
+                                        action.from.x
+                                    ) * k;
+
+                                item.y =
+                                    action.from.y +
+                                    (
+                                        action.to.y -
+                                        action.from.y
+                                    ) * k;
+
+                                this.render();
+                            }
+                        );
+                    }
+
+                    break;
+                }
+
+                case "deposit": {
+                    this.playSfx("drop");
+
+                    this.visualRobot.inventory =
+                        this.visualRobot.inventory.filter(
+                            x =>
+                                x.id !==
+                                action.item.id
+                        );
+
+                    this.visualObjects.push({
+                        ...this.clone(
+                            action.item.original
+                        ),
+
+                        id:
+                            `${action.item.id}-deposited`,
+
+                        x: action.x,
+                        y: action.y,
+
+                        deposited: true,
+                        pickable: false
+                    });
+
+                    await this.wait(250);
+
+                    break;
+                }
+
+                case "clean": {
+                    const item =
+                        this.visualObjects.find(
+                            x =>
+                                x.id ===
+                                action.objectId
+                        );
+
+                    await this.animate(
+                        260,
+                        t => {
+                            if (item) {
+                                item._cleanProgress = t;
+                            }
+
+                            this.render();
+                        }
+                    );
+
+                    this.visualObjects =
+                        this.visualObjects.filter(
+                            x =>
+                                x.id !==
+                                action.objectId
+                        );
+
+                    break;
+                }
+
+                default: {
+                    this.playSfx(action.type);
+
+                    await this.wait(220);
+
+                    break;
+                }
+            }
+
+            this.render();
+        }
+
+        if (
+            id !== this.playbackId
+        ) {
+            return;
+        }
+
+        this.visualRobot = {
+            x: this.robot.x,
+            y: this.robot.y,
+            direction:
+                this.robot.direction,
+            inventory:
+                this.clone(
+                    this.robot.inventory
+                )
+        };
+
+        this.visualObjects =
+            this.clone(
+                this.logicalObjects
+            );
+
+        this.visualTargets =
+            this.clone(
+                this.logicalTargets
+            );
+
+        this.render();
+    }
 }
 
-
-
 /* =========================================================
-   EXPORT / START
+   DÉMARRAGE DU MOTEUR
 ========================================================= */
 
 function startPytGame() {
-
-    if (
-        window.pytGame
-    ) {
-
+    if (window.pytGame) {
         return;
     }
-
 
     window.PytGame =
         PytGame;
 
-
     window.PytInterpreter =
         PytInterpreter;
 
-
     window.PytCodeAnalyzer =
         PytCodeAnalyzer;
-
 
     window.pytGame =
         new PytGame();
 }
 
-
-
 if (
-    document.readyState ===
-    "loading"
+    document.readyState === "loading"
 ) {
-
     document.addEventListener(
         "DOMContentLoaded",
         startPytGame,
@@ -9096,8 +4507,6 @@ if (
             once: true
         }
     );
-
 } else {
-
     startPytGame();
 }
