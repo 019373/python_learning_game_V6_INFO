@@ -1,4 +1,25 @@
+
 "use strict";
+
+/* =========================================================
+   PYT - app.js
+
+   APPLICATION PRINCIPALE
+
+   Gère :
+   - l'introduction
+   - la navigation générale
+   - les paramètres
+   - la musique
+   - les crédits
+   - la fenêtre de code Python
+   - les messages de Pyt
+   - les fenêtres de réussite
+
+   ui.js gère les chapitres et la progression.
+   game.js gère l'interpréteur et les déplacements.
+   art.js conserve tous les graphismes.
+========================================================= */
 
 (() => {
 
@@ -6,534 +27,589 @@
 
         constructor() {
 
-            this.currentChapter = 1;
-            this.currentLevel = 1;
-
-            this.activeGameScreen = "map";
-
-            this.settingsReturnState = {
-                screen: "game",
-                gameScreen: "map"
-            };
-
-            this.introFinished = false;
-            this.introReady = false;
-
-            this.guideVisible = false;
-
-            this.codeWindowOpen = false;
-            this.draggingCodeWindow = false;
-
-            this.creditsTimers = [];
-
-            this.settingsKey = "pyt-settings";
-
-            this.settings = this.loadSettings();
-
-            this.cacheDom();
-
-            this.prepareInitialState();
-
-            this.prepareIntro();
-
-            this.prepareSettings();
-
-            this.prepareCredits();
-
-            this.prepareNavigation();
-
-            this.prepareCodeWindow();
-
-            this.prepareGuide();
-
-            this.prepareModal();
-
-            this.prepareResponsive();
-
-            this.applySettings();
-
-            this.dispatchReady();
-        }
-
-
-
-        /* =====================================================
-           DOM
-        ===================================================== */
-
-        cacheDom() {
-
-            const byId = id =>
+            this.byId = id =>
                 document.getElementById(id);
 
-
-            /* INTRO */
-
-            this.introScreen =
-                byId("intro-screen");
-
-            this.skipIntroButton =
-                byId("skip-intro-button");
-
-            this.introScene =
-                byId("intro-scene");
-
-            this.introContinueMessage =
-                byId("intro-continue-message");
-
-
-            /* MENU */
-
-            this.mainMenu =
-                byId("main-menu");
-
-            this.playButton =
-                byId("play-button");
-
-            this.settingsButton =
-                byId("settings-button");
-
-
-            /* SETTINGS */
-
-            this.settingsScreen =
-                byId("settings-screen");
-
-            this.musicEnabled =
-                byId("music-enabled");
-
-            this.volumeSlider =
-                byId("volume-slider");
-
-            this.volumeValue =
-                byId("volume-value");
-
-            this.creditsButton =
-                byId("credits-button");
-
-            this.settingsBackButton =
-                byId("settings-back-button");
-
-
-            /* CREDITS */
-
-            this.creditsScreen =
-                byId("credits-screen");
-
-            this.closeCreditsButton =
-                byId("close-credits-button");
-
-            this.creditsScroll =
-                byId("credits-scroll");
-
-
-            /* GAME INTERFACE */
-
-            this.gameInterface =
-                byId("game-interface");
-
-            this.chapterBadge =
-                byId("chapter-badge");
-
-            this.difficultyBadge =
-                byId("difficulty-badge");
-
-            this.roomName =
-                byId("room-name");
-
-            this.courseButton =
-                byId("course-button");
-
-            this.mapButton =
-                byId("map-button");
-
-            this.gameSettingsButton =
-                byId("game-settings-button");
-
-            this.menuButton =
-                byId("menu-button");
-
-
-            /* GAME SCREENS */
-
-            this.chapterScreen =
-                byId("chapter-screen");
-
-            this.mapScreen =
-                byId("map-screen");
-
-            this.gameScreen =
-                byId("game-screen");
-
-
-            /* CODE */
-
-            this.openCodeButton =
-                byId("open-code-button");
-
-            this.codeWindow =
-                byId("code-window");
-
-            this.codeWindowHeader =
-                byId("code-window-header");
-
-            this.codeRestartButton =
-                byId("code-restart-button");
-
-            this.closeCodeButton =
-                byId("close-code-button");
-
-            this.codeEditor =
-                byId("code-editor");
-
-            this.clearCodeButton =
-                byId("clear-code-button");
-
-            this.runCodeButton =
-                byId("run-code-button");
-
-            this.consoleOutput =
-                byId("console-output");
-
-
-            /* GAME */
-
-            this.restartButton =
-                byId("restart-button");
-
-            this.gameCanvas =
-                byId("game-canvas");
-
-            this.robotThoughtBubble =
-                byId("robot-thought-bubble");
-
-
-            /* GUIDE */
-
-            this.pytGuide =
-                byId("pyt-guide");
-
-            this.closePytGuideButton =
-                byId("close-pyt-guide-button");
-
-            this.pytGuideMessage =
-                byId("pyt-guide-message");
-
-            this.pytGuideActions =
-                byId("pyt-guide-actions");
-
-
-            /* MODAL */
-
-            this.modalBackground =
-                byId("modal-background");
-
-            this.messageModal =
-                byId("message-modal");
-
-            this.modalLabel =
-                byId("modal-label");
-
-            this.modalTitle =
-                byId("modal-title");
-
-            this.modalMessage =
-                byId("modal-message");
-
-            this.modalSecondaryButton =
-                byId("modal-secondary-button");
-
-            this.modalPrimaryButton =
-                byId("modal-primary-button");
-
-
-            /* AUDIO */
-
-            this.musicAudio =
-                byId("music-audio");
-
-            this.theoryAudio =
-                byId("theory-audio");
-        }
-
-
-
-        /* =====================================================
-           UTILITAIRES
-        ===================================================== */
-
-        show(element) {
-
-            if (!element) {
-                return;
-            }
-
-            element.hidden = false;
-
-            element.classList.remove(
-                "hidden"
-            );
-        }
-
-
-
-        hide(element) {
-
-            if (!element) {
-                return;
-            }
-
-            element.hidden = true;
-
-            element.classList.add(
-                "hidden"
-            );
-        }
-
-
-
-        clamp(
-            value,
-            min,
-            max
-        ) {
-
-            return Math.max(
-                min,
-                Math.min(
-                    max,
-                    value
-                )
-            );
-        }
-
-
-
-        /* =====================================================
-           SETTINGS STORAGE
-        ===================================================== */
-
-        loadSettings() {
-
-            const defaults = {
-                music: true,
-                volume: 0.55
+            this.primaryIds = [
+                "intro-screen",
+                "main-menu",
+                "settings-screen",
+                "credits-screen",
+                "game-interface"
+            ];
+
+            this.subscreenIds = [
+                "chapter-screen",
+                "map-screen",
+                "game-screen"
+            ];
+
+            this.activeSubscreen = "map-screen";
+
+            this.settingsReturn = "game";
+            this.creditsReturn = "settings";
+
+            this.introReady = false;
+            this.introDone = false;
+            this.introTimers = [];
+
+            this.creditsFrame = null;
+            this.creditsSubtitleTimer = null;
+            this.creditsToken = 0;
+
+            this.modalActions = {
+                primary: null,
+                secondary: null
             };
 
+            this.storage = {
+                music: "pyt-music-enabled",
+                volume: "pyt-music-volume",
+                drafts: "pyt-code-drafts"
+            };
+
+            this.musicEnabled =
+                this.readStorage(
+                    this.storage.music,
+                    "1"
+                ) !== "0";
+
+            this.volume =
+                this.clamp(
+                    Number(
+                        this.readStorage(
+                            this.storage.volume,
+                            "50"
+                        )
+                    ),
+                    0,
+                    100
+                );
+
+            this.drafts =
+                this.readJSON(
+                    this.storage.drafts
+                );
+
+            this.cacheElements();
+
+            this.bindEvents();
+
+            this.applyAudioSettings();
+
+            this.setupIntro();
+        }
+
+        /* =====================================================
+           RÉCUPÉRATION DES ÉLÉMENTS HTML
+        ===================================================== */
+
+        cacheElements() {
+
+            const get = this.byId;
+
+            this.introScreen =
+                get("intro-screen");
+
+            this.introScene =
+                get("intro-scene");
+
+            this.introContinue =
+                get("intro-continue-message");
+
+            this.skipIntroButton =
+                get("skip-intro-button");
+
+            this.settingsScreen =
+                get("settings-screen");
+
+            this.gameInterface =
+                get("game-interface");
+
+            this.creditsScreen =
+                get("credits-screen");
+
+            this.creditsScroll =
+                get("credits-scroll");
+
+            this.creditsPerspective =
+                this.creditsScreen
+                    ?.querySelector(
+                        ".credits-perspective"
+                    ) || null;
+
+            this.creditsTitle =
+                this.creditsScroll
+                    ?.querySelector(
+                        ".credits-final-title"
+                    ) || null;
+
+            this.codeWindow =
+                get("code-window");
+
+            this.codeEditor =
+                get("code-editor");
+
+            this.consoleOutput =
+                get("console-output");
+
+            this.runButton =
+                get("run-code-button");
+
+            this.guide =
+                get("pyt-guide");
+
+            this.guideMessage =
+                get("pyt-guide-message");
+
+            this.guideActions =
+                get("pyt-guide-actions");
+
+            this.modalBackground =
+                get("modal-background");
+
+            this.musicInput =
+                get("music-enabled");
+
+            this.volumeSlider =
+                get("volume-slider");
+
+            this.volumeValue =
+                get("volume-value");
+
+            this.musicAudio =
+                get("music-audio");
+
+            this.theoryAudio =
+                get("theory-audio");
+
+            this.thought =
+                get("robot-thought-bubble");
+        }
+
+        /* =====================================================
+           STOCKAGE LOCAL
+        ===================================================== */
+
+        readStorage(key, fallback = null) {
+
+            try {
+
+                return (
+                    localStorage.getItem(key) ??
+                    fallback
+                );
+
+            } catch (error) {
+
+                return fallback;
+            }
+        }
+
+        writeStorage(key, value) {
+
+            try {
+
+                localStorage.setItem(
+                    key,
+                    String(value)
+                );
+
+            } catch (error) {
+
+                console.warn(
+                    "[PYT] Sauvegarde indisponible.",
+                    error
+                );
+            }
+        }
+
+        readJSON(key) {
 
             try {
 
                 const value =
                     JSON.parse(
-                        localStorage.getItem(
-                            this.settingsKey
-                        ) ||
-                        "{}"
+                        this.readStorage(
+                            key,
+                            "{}"
+                        )
                     );
 
+                if (
+                    value &&
+                    typeof value === "object" &&
+                    !Array.isArray(value)
+                ) {
 
-                return {
-                    ...defaults,
-                    ...value
-                };
-
-            } catch (error) {
-
-                console.warn(
-                    "[PYT] Réglages illisibles.",
-                    error
-                );
-
-                return defaults;
-            }
-        }
-
-
-
-        saveSettings() {
-
-            try {
-
-                localStorage.setItem(
-                    this.settingsKey,
-                    JSON.stringify(
-                        this.settings
-                    )
-                );
+                    return value;
+                }
 
             } catch (error) {
 
                 console.warn(
-                    "[PYT] Impossible de sauvegarder les réglages.",
+                    "[PYT] Lecture des données impossible.",
                     error
                 );
             }
+
+            return {};
         }
 
-
-
         /* =====================================================
-           ÉTAT INITIAL
+           OUTILS GÉNÉRAUX
         ===================================================== */
 
-        prepareInitialState() {
+        clamp(value, min, max) {
 
-            /*
-             * L'intro est la seule chose visible
-             * au chargement.
-             */
-
-            this.show(
-                this.introScreen
+            return Math.max(
+                min,
+                Math.min(
+                    max,
+                    Number.isFinite(value)
+                        ? value
+                        : min
+                )
             );
-
-            this.hide(
-                this.mainMenu
-            );
-
-            this.hide(
-                this.settingsScreen
-            );
-
-            this.hide(
-                this.creditsScreen
-            );
-
-            this.hide(
-                this.gameInterface
-            );
-
-            this.hide(
-                this.codeWindow
-            );
-
-            this.hide(
-                this.pytGuide
-            );
-
-            this.hide(
-                this.modalBackground
-            );
-
-            this.hide(
-                this.robotThoughtBubble
-            );
-
-
-            /*
-             * On retire définitivement
-             * les anciennes infos du haut.
-             */
-
-            if (
-                this.difficultyBadge
-            ) {
-
-                this.difficultyBadge.hidden =
-                    true;
-
-                this.difficultyBadge.style.display =
-                    "none";
-            }
-
-
-            if (
-                this.roomName
-            ) {
-
-                this.roomName.hidden =
-                    true;
-
-                this.roomName.style.display =
-                    "none";
-            }
         }
 
+        setVisible(element, visible) {
 
-
-        /* =====================================================
-           INTRO
-        ===================================================== */
-
-        prepareIntro() {
-
-            if (
-                !this.introScreen
-            ) {
-
-                this.enterGame();
-
+            if (!element) {
                 return;
             }
 
+            element.hidden = !visible;
 
-            this.introReady =
-                false;
+            element.classList.toggle(
+                "hidden",
+                !visible
+            );
+        }
 
+        isVisible(element) {
 
-            if (
-                this.introContinueMessage
-            ) {
+            return Boolean(
+                element &&
+                !element.hidden &&
+                !element.classList.contains(
+                    "hidden"
+                )
+            );
+        }
 
-                this.introContinueMessage
-                    .classList
-                    .remove(
-                        "visible"
-                    );
+        bind(id, callback) {
+
+            const button =
+                this.byId(id);
+
+            if (!button) {
+                return;
             }
 
+            button.addEventListener(
+                "click",
+                event => {
 
-            /*
-             * Après l'animation d'intro,
-             * l'utilisateur peut continuer.
-             */
+                    event.preventDefault();
 
-            setTimeout(
+                    callback(event);
+                }
+            );
+        }
+
+        /* =====================================================
+           ÉVÉNEMENTS DES BOUTONS
+        ===================================================== */
+
+        bindEvents() {
+
+            /* INTRO */
+
+            this.bind(
+                "skip-intro-button",
+                () => this.finishIntro()
+            );
+
+            this.bind(
+                "play-button",
+                () => this.enterGame()
+            );
+
+            /* PARAMÈTRES */
+
+            this.bind(
+                "settings-button",
+                () => this.openSettings()
+            );
+
+            this.bind(
+                "game-settings-button",
+                () => this.openSettings()
+            );
+
+            this.bind(
+                "settings-back-button",
+                () => this.closeSettings()
+            );
+
+            /* CRÉDITS */
+
+            this.bind(
+                "credits-button",
+                () => this.openCredits()
+            );
+
+            this.bind(
+                "close-credits-button",
+                () => this.closeCredits()
+            );
+
+            /* LOGO PYT : RETOUR MAISON */
+
+            this.bind(
+                "menu-button",
                 () => {
 
+                    this.hideCodeWindow();
+
                     if (
-                        this.introFinished
+                        window.pytUI &&
+                        typeof window.pytUI
+                            .openHouseMap === "function"
                     ) {
+
+                        window.pytUI.openHouseMap();
+
+                    } else {
+
+                        this.showMap();
+                    }
+                }
+            );
+
+            /*
+             * Les boutons Carte et Théorie
+             * sont déjà gérés par ui.js.
+             *
+             * On ne leur ajoute pas ici
+             * de deuxième événement.
+             */
+
+            /* FENÊTRE DE CODE */
+
+            this.bind(
+                "open-code-button",
+                () => this.openCodeWindow()
+            );
+
+            this.bind(
+                "close-code-button",
+                () => this.hideCodeWindow()
+            );
+
+            this.bind(
+                "clear-code-button",
+                () => {
+
+                    if (!this.codeEditor) {
+                        return;
+                    }
+
+                    this.codeEditor.value = "";
+
+                    this.saveDraft();
+
+                    window.pytUI
+                        ?.clearCodeError?.();
+
+                    this.codeEditor.focus();
+                }
+            );
+
+            this.bind(
+                "run-code-button",
+                () => this.runCode()
+            );
+
+            /* RECOMMENCER */
+
+            this.bind(
+                "restart-button",
+                () => this.restartLevel()
+            );
+
+            this.bind(
+                "code-restart-button",
+                () => this.restartLevel()
+            );
+
+            /* GUIDE */
+
+            this.bind(
+                "close-pyt-guide-button",
+                () => this.hideGuide()
+            );
+
+            /* MODALES */
+
+            this.bind(
+                "modal-primary-button",
+                () => this.chooseModal("primary")
+            );
+
+            this.bind(
+                "modal-secondary-button",
+                () => this.chooseModal("secondary")
+            );
+
+            /* ÉDITEUR : SAUVEGARDE */
+
+            this.codeEditor
+                ?.addEventListener(
+                    "input",
+                    () => this.saveDraft()
+                );
+
+            /* ÉDITEUR : TAB ET CTRL+ENTRÉE */
+
+            this.codeEditor
+                ?.addEventListener(
+                    "keydown",
+                    event => {
+
+                        if (event.key === "Tab") {
+
+                            event.preventDefault();
+
+                            const from =
+                                event.target.selectionStart;
+
+                            const to =
+                                event.target.selectionEnd;
+
+                            const text =
+                                event.target.value;
+
+                            event.target.value =
+                                text.slice(0, from) +
+                                "    " +
+                                text.slice(to);
+
+                            event.target.selectionStart =
+                                from + 4;
+
+                            event.target.selectionEnd =
+                                from + 4;
+
+                            this.saveDraft();
+                        }
+
+                        if (
+                            event.key === "Enter" &&
+                            (
+                                event.ctrlKey ||
+                                event.metaKey
+                            )
+                        ) {
+
+                            event.preventDefault();
+
+                            this.runCode();
+                        }
+                    }
+                );
+
+            /* CLAVIER GLOBAL */
+
+            document.addEventListener(
+                "keydown",
+                event => {
+
+                    if (event.key === "Escape") {
+
+                        if (
+                            this.isVisible(
+                                this.modalBackground
+                            )
+                        ) {
+
+                            this.closeModal();
+
+                        } else if (
+                            this.isVisible(
+                                this.creditsScreen
+                            )
+                        ) {
+
+                            this.closeCredits();
+
+                        } else if (
+                            this.isVisible(
+                                this.settingsScreen
+                            )
+                        ) {
+
+                            this.closeSettings();
+
+                        } else if (
+                            this.isVisible(
+                                this.codeWindow
+                            )
+                        ) {
+
+                            this.hideCodeWindow();
+
+                        } else if (
+                            this.isVisible(
+                                this.guide
+                            )
+                        ) {
+
+                            this.hideGuide();
+                        }
 
                         return;
                     }
 
-
-                    this.introReady =
-                        true;
-
+                    /*
+                     * Une touche continue l'intro
+                     * uniquement lorsque
+                     * l'animation est terminée.
+                     */
 
                     if (
-                        this.introContinueMessage
+                        !this.introDone &&
+                        this.introReady &&
+                        this.isVisible(
+                            this.introScreen
+                        )
                     ) {
 
-                        this.introContinueMessage
-                            .classList
-                            .add(
-                                "visible"
-                            );
-                    }
+                        const ignored = [
+                            "Tab",
+                            "Shift",
+                            "Control",
+                            "Alt",
+                            "Meta"
+                        ];
 
-                },
-                3500
+                        if (
+                            !ignored.includes(
+                                event.key
+                            )
+                        ) {
+
+                            this.finishIntro();
+                        }
+                    }
+                }
             );
 
-
-            if (
-                this.skipIntroButton
-            ) {
-
-                this.skipIntroButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.finishIntro()
-                    );
-            }
-
+            /* CLIC OU TOUCHER SUR L'INTRO */
 
             this.introScreen
-                .addEventListener(
+                ?.addEventListener(
                     "click",
                     event => {
 
@@ -545,1425 +621,1127 @@
                             return;
                         }
 
-
-                        if (
-                            this.introReady
-                        ) {
+                        if (this.introReady) {
 
                             this.finishIntro();
                         }
                     }
                 );
 
+            /* FERMER MODALE EN DEHORS */
+
+            this.modalBackground
+                ?.addEventListener(
+                    "click",
+                    event => {
+
+                        if (
+                            event.target ===
+                            this.modalBackground
+                        ) {
+
+                            this.closeModal();
+                        }
+                    }
+                );
+
+            /* MUSIQUE */
+
+            this.musicInput
+                ?.addEventListener(
+                    "change",
+                    () => {
+
+                        this.musicEnabled =
+                            Boolean(
+                                this.musicInput.checked
+                            );
+
+                        this.writeStorage(
+                            this.storage.music,
+                            this.musicEnabled
+                                ? "1"
+                                : "0"
+                        );
+
+                        this.applyAudioSettings(true);
+                    }
+                );
+
+            /* VOLUME */
+
+            this.volumeSlider
+                ?.addEventListener(
+                    "input",
+                    () => {
+
+                        this.volume =
+                            this.clamp(
+                                Number(
+                                    this.volumeSlider.value
+                                ),
+                                0,
+                                100
+                            );
+
+                        this.writeStorage(
+                            this.storage.volume,
+                            this.volume
+                        );
+
+                        this.applyAudioSettings(true);
+                    }
+                );
+
+            /* EXERCICE OUVERT PAR UI.JS */
 
             window.addEventListener(
-                "keydown",
+                "pyt:level-opened",
+                () => {
+
+                    this.restoreDraft();
+
+                    this.hideCodeWindow();
+
+                    this.hideGuide();
+
+                    this.hideThought();
+
+                    this.showGame();
+                }
+            );
+
+            /* RÉSULTAT DU MOTEUR */
+
+            window.addEventListener(
+                "pyt:execution-result",
                 event => {
 
-                    if (
-                        this.introFinished
-                    ) {
-
-                        return;
-                    }
-
-
-                    if (
-                        !this.introReady
-                    ) {
-
-                        return;
-                    }
-
-
-                    if (
-                        [
-                            "Enter",
-                            " ",
-                            "Spacebar"
-                        ].includes(
-                            event.key
-                        )
-                    ) {
-
-                        event.preventDefault();
-
-                        this.finishIntro();
-                    }
+                    this.showExecutionResult(
+                        event.detail || {}
+                    );
                 }
             );
         }
 
+        /* =====================================================
+           INTRO
+        ===================================================== */
 
+        setupIntro() {
 
-        finishIntro() {
+            /*
+             * Au lancement, seule l'intro
+             * doit être visible.
+             */
 
-            if (
-                this.introFinished
-            ) {
+            this.primaryIds.forEach(
+                id => {
 
+                    this.setVisible(
+                        this.byId(id),
+                        id === "intro-screen"
+                    );
+                }
+            );
+
+            this.setVisible(
+                this.introContinue,
+                false
+            );
+
+            this.setVisible(
+                this.skipIntroButton,
+                false
+            );
+
+            this.setVisible(
+                this.codeWindow,
+                false
+            );
+
+            this.setVisible(
+                this.guide,
+                false
+            );
+
+            this.setVisible(
+                this.modalBackground,
+                false
+            );
+
+            /* SOUS-TITRE */
+
+            this.ensureIntroSubtitle();
+
+            /*
+             * Le robot de l'intro seulement.
+             * Celui du jeu n'est pas modifié.
+             *
+             * On supprime toute animation
+             * de saut sur le corps.
+             *
+             * L'arrivée depuis la droite
+             * reste gérée par style.css
+             * sur .intro-robot-wrapper.
+             */
+
+            const introRobot =
+                this.introScreen
+                    ?.querySelector(
+                        ".intro-pyt"
+                    );
+
+            if (introRobot) {
+
+                introRobot.style.animation =
+                    "none";
+
+                introRobot.style.transform =
+                    "scale(1.04)";
+            }
+
+            /*
+             * Le bouton Passer apparaît
+             * rapidement.
+             */
+
+            this.introTimers.push(
+                setTimeout(
+                    () => {
+
+                        this.setVisible(
+                            this.skipIntroButton,
+                            true
+                        );
+
+                    },
+                    950
+                )
+            );
+
+            /*
+             * L'intro dure environ 4 secondes.
+             *
+             * Le robot :
+             * 1. arrive depuis la droite
+             * 2. se place entre P et T
+             * 3. lève les bras
+             *
+             * Puis le message pour continuer
+             * apparaît.
+             */
+
+            this.introTimers.push(
+                setTimeout(
+                    () => {
+
+                        this.introReady = true;
+
+                        this.setVisible(
+                            this.introContinue,
+                            true
+                        );
+
+                        this.introContinue
+                            ?.classList
+                            .add("visible");
+
+                    },
+                    3950
+                )
+            );
+        }
+
+        ensureIntroSubtitle() {
+
+            if (!this.introScreen) {
                 return;
             }
 
-
-            this.introFinished =
-                true;
-
-
-            if (
-                this.introScreen
-            ) {
-
-                this.introScreen
-                    .classList
-                    .add(
-                        "intro-leaving"
-                    );
-            }
-
-
-            setTimeout(
-                () => {
-
-                    this.hide(
-                        this.introScreen
-                    );
-
-
-                    this.enterGame();
-
-                },
-                500
-            );
-        }
-
-
-
-        /* =====================================================
-           ENTRÉE DANS LE JEU
-        ===================================================== */
-
-        enterGame() {
+            let subtitle =
+                this.byId(
+                    "intro-subtitle"
+                );
 
             /*
-             * IMPORTANT :
+             * Si le sous-titre existe déjà
+             * dans index.html, on le réutilise.
              *
-             * pas de menu intermédiaire.
-             *
-             * Après l'intro :
-             * directement le plan de la maison.
+             * Sinon app.js le crée
+             * automatiquement.
              */
 
-            this.hide(
-                this.mainMenu
-            );
+            if (!subtitle) {
 
-            this.hide(
-                this.settingsScreen
-            );
-
-            this.hide(
-                this.creditsScreen
-            );
-
-            this.show(
-                this.gameInterface
-            );
-
-
-            this.activeGameScreen =
-                "map";
-
-
-            this.showMap();
-
-
-            requestAnimationFrame(
-                () => {
-
-                    if (
-                        window.pytUI &&
-                        typeof
-                        window.pytUI
-                            .openHouseMap ===
-                        "function"
-                    ) {
-
-                        window.pytUI
-                            .openHouseMap(
-                                true
-                            );
-                    }
-                }
-            );
-        }
-
-
-
-        /*
-         * Ancienne compatibilité.
-         *
-         * Si un ancien bouton appelle
-         * showMainMenu(), il retourne
-         * maintenant simplement à la carte.
-         */
-
-        showMainMenu() {
-
-            this.enterGame();
-        }
-
-
-
-        /* =====================================================
-           NAVIGATION
-        ===================================================== */
-
-        prepareNavigation() {
-
-            if (
-                this.playButton
-            ) {
-
-                this.playButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.enterGame()
-                    );
-            }
-
-
-            if (
-                this.settingsButton
-            ) {
-
-                this.settingsButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.showSettings()
-                    );
-            }
-
-
-            if (
-                this.gameSettingsButton
-            ) {
-
-                this.gameSettingsButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.showSettings()
-                    );
-            }
-
-
-            if (
-                this.menuButton
-            ) {
-
-                this.menuButton
-                    .addEventListener(
-                        "click",
-                        () => {
-
-                            if (
-                                window.pytUI &&
-                                typeof
-                                window.pytUI
-                                    .openHouseMap ===
-                                "function"
-                            ) {
-
-                                window.pytUI
-                                    .openHouseMap();
-
-                            } else {
-
-                                this.showMap();
-                            }
-                        }
-                    );
-            }
-        }
-
-
-
-        hideGameScreens() {
-
-            this.hide(
-                this.chapterScreen
-            );
-
-            this.hide(
-                this.mapScreen
-            );
-
-            this.hide(
-                this.gameScreen
-            );
-        }
-
-
-
-        showMap() {
-
-            this.show(
-                this.gameInterface
-            );
-
-
-            this.hideGameScreens();
-
-
-            this.show(
-                this.mapScreen
-            );
-
-
-            this.activeGameScreen =
-                "map";
-
-
-            this.closeCodeWindow();
-
-
-            requestAnimationFrame(
-                () => {
-
-                    if (
-                        window.pytUI &&
-                        typeof
-                        window.pytUI
-                            .resizeHouseCanvas ===
-                        "function"
-                    ) {
-
-                        window.pytUI
-                            .resizeHouseCanvas();
-                    }
-
-
-                    if (
-                        window.pytUI &&
-                        typeof
-                        window.pytUI
-                            .refresh ===
-                        "function"
-                    ) {
-
-                        window.pytUI
-                            .refresh();
-                    }
-                }
-            );
-        }
-
-
-
-        showCourse() {
-
-            this.show(
-                this.gameInterface
-            );
-
-
-            this.hideGameScreens();
-
-
-            this.show(
-                this.chapterScreen
-            );
-
-
-            this.activeGameScreen =
-                "course";
-
-
-            this.closeCodeWindow();
-        }
-
-
-
-        showGame() {
-
-            this.show(
-                this.gameInterface
-            );
-
-
-            this.hideGameScreens();
-
-
-            this.show(
-                this.gameScreen
-            );
-
-
-            this.activeGameScreen =
-                "game";
-
-
-            /*
-             * Canvas visible avant rendu.
-             */
-
-            if (
-                this.gameCanvas
-            ) {
-
-                this.gameCanvas.hidden =
-                    false;
-
-
-                this.gameCanvas.style.display =
-                    "block";
-
-
-                this.gameCanvas.style.visibility =
-                    "visible";
-
-
-                this.gameCanvas.style.opacity =
-                    "1";
-            }
-
-
-            requestAnimationFrame(
-                () => {
-
-                    requestAnimationFrame(
-                        () => {
-
-                            if (
-                                window.pytGame &&
-                                typeof
-                                window.pytGame
-                                    .resizeCanvas ===
-                                "function"
-                            ) {
-
-                                window.pytGame
-                                    .resizeCanvas();
-                            }
-
-
-                            if (
-                                window.pytGame &&
-                                typeof
-                                window.pytGame
-                                    .render ===
-                                "function"
-                            ) {
-
-                                window.pytGame
-                                    .render();
-                            }
-                        }
-                    );
-                }
-            );
-        }
-
-
-
-        /* =====================================================
-           SETTINGS
-        ===================================================== */
-
-        prepareSettings() {
-
-            if (
-                this.musicEnabled
-            ) {
-
-                this.musicEnabled
-                    .addEventListener(
-                        "change",
-                        () => {
-
-                            this.settings.music =
-                                Boolean(
-                                    this.musicEnabled
-                                        .checked
-                                );
-
-
-                            /*
-                             * Music = Non
-                             * => volume réellement à zéro.
-                             */
-
-                            if (
-                                !this.settings.music
-                            ) {
-
-                                this.settings.volume =
-                                    0;
-
-
-                                if (
-                                    this.volumeSlider
-                                ) {
-
-                                    this.volumeSlider.value =
-                                        "0";
-                                }
-                            }
-
-
-                            this.applySettings();
-
-                            this.saveSettings();
-                        }
-                    );
-            }
-
-
-            if (
-                this.volumeSlider
-            ) {
-
-                this.volumeSlider
-                    .addEventListener(
-                        "input",
-                        () => {
-
-                            const value =
-                                this.clamp(
-                                    Number(
-                                        this.volumeSlider
-                                            .value
-                                    ) /
-                                    100,
-                                    0,
-                                    1
-                                );
-
-
-                            this.settings.volume =
-                                value;
-
-
-                            /*
-                             * Si l'utilisateur remonte
-                             * le volume, Musique repasse
-                             * automatiquement à Oui.
-                             */
-
-                            if (
-                                value >
-                                0
-                            ) {
-
-                                this.settings.music =
-                                    true;
-
-
-                                if (
-                                    this.musicEnabled
-                                ) {
-
-                                    this.musicEnabled.checked =
-                                        true;
-                                }
-                            }
-
-
-                            this.applySettings();
-
-                            this.saveSettings();
-                        }
-                    );
-            }
-
-
-            if (
-                this.settingsBackButton
-            ) {
-
-                this.settingsBackButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.closeSettings()
-                    );
-            }
-        }
-
-
-
-        applySettings() {
-
-            this.settings.volume =
-                this.clamp(
-                    Number(
-                        this.settings.volume ??
-                        0.55
-                    ),
-                    0,
-                    1
-                );
-
-
-            if (
-                !this.settings.music
-            ) {
-
-                this.settings.volume =
-                    0;
-            }
-
-
-            if (
-                this.musicEnabled
-            ) {
-
-                this.musicEnabled.checked =
-                    Boolean(
-                        this.settings.music
-                    );
-            }
-
-
-            if (
-                this.volumeSlider
-            ) {
-
-                this.volumeSlider.value =
-                    String(
-                        Math.round(
-                            this.settings.volume *
-                            100
-                        )
-                    );
-            }
-
-
-            if (
-                this.volumeValue
-            ) {
-
-                this.volumeValue.textContent =
-                    `${Math.round(
-                        this.settings.volume *
-                        100
-                    )}%`;
-            }
-
-
-            [
-                this.musicAudio,
-                this.theoryAudio
-            ]
-                .forEach(
-                    audio => {
-
-                        if (
-                            !audio
-                        ) {
-
-                            return;
-                        }
-
-
-                        audio.volume =
-                            this.settings.music
-                                ? this.settings.volume
-                                : 0;
-
-
-                        audio.muted =
-                            !this.settings.music ||
-                            this.settings.volume ===
-                                0;
-                    }
-                );
-        }
-
-
-
-        showSettings() {
-
-            this.settingsReturnState = {
-
-                screen:
-                    this.gameInterface &&
-                    !this.gameInterface
-                        .classList
-                        .contains(
-                            "hidden"
-                        )
-                        ? "game"
-                        : "menu",
-
-                gameScreen:
-                    this.activeGameScreen
-            };
-
-
-            this.hide(
-                this.mainMenu
-            );
-
-            this.hide(
-                this.gameInterface
-            );
-
-            this.hide(
-                this.creditsScreen
-            );
-
-            this.closeCodeWindow();
-
-
-            this.show(
-                this.settingsScreen
-            );
-
-
-            this.applySettings();
-        }
-
-
-
-        closeSettings() {
-
-            this.hide(
-                this.settingsScreen
-            );
-
-
-            if (
-                this.settingsReturnState
-                    .screen ===
-                "game"
-            ) {
-
-                this.show(
-                    this.gameInterface
-                );
-
-
-                switch (
-                    this.settingsReturnState
-                        .gameScreen
-                ) {
-
-                    case "course":
-
-                        this.showCourse();
-
-                        break;
-
-
-                    case "game":
-
-                        this.showGame();
-
-                        break;
-
-
-                    default:
-
-                        this.showMap();
-                }
-
-            } else {
-
-                /*
-                 * Le jeu n'utilise normalement
-                 * plus le menu.
-                 */
-
-                this.enterGame();
-            }
-        }
-
-
-
-        /* =====================================================
-           CREDITS
-        ===================================================== */
-
-        prepareCredits() {
-
-            if (
-                this.creditsButton
-            ) {
-
-                this.creditsButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.openCredits()
-                    );
-            }
-
-
-            if (
-                this.closeCreditsButton
-            ) {
-
-                this.closeCreditsButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.closeCredits()
-                    );
-            }
-
-
-            if (
-                !this.creditsScreen
-            ) {
-
-                return;
-            }
-
-
-            /*
-             * On retire un éventuel PYT
-             * présent au début des crédits.
-             */
-
-            if (
-                this.creditsScroll
-            ) {
-
-                const children =
-                    Array.from(
-                        this.creditsScroll
-                            .children
-                    );
-
-
-                children.forEach(
-                    (
-                        child,
-                        index
-                    ) => {
-
-                        if (
-                            index >
-                            1
-                        ) {
-
-                            return;
-                        }
-
-
-                        const text =
-                            child.textContent
-                                ?.trim()
-                                .toUpperCase();
-
-
-                        if (
-                            text ===
-                            "PYT"
-                        ) {
-
-                            child.classList.add(
-                                "credits-opening-title"
-                            );
-
-
-                            child.hidden =
-                                true;
-                        }
-                    }
-                );
-            }
-
-
-            /*
-             * Overlay final.
-             *
-             * Le PYT final ne dépend donc
-             * plus de la longueur des noms.
-             */
-
-            let overlay =
-                document.getElementById(
-                    "credits-final-overlay"
-                );
-
-
-            if (
-                !overlay
-            ) {
-
-                overlay =
+                subtitle =
                     document.createElement(
                         "div"
                     );
 
+                subtitle.id =
+                    "intro-subtitle";
 
-                overlay.id =
-                    "credits-final-overlay";
+                subtitle.className =
+                    "intro-subtitle";
 
-
-                overlay.className =
-                    "credits-final-overlay";
-
-
-                overlay.innerHTML = `
-                    <div class="credits-final-title">PYT</div>
-                    <div class="credits-final-subtitle">apprentissage Python</div>
-                `;
-
-
-                this.creditsScreen
+                this.introScreen
                     .appendChild(
-                        overlay
+                        subtitle
                     );
             }
 
+            subtitle.textContent =
+                "apprentissage Python";
 
-            this.creditsFinalOverlay =
-                overlay;
-
-
-            this.creditsFinalTitle =
-                overlay.querySelector(
-                    ".credits-final-title"
-                );
-
-
-            this.creditsFinalSubtitle =
-                overlay.querySelector(
-                    ".credits-final-subtitle"
-                );
-
-
-            this.resetCreditsAnimation();
+            subtitle.style.textTransform =
+                "none";
         }
 
+        finishIntro() {
 
-
-        clearCreditsTimers() {
-
-            this.creditsTimers
-                .forEach(
-                    timer =>
-                        clearTimeout(
-                            timer
-                        )
-                );
-
-
-            this.creditsTimers =
-                [];
-        }
-
-
-
-        resetCreditsAnimation() {
-
-            this.clearCreditsTimers();
-
-
-            if (
-                this.creditsScreen
-            ) {
-
-                this.creditsScreen
-                    .classList
-                    .remove(
-                        "credits-running",
-                        "credits-show-final",
-                        "credits-show-subtitle"
-                    );
-            }
-
-
-            if (
-                this.creditsScroll
-            ) {
-
-                this.creditsScroll
-                    .classList
-                    .remove(
-                        "credits-scroll-running"
-                    );
-
-
-                /*
-                 * Force le navigateur à remettre
-                 * l'animation CSS à zéro.
-                 */
-
-                void this.creditsScroll
-                    .offsetWidth;
-            }
-
-
-            if (
-                this.creditsFinalOverlay
-            ) {
-
-                this.creditsFinalOverlay
-                    .classList
-                    .remove(
-                        "visible",
-                        "subtitle-visible"
-                    );
-            }
-        }
-
-
-
-        openCredits() {
-
-            this.hide(
-                this.settingsScreen
-            );
-
-            this.show(
-                this.creditsScreen
-            );
-
-
-            this.resetCreditsAnimation();
-
-
-            requestAnimationFrame(
-                () => {
-
-                    if (
-                        this.creditsScreen
-                    ) {
-
-                        this.creditsScreen
-                            .classList
-                            .add(
-                                "credits-running"
-                            );
-                    }
-
-
-                    if (
-                        this.creditsScroll
-                    ) {
-
-                        this.creditsScroll
-                            .classList
-                            .add(
-                                "credits-scroll-running"
-                            );
-                    }
-                }
-            );
-
-
-            /*
-             * Temps du défilement.
-             *
-             * 30 secondes :
-             * PYT arrive et reste au centre.
-             */
-
-            const finalTimer =
-                setTimeout(
-                    () => {
-
-                        if (
-                            !this.creditsScreen ||
-                            this.creditsScreen
-                                .classList
-                                .contains(
-                                    "hidden"
-                                )
-                        ) {
-
-                            return;
-                        }
-
-
-                        this.creditsScreen
-                            .classList
-                            .add(
-                                "credits-show-final"
-                            );
-
-
-                        if (
-                            this.creditsFinalOverlay
-                        ) {
-
-                            this.creditsFinalOverlay
-                                .classList
-                                .add(
-                                    "visible"
-                                );
-                        }
-
-                    },
-                    30000
-                );
-
-
-            /*
-             * EXACTEMENT 3 secondes
-             * après l'arrivée de PYT :
-             *
-             * apprentissage Python
-             */
-
-            const subtitleTimer =
-                setTimeout(
-                    () => {
-
-                        if (
-                            !this.creditsScreen ||
-                            this.creditsScreen
-                                .classList
-                                .contains(
-                                    "hidden"
-                                )
-                        ) {
-
-                            return;
-                        }
-
-
-                        this.creditsScreen
-                            .classList
-                            .add(
-                                "credits-show-subtitle"
-                            );
-
-
-                        if (
-                            this.creditsFinalOverlay
-                        ) {
-
-                            this.creditsFinalOverlay
-                                .classList
-                                .add(
-                                    "subtitle-visible"
-                                );
-                        }
-
-                    },
-                    33000
-                );
-
-
-            this.creditsTimers.push(
-                finalTimer,
-                subtitleTimer
-            );
-        }
-
-
-
-        closeCredits() {
-
-            this.resetCreditsAnimation();
-
-
-            this.hide(
-                this.creditsScreen
-            );
-
-
-            this.show(
-                this.settingsScreen
-            );
-        }
-
-
-
-        /* =====================================================
-           CODE WINDOW
-        ===================================================== */
-
-        prepareCodeWindow() {
-
-            if (
-                this.openCodeButton
-            ) {
-
-                this.openCodeButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.openCodeWindow()
-                    );
-            }
-
-
-            if (
-                this.closeCodeButton
-            ) {
-
-                this.closeCodeButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.closeCodeWindow()
-                    );
-            }
-
-
-            if (
-                this.clearCodeButton
-            ) {
-
-                this.clearCodeButton
-                    .addEventListener(
-                        "click",
-                        () => {
-
-                            if (
-                                this.codeEditor
-                            ) {
-
-                                this.codeEditor.value =
-                                    "";
-
-
-                                this.codeEditor.focus();
-                            }
-
-
-                            this.clearConsole();
-                        }
-                    );
-            }
-
-
-            if (
-                this.runCodeButton
-            ) {
-
-                this.runCodeButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.runCode()
-                    );
-            }
-
-
-            if (
-                this.codeRestartButton
-            ) {
-
-                this.codeRestartButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.restartLevel()
-                    );
-            }
-
-
-            if (
-                this.restartButton
-            ) {
-
-                this.restartButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.restartLevel()
-                    );
-            }
-
-
-            /*
-             * CTRL + ENTER
-             */
-
-            if (
-                this.codeEditor
-            ) {
-
-                this.codeEditor
-                    .addEventListener(
-                        "keydown",
-                        event => {
-
-                            if (
-                                (
-                                    event.ctrlKey ||
-                                    event.metaKey
-                                ) &&
-                                event.key ===
-                                    "Enter"
-                            ) {
-
-                                event.preventDefault();
-
-                                this.runCode();
-                            }
-                        }
-                    );
-            }
-
-
-            this.prepareCodeDragging();
-        }
-
-
-
-        openCodeWindow() {
-
-            if (
-                !this.codeWindow
-            ) {
-
+            if (this.introDone) {
                 return;
             }
 
+            this.introDone = true;
 
-            this.codeWindowOpen =
-                true;
+            this.introReady = false;
 
-
-            this.show(
-                this.codeWindow
+            this.introTimers.forEach(
+                timer =>
+                    clearTimeout(timer)
             );
 
+            this.introTimers = [];
+
+            this.introContinue
+                ?.classList
+                .remove("visible");
+
+            /*
+             * Petit fondu avant
+             * d'afficher la maison.
+             */
+
+            this.introScreen
+                ?.classList
+                .add("intro-leaving");
+
+            setTimeout(
+                () => this.enterGame(),
+                450
+            );
+        }
+
+        /* =====================================================
+           ENTRER DANS LE JEU
+        ===================================================== */
+
+        enterGame() {
+
+            this.introDone = true;
+
+            this.setVisible(
+                this.introScreen,
+                false
+            );
+
+            this.setVisible(
+                this.byId("main-menu"),
+                false
+            );
+
+            this.setVisible(
+                this.settingsScreen,
+                false
+            );
+
+            this.setVisible(
+                this.creditsScreen,
+                false
+            );
+
+            this.setVisible(
+                this.gameInterface,
+                true
+            );
+
+            this.hideCodeWindow();
+
+            this.hideGuide();
+
+            /*
+             * La maison est ouverte par ui.js,
+             * qui conserve sa carte et
+             * ses règles de progression.
+             */
 
             if (
-                this.isMobileLayout()
+                window.pytUI &&
+                typeof window.pytUI
+                    .openHouseMap === "function"
             ) {
 
-                this.resetCodeWindowPosition();
+                window.pytUI
+                    .openHouseMap(true);
 
             } else {
 
-                this.keepCodeWindowInsideViewport();
+                this.showMap();
             }
 
+            this.applyAudioSettings(true);
+        }
 
-            requestAnimationFrame(
-                () => {
+        /* =====================================================
+           AFFICHAGE GÉNÉRAL
+        ===================================================== */
 
-                    if (
-                        this.codeEditor
-                    ) {
+        showPrimary(id) {
 
-                        this.codeEditor.focus();
-                    }
+            this.primaryIds.forEach(
+                name => {
+
+                    this.setVisible(
+                        this.byId(name),
+                        name === id
+                    );
                 }
             );
         }
 
+        showSubscreen(id) {
 
+            this.activeSubscreen = id;
 
-        closeCodeWindow() {
+            /*
+             * Afficher d'abord
+             * l'interface principale.
+             */
+
+            this.showPrimary(
+                "game-interface"
+            );
+
+            /*
+             * Une seule sous-page
+             * doit être visible.
+             */
+
+            this.subscreenIds.forEach(
+                name => {
+
+                    this.setVisible(
+                        this.byId(name),
+                        name === id
+                    );
+                }
+            );
+
+            /*
+             * On cache la fenêtre de code
+             * quand on quitte l'exercice,
+             * mais son contenu reste intact.
+             */
 
             if (
-                !this.codeWindow
+                id !== "game-screen"
+            ) {
+
+                this.hideCodeWindow();
+
+                this.hideThought();
+            }
+
+            this.hideGuide();
+
+            this.applyAudioSettings(true);
+
+            /*
+             * Important :
+             * le canvas doit être visible
+             * avant le redimensionnement.
+             */
+
+            if (
+                id === "game-screen"
+            ) {
+
+                requestAnimationFrame(
+                    () => {
+
+                        window.pytGame
+                            ?.resizeCanvas?.();
+
+                        window.pytGame
+                            ?.render?.();
+                    }
+                );
+            }
+        }
+
+        /* =====================================================
+           MÉTHODES UTILISÉES PAR UI.JS
+        ===================================================== */
+
+        showMap() {
+
+            this.showSubscreen(
+                "map-screen"
+            );
+        }
+
+        showCourse() {
+
+            this.showSubscreen(
+                "chapter-screen"
+            );
+        }
+
+        showGame() {
+
+            this.showSubscreen(
+                "game-screen"
+            );
+        }
+
+        /* =====================================================
+           PARAMÈTRES
+        ===================================================== */
+
+        openSettings() {
+
+            this.settingsReturn =
+                this.isVisible(
+                    this.gameInterface
+                )
+                    ? "game"
+                    : "intro";
+
+            this.showPrimary(
+                "settings-screen"
+            );
+
+            this.hideCodeWindow();
+
+            this.hideGuide();
+
+            this.applyAudioSettings();
+        }
+
+        closeSettings() {
+
+            if (
+                this.settingsReturn === "intro" &&
+                !this.introDone
+            ) {
+
+                this.showPrimary(
+                    "intro-screen"
+                );
+
+            } else {
+
+                this.showSubscreen(
+                    this.activeSubscreen
+                );
+            }
+        }
+
+        /* =====================================================
+           AUDIO
+        ===================================================== */
+
+        hasAudioSource(audio) {
+
+            return Boolean(
+                audio &&
+                (
+                    audio.currentSrc ||
+                    audio.getAttribute("src") ||
+                    audio.querySelector(
+                        "source[src]"
+                    )
+                )
+            );
+        }
+
+        applyAudioSettings(
+            userGesture = false
+        ) {
+
+            if (this.musicInput) {
+
+                this.musicInput.checked =
+                    this.musicEnabled;
+            }
+
+            if (this.volumeSlider) {
+
+                this.volumeSlider.value =
+                    String(this.volume);
+            }
+
+            if (this.volumeValue) {
+
+                this.volumeValue.textContent =
+                    `${this.volume}%`;
+            }
+
+            const inTheory =
+                this.activeSubscreen ===
+                    "chapter-screen" &&
+                this.isVisible(
+                    this.gameInterface
+                );
+
+            const selected =
+                inTheory
+                    ? this.theoryAudio
+                    : this.musicAudio;
+
+            for (
+                const audio of [
+                    this.musicAudio,
+                    this.theoryAudio
+                ]
+            ) {
+
+                if (!audio) {
+                    continue;
+                }
+
+                audio.volume =
+                    this.volume / 100;
+
+                if (
+                    !this.musicEnabled ||
+                    audio !== selected ||
+                    !this.hasAudioSource(audio)
+                ) {
+
+                    audio.pause();
+
+                } else if (userGesture) {
+
+                    const result =
+                        audio.play();
+
+                    if (
+                        result &&
+                        typeof result.catch ===
+                            "function"
+                    ) {
+
+                        result.catch(
+                            () => {}
+                        );
+                    }
+                }
+            }
+        }
+
+        playSfx(name) {
+
+            /*
+             * Les bruitages sont prévus
+             * pour une version ultérieure.
+             *
+             * Cette méthode reste présente
+             * pour les appels depuis game.js.
+             */
+
+        }
+
+        /* =====================================================
+           CRÉDITS
+        ===================================================== */
+
+        openCredits() {
+
+            this.creditsReturn =
+                this.isVisible(
+                    this.settingsScreen
+                )
+                    ? "settings"
+                    : "game";
+
+            this.showPrimary(
+                "credits-screen"
+            );
+
+            this.startCredits();
+        }
+
+        /* =====================================================
+           DÉFILEMENT STAR WARS
+        ===================================================== */
+
+        startCredits() {
+
+            if (
+                !this.creditsScreen ||
+                !this.creditsScroll ||
+                !this.creditsTitle
             ) {
 
                 return;
             }
 
+            this.stopCredits();
 
-            this.codeWindowOpen =
-                false;
+            const token =
+                ++this.creditsToken;
 
+            const viewer =
+                this.creditsPerspective ||
+                this.creditsScreen;
 
-            this.hide(
-                this.codeWindow
+            const scroll =
+                this.creditsScroll;
+
+            const title =
+                this.creditsTitle;
+
+            /*
+             * On conserve les noms
+             * des contributeurs déjà écrits
+             * dans index.html.
+             */
+
+            scroll.style.animation =
+                "none";
+
+            scroll.style.position =
+                "absolute";
+
+            scroll.style.left =
+                "50%";
+
+            scroll.style.width =
+                "min(88vw, 720px)";
+
+            scroll.style.textAlign =
+                "center";
+
+            scroll.style.transformOrigin =
+                "50% 50%";
+
+            scroll.style.willChange =
+                "transform";
+
+            viewer.style.perspective =
+                "900px";
+
+            /*
+             * Titre final PYT géant.
+             */
+
+            title.style.textAlign =
+                "center";
+
+            title.style.fontSize =
+                "clamp(88px, 18vw, 220px)";
+
+            title.style.lineHeight =
+                "1.15";
+
+            /*
+             * Sous-titre final.
+             * Il apparaît 3 secondes
+             * après l'arrêt du défilement.
+             */
+
+            let subtitle =
+                scroll.querySelector(
+                    ".credits-final-subtitle"
+                );
+
+            if (!subtitle) {
+
+                subtitle =
+                    document.createElement(
+                        "div"
+                    );
+
+                subtitle.className =
+                    "credits-final-subtitle";
+
+                subtitle.textContent =
+                    "apprentissage Python";
+
+                title.insertAdjacentElement(
+                    "afterend",
+                    subtitle
+                );
+            }
+
+            Object.assign(
+                subtitle.style,
+                {
+
+                    textAlign:
+                        "center",
+
+                    fontSize:
+                        "clamp(12px, 2vw, 22px)",
+
+                    fontWeight:
+                        "700",
+
+                    letterSpacing:
+                        "0.08em",
+
+                    color:
+                        "#fff1d2",
+
+                    textShadow:
+                        "2px 3px 0 #171424",
+
+                    opacity:
+                        "0",
+
+                    transition:
+                        "opacity 650ms ease",
+
+                    marginTop:
+                        "10px"
+                }
+            );
+
+            /*
+             * Position initiale du défilement :
+             * sous l'écran.
+             */
+
+            scroll.style.transform =
+                "translate3d(-50%, 0px, 0) rotateX(18deg)";
+
+            const height =
+                Math.max(
+                    1,
+                    viewer
+                        .getBoundingClientRect()
+                        .height ||
+                    window.innerHeight
+                );
+
+            const initial =
+                height * 1.10;
+
+            /*
+             * Destination :
+             * le grand titre final
+             * doit finir au centre.
+             */
+
+            const titleCenter =
+                title.offsetTop +
+                title.offsetHeight / 2;
+
+            const destination =
+                height / 2 -
+                titleCenter;
+
+            const duration =
+                30000;
+
+            const started =
+                performance.now();
+
+            const drawAt =
+                y => {
+
+                    scroll.style.transform =
+                        `translate3d(-50%, ${y}px, 0) rotateX(18deg)`;
+                };
+
+            drawAt(initial);
+
+            const step =
+                now => {
+
+                    if (
+                        token !==
+                            this.creditsToken ||
+                        !this.isVisible(
+                            this.creditsScreen
+                        )
+                    ) {
+
+                        return;
+                    }
+
+                    const progress =
+                        Math.min(
+                            1,
+                            (
+                                now -
+                                started
+                            ) /
+                            duration
+                        );
+
+                    const y =
+                        initial +
+                        (
+                            destination -
+                            initial
+                        ) *
+                        progress;
+
+                    drawAt(y);
+
+                    if (
+                        progress < 1
+                    ) {
+
+                        this.creditsFrame =
+                            requestAnimationFrame(
+                                step
+                            );
+
+                        return;
+                    }
+
+                    this.creditsFrame =
+                        null;
+
+                    /*
+                     * Corriger précisément
+                     * la position du titre
+                     * une fois le défilement
+                     * terminé.
+                     */
+
+                    const targetY =
+                        window.innerHeight / 2;
+
+                    const rect =
+                        title
+                            .getBoundingClientRect();
+
+                    const correction =
+                        targetY -
+                        (
+                            rect.top +
+                            rect.height / 2
+                        );
+
+                    drawAt(
+                        destination +
+                        correction
+                    );
+
+                    /*
+                     * Le défilement est arrêté.
+                     * PYT reste au centre.
+                     *
+                     * Trois secondes plus tard :
+                     * apprentissage Python.
+                     */
+
+                    this.creditsSubtitleTimer =
+                        setTimeout(
+                            () => {
+
+                                if (
+                                    token ===
+                                        this.creditsToken &&
+                                    this.isVisible(
+                                        this.creditsScreen
+                                    )
+                                ) {
+
+                                    subtitle.style.opacity =
+                                        "1";
+                                }
+
+                            },
+                            3000
+                        );
+                };
+
+            this.creditsFrame =
+                requestAnimationFrame(
+                    step
+                );
+        }
+
+        stopCredits() {
+
+            this.creditsToken++;
+
+            if (
+                this.creditsFrame !==
+                    null
+            ) {
+
+                cancelAnimationFrame(
+                    this.creditsFrame
+                );
+            }
+
+            if (
+                this.creditsSubtitleTimer !==
+                    null
+            ) {
+
+                clearTimeout(
+                    this.creditsSubtitleTimer
+                );
+            }
+
+            this.creditsFrame =
+                null;
+
+            this.creditsSubtitleTimer =
+                null;
+        }
+
+        closeCredits() {
+
+            this.stopCredits();
+
+            if (
+                this.creditsReturn ===
+                    "settings"
+            ) {
+
+                this.showPrimary(
+                    "settings-screen"
+                );
+
+            } else {
+
+                this.showSubscreen(
+                    this.activeSubscreen
+                );
+            }
+        }
+
+        /* =====================================================
+           SAUVEGARDE DU CODE PYTHON
+        ===================================================== */
+
+        currentLevelKey() {
+
+            return (
+                window.pytUI
+                    ?.currentLevelKey ||
+                null
             );
         }
 
+        saveDraft() {
 
-
-        runCode() {
+            const key =
+                this.currentLevelKey();
 
             if (
+                !key ||
                 !this.codeEditor
             ) {
 
                 return;
             }
 
-
-            const source =
+            this.drafts[key] =
                 this.codeEditor.value;
 
-
-            this.clearConsole();
-
-
-            /*
-             * Un seul événement.
-             *
-             * game.js peut l'écouter
-             * et ui.js l'utilise aussi
-             * pour compter la tentative.
-             */
-
-            window.dispatchEvent(
-                new CustomEvent(
-                    "pyt:run-code",
-                    {
-
-                        detail: {
-                            source
-                        }
-                    }
+            this.writeStorage(
+                this.storage.drafts,
+                JSON.stringify(
+                    this.drafts
                 )
             );
         }
 
+        restoreDraft() {
 
+            const key =
+                this.currentLevelKey();
+
+            if (
+                !key ||
+                !this.codeEditor
+            ) {
+
+                return;
+            }
+
+            if (
+                Object.prototype
+                    .hasOwnProperty
+                    .call(
+                        this.drafts,
+                        key
+                    )
+            ) {
+
+                this.codeEditor.value =
+                    this.drafts[key];
+            }
+        }
+
+        /* =====================================================
+           FENÊTRE DE CODE
+        ===================================================== */
+
+        openCodeWindow() {
+
+            if (
+                !this.isVisible(
+                    this.byId("game-screen")
+                )
+            ) {
+
+                return;
+            }
+
+            this.setVisible(
+                this.codeWindow,
+                true
+            );
+
+            this.codeEditor
+                ?.focus(
+                    {
+                        preventScroll: true
+                    }
+                );
+        }
+
+        hideCodeWindow() {
+
+            this.setVisible(
+                this.codeWindow,
+                false
+            );
+        }
+
+        /* =====================================================
+           RECOMMENCER L'EXERCICE
+        ===================================================== */
 
         restartLevel() {
 
-            this.clearConsole();
-
-
             if (
-                window.pytGame &&
-                typeof
-                window.pytGame
-                    .restartLevel ===
-                "function"
+                !window.pytGame
+                    ?.levelData
             ) {
-
-                window.pytGame
-                    .restartLevel();
 
                 return;
             }
 
+            this.hideThought();
 
-            if (
-                window.pytGame &&
-                typeof
-                window.pytGame
-                    .resetLevel ===
-                "function"
-            ) {
+            window.pytUI
+                ?.clearCodeError?.();
 
-                window.pytGame
-                    .resetLevel();
-
-                return;
-            }
-
-
-            window.dispatchEvent(
-                new CustomEvent(
-                    "pyt:restart-level"
-                )
-            );
-        }
-
-
-
-        clearConsole() {
+            window.pytGame
+                .restartLevel();
 
             if (
                 this.consoleOutput
@@ -1972,934 +1750,397 @@
                 this.consoleOutput.textContent =
                     "";
             }
-        }
-
-
-
-        /* =====================================================
-           CODE WINDOW DRAG
-        ===================================================== */
-
-        isMobileLayout() {
-
-            return (
-                window.innerWidth <=
-                    820 ||
-                window.matchMedia(
-                    "(pointer: coarse)"
-                ).matches
-            );
-        }
-
-
-
-        prepareCodeDragging() {
-
-            if (
-                !this.codeWindow ||
-                !this.codeWindowHeader
-            ) {
-
-                return;
-            }
-
-
-            let startX =
-                0;
-
-            let startY =
-                0;
-
-            let startLeft =
-                0;
-
-            let startTop =
-                0;
-
-
-            const move =
-                event => {
-
-                    if (
-                        !this.draggingCodeWindow ||
-                        this.isMobileLayout()
-                    ) {
-
-                        return;
-                    }
-
-
-                    const dx =
-                        event.clientX -
-                        startX;
-
-
-                    const dy =
-                        event.clientY -
-                        startY;
-
-
-                    const maxLeft =
-                        Math.max(
-                            0,
-                            window.innerWidth -
-                                this.codeWindow
-                                    .offsetWidth
-                        );
-
-
-                    const maxTop =
-                        Math.max(
-                            0,
-                            window.innerHeight -
-                                this.codeWindow
-                                    .offsetHeight
-                        );
-
-
-                    this.codeWindow.style.left =
-                        `${this.clamp(
-                            startLeft +
-                                dx,
-                            0,
-                            maxLeft
-                        )}px`;
-
-
-                    this.codeWindow.style.top =
-                        `${this.clamp(
-                            startTop +
-                                dy,
-                            0,
-                            maxTop
-                        )}px`;
-
-
-                    this.codeWindow.style.right =
-                        "auto";
-
-
-                    this.codeWindow.style.bottom =
-                        "auto";
-                };
-
-
-            const stop =
-                () => {
-
-                    this.draggingCodeWindow =
-                        false;
-
-
-                    document.body
-                        .classList
-                        .remove(
-                            "dragging-code-window"
-                        );
-                };
-
-
-            this.codeWindowHeader
-                .addEventListener(
-                    "pointerdown",
-                    event => {
-
-                        if (
-                            this.isMobileLayout()
-                        ) {
-
-                            return;
-                        }
-
-
-                        if (
-                            event.target.closest(
-                                "button"
-                            )
-                        ) {
-
-                            return;
-                        }
-
-
-                        const rect =
-                            this.codeWindow
-                                .getBoundingClientRect();
-
-
-                        this.draggingCodeWindow =
-                            true;
-
-
-                        startX =
-                            event.clientX;
-
-
-                        startY =
-                            event.clientY;
-
-
-                        startLeft =
-                            rect.left;
-
-
-                        startTop =
-                            rect.top;
-
-
-                        document.body
-                            .classList
-                            .add(
-                                "dragging-code-window"
-                            );
-
-
-                        this.codeWindowHeader
-                            .setPointerCapture?.(
-                                event.pointerId
-                            );
-
-
-                        event.preventDefault();
-                    }
-                );
-
-
-            window.addEventListener(
-                "pointermove",
-                move
-            );
-
-
-            window.addEventListener(
-                "pointerup",
-                stop
-            );
-
-
-            window.addEventListener(
-                "pointercancel",
-                stop
-            );
-        }
-
-
-
-        resetCodeWindowPosition() {
-
-            if (
-                !this.codeWindow
-            ) {
-
-                return;
-            }
-
-
-            this.codeWindow.style.left =
-                "";
-
-            this.codeWindow.style.top =
-                "";
-
-            this.codeWindow.style.right =
-                "";
-
-            this.codeWindow.style.bottom =
-                "";
-        }
-
-
-
-        keepCodeWindowInsideViewport() {
-
-            if (
-                !this.codeWindow ||
-                this.isMobileLayout()
-            ) {
-
-                return;
-            }
-
-
-            const rect =
-                this.codeWindow
-                    .getBoundingClientRect();
-
-
-            const margin =
-                12;
-
-
-            let left =
-                rect.left;
-
-
-            let top =
-                rect.top;
-
-
-            if (
-                rect.right >
-                window.innerWidth -
-                    margin
-            ) {
-
-                left =
-                    window.innerWidth -
-                    rect.width -
-                    margin;
-            }
-
-
-            if (
-                rect.bottom >
-                window.innerHeight -
-                    margin
-            ) {
-
-                top =
-                    window.innerHeight -
-                    rect.height -
-                    margin;
-            }
-
-
-            left =
-                Math.max(
-                    margin,
-                    left
-                );
-
-
-            top =
-                Math.max(
-                    margin,
-                    top
-                );
-
-
-            this.codeWindow.style.left =
-                `${left}px`;
-
-
-            this.codeWindow.style.top =
-                `${top}px`;
-
-
-            this.codeWindow.style.right =
-                "auto";
-
-
-            this.codeWindow.style.bottom =
-                "auto";
-        }
-
-
-
-        /* =====================================================
-           GUIDE PYT
-        ===================================================== */
-
-        prepareGuide() {
-
-            if (
-                this.closePytGuideButton
-            ) {
-
-                this.closePytGuideButton
-                    .addEventListener(
-                        "click",
-                        () =>
-                            this.hideGuide()
-                    );
-            }
-        }
-
-
-
-        showGuide(
-            message,
-            actions = []
-        ) {
-
-            if (
-                !this.pytGuide ||
-                !this.pytGuideMessage
-            ) {
-
-                return;
-            }
-
-
-            this.pytGuideMessage.textContent =
-                String(
-                    message ?? ""
-                );
-
-
-            if (
-                this.pytGuideActions
-            ) {
-
-                this.pytGuideActions
-                    .replaceChildren();
-
-
-                actions
-                    .filter(
-                        action =>
-                            action &&
-                            action.label
-                    )
-                    .forEach(
-                        action => {
-
-                            const button =
-                                document.createElement(
-                                    "button"
-                                );
-
-
-                            button.type =
-                                "button";
-
-
-                            button.className =
-                                action.primary
-                                    ? "primary-button"
-                                    : "secondary-button";
-
-
-                            button.textContent =
-                                action.label;
-
-
-                            button.addEventListener(
-                                "click",
-                                () => {
-
-                                    if (
-                                        typeof
-                                        action.onClick ===
-                                        "function"
-                                    ) {
-
-                                        action.onClick();
-                                    }
-                                }
-                            );
-
-
-                            this.pytGuideActions
-                                .appendChild(
-                                    button
-                                );
-                        }
-                    );
-            }
-
-
-            this.guideVisible =
-                true;
-
-
-            this.show(
-                this.pytGuide
-            );
-
-
-            requestAnimationFrame(
-                () => {
-
-                    this.pytGuide
-                        .classList
-                        .add(
-                            "guide-visible"
-                        );
-                }
-            );
-        }
-
-
-
-        hideGuide() {
-
-            if (
-                !this.pytGuide
-            ) {
-
-                return;
-            }
-
-
-            this.guideVisible =
-                false;
-
-
-            this.pytGuide
-                .classList
-                .remove(
-                    "guide-visible"
-                );
-
-
-            setTimeout(
-                () => {
-
-                    if (
-                        !this.guideVisible
-                    ) {
-
-                        this.hide(
-                            this.pytGuide
-                        );
-                    }
-
-                },
-                220
-            );
-        }
-
-
-
-        /* =====================================================
-           BULLE ROBOT
-        ===================================================== */
-
-        showThought(
-            message,
-            duration = 2300
-        ) {
-
-            if (
-                !this.robotThoughtBubble
-            ) {
-
-                return;
-            }
-
-
-            this.robotThoughtBubble.textContent =
-                String(
-                    message ||
-                    "Ce n'est pas là que je voulais aller..."
-                );
-
-
-            this.show(
-                this.robotThoughtBubble
-            );
-
-
-            this.robotThoughtBubble
-                .classList
-                .add(
-                    "thought-visible"
-                );
-
-
-            clearTimeout(
-                this.thoughtTimer
-            );
-
-
-            this.thoughtTimer =
-                setTimeout(
-                    () => {
-
-                        this.robotThoughtBubble
-                            .classList
-                            .remove(
-                                "thought-visible"
-                            );
-
-
-                        setTimeout(
-                            () =>
-                                this.hide(
-                                    this.robotThoughtBubble
-                                ),
-                            180
-                        );
-
-                    },
-                    duration
-                );
-        }
-
-
-
-        /* =====================================================
-           MODAL
-        ===================================================== */
-
-        prepareModal() {
-
-            if (
-                this.modalBackground
-            ) {
-
-                this.modalBackground
-                    .addEventListener(
-                        "click",
-                        event => {
-
-                            if (
-                                event.target ===
-                                this.modalBackground
-                            ) {
-
-                                /*
-                                 * On ne ferme pas automatiquement
-                                 * les modales importantes.
-                                 */
-                            }
-                        }
-                    );
-            }
-        }
-
-
-
-        showModal({
-            label = "PYT",
-            title = "",
-            message = "",
-            primaryText = "Continuer",
-            primaryAction = null,
-            secondaryText = "",
-            secondaryAction = null
-        } = {}) {
-
-            if (
-                !this.modalBackground
-            ) {
-
-                if (
-                    typeof
-                    primaryAction ===
-                    "function"
-                ) {
-
-                    primaryAction();
-                }
-
-
-                return;
-            }
-
-
-            if (
-                this.modalLabel
-            ) {
-
-                this.modalLabel.textContent =
-                    label;
-            }
-
-
-            if (
-                this.modalTitle
-            ) {
-
-                this.modalTitle.textContent =
-                    title;
-            }
-
-
-            if (
-                this.modalMessage
-            ) {
-
-                this.modalMessage.textContent =
-                    message;
-            }
-
-
-            if (
-                this.modalPrimaryButton
-            ) {
-
-                this.modalPrimaryButton.textContent =
-                    primaryText;
-
-
-                this.modalPrimaryButton.onclick =
-                    () => {
-
-                        this.hideModal();
-
-
-                        if (
-                            typeof
-                            primaryAction ===
-                            "function"
-                        ) {
-
-                            primaryAction();
-                        }
-                    };
-            }
-
-
-            if (
-                this.modalSecondaryButton
-            ) {
-
-                if (
-                    secondaryText
-                ) {
-
-                    this.show(
-                        this.modalSecondaryButton
-                    );
-
-
-                    this.modalSecondaryButton.textContent =
-                        secondaryText;
-
-
-                    this.modalSecondaryButton.onclick =
-                        () => {
-
-                            this.hideModal();
-
-
-                            if (
-                                typeof
-                                secondaryAction ===
-                                "function"
-                            ) {
-
-                                secondaryAction();
-                            }
-                        };
-
-                } else {
-
-                    this.hide(
-                        this.modalSecondaryButton
-                    );
-
-
-                    this.modalSecondaryButton.onclick =
-                        null;
-                }
-            }
-
-
-            this.show(
-                this.modalBackground
-            );
-        }
-
-
-
-        hideModal() {
-
-            this.hide(
-                this.modalBackground
-            );
-        }
-
-
-
-        /* =====================================================
-           SFX
-           AUDIO PLUS TARD
-        ===================================================== */
-
-        playSfx(
-            name,
-            options = {}
-        ) {
 
             /*
-             * Aucun fichier audio ajouté ici.
+             * Le code écrit n'est pas effacé.
+             */
+        }
+
+        /* =====================================================
+           EXÉCUTER LE CODE
+        ===================================================== */
+
+        runCode() {
+
+            if (
+                !this.codeEditor ||
+                !window.pytGame
+                    ?.levelData ||
+                window.pytGame
+                    .executing
+            ) {
+
+                return;
+            }
+
+            this.saveDraft();
+
+            this.hideGuide();
+
+            this.hideThought();
+
+            window.pytUI
+                ?.clearCodeError?.();
+
+            if (
+                this.consoleOutput
+            ) {
+
+                this.consoleOutput.textContent =
+                    "Exécution du programme...";
+            }
+
+            /*
+             * Événement écouté par game.js.
              *
-             * Plus tard, le plugin audio pourra
-             * écouter cet événement.
+             * On utilise la propriété source,
+             * attendue par le nouveau moteur.
              */
 
             window.dispatchEvent(
                 new CustomEvent(
-                    "pyt:sfx-request",
+                    "pyt:run-code",
                     {
 
                         detail: {
-                            name,
-                            options
+
+                            source:
+                                this.codeEditor.value
                         }
                     }
                 )
             );
         }
 
-
-
         /* =====================================================
-           RESPONSIVE
+           AFFICHAGE DU RÉSULTAT
         ===================================================== */
 
-        prepareResponsive() {
+        showExecutionResult(detail) {
 
-            const update =
-                () => {
+            const lines =
+                Array.isArray(
+                    detail.output
+                )
+                    ? detail.output.map(
+                        String
+                    )
+                    : [];
 
-                    document.documentElement
-                        .classList
-                        .toggle(
-                            "pyt-mobile",
-                            this.isMobileLayout()
-                        );
+            if (
+                detail.success
+            ) {
 
+                lines.push(
+                    "✓ Mission réussie !"
+                );
 
-                    if (
-                        this.isMobileLayout()
-                    ) {
+            } else {
 
-                        this.resetCodeWindowPosition();
+                lines.push(
+                    `✗ ${detail.message || "Mission incomplète."}`
+                );
+            }
 
-                    } else if (
-                        this.codeWindowOpen
-                    ) {
+            if (
+                this.consoleOutput
+            ) {
 
-                        this.keepCodeWindowInsideViewport();
-                    }
+                this.consoleOutput.textContent =
+                    lines.join("\n");
+            }
 
+            if (
+                detail.success
+            ) {
 
-                    /*
-                     * Carte.
-                     */
+                this.hideThought();
 
-                    if (
-                        window.pytUI &&
-                        typeof
-                        window.pytUI
-                            .resizeHouseCanvas ===
-                        "function"
-                    ) {
+            } else if (
+                this.isVisible(
+                    this.byId("game-screen")
+                )
+            ) {
 
-                        window.pytUI
-                            .resizeHouseCanvas();
-                    }
+                /*
+                 * Retour de Pyt après un échec.
+                 * Le niveau reste jouable.
+                 */
 
+                this.showThought(
+                    "Ce n’est pas là que je voulais aller..."
+                );
+            }
 
-                    /*
-                     * Exercice.
-                     */
-
-                    requestAnimationFrame(
-                        () => {
-
-                            if (
-                                window.pytGame &&
-                                typeof
-                                window.pytGame
-                                    .resizeCanvas ===
-                                "function"
-                            ) {
-
-                                window.pytGame
-                                    .resizeCanvas();
-                            }
-
-
-                            if (
-                                window.pytGame &&
-                                typeof
-                                window.pytGame
-                                    .render ===
-                                "function" &&
-                                this.activeGameScreen ===
-                                    "game"
-                            ) {
-
-                                window.pytGame
-                                    .render();
-                            }
-                        }
-                    );
-                };
-
-
-            window.addEventListener(
-                "resize",
-                update,
-                {
-                    passive: true
-                }
-            );
-
-
-            window.addEventListener(
-                "orientationchange",
-                () => {
-
-                    setTimeout(
-                        update,
-                        120
-                    );
-                }
-            );
-
-
-            update();
+            /*
+             * Le premier/deuxième échec
+             * est géré par ui.js.
+             * Aucun soulignement forcé ici.
+             */
         }
 
-
-
         /* =====================================================
-           READY
+           GUIDE DE PYT
         ===================================================== */
 
-        dispatchReady() {
+        showGuide(
+            message,
+            actions = null
+        ) {
 
-            setTimeout(
-                () => {
+            if (
+                this.guideMessage
+            ) {
 
-                    window.dispatchEvent(
-                        new CustomEvent(
-                            "pyt:app-ready"
-                        )
+                this.guideMessage.textContent =
+                    String(
+                        message ||
+                        ""
                     );
+            }
 
-                },
-                0
+            if (
+                this.guideActions
+            ) {
+
+                this.guideActions
+                    .replaceChildren();
+
+                if (
+                    Array.isArray(
+                        actions
+                    )
+                ) {
+
+                    for (
+                        const action
+                        of actions
+                    ) {
+
+                        const button =
+                            document.createElement(
+                                "button"
+                            );
+
+                        button.type =
+                            "button";
+
+                        button.className =
+                            "pixel-button pixel-button-secondary";
+
+                        button.textContent =
+                            String(
+                                action.text ||
+                                action.label ||
+                                "Continuer"
+                            );
+
+                        button.addEventListener(
+                            "click",
+                            () => {
+
+                                this.hideGuide();
+
+                                action.action?.();
+                            }
+                        );
+
+                        this.guideActions
+                            .appendChild(
+                                button
+                            );
+                    }
+                }
+            }
+
+            this.setVisible(
+                this.guide,
+                true
             );
+        }
+
+        hideGuide() {
+
+            this.setVisible(
+                this.guide,
+                false
+            );
+        }
+
+        /* =====================================================
+           BULLE DE PENSÉE
+        ===================================================== */
+
+        showThought(message) {
+
+            if (
+                this.thought
+            ) {
+
+                this.thought.textContent =
+                    message;
+            }
+
+            this.setVisible(
+                this.thought,
+                true
+            );
+        }
+
+        hideThought() {
+
+            this.setVisible(
+                this.thought,
+                false
+            );
+        }
+
+        /* =====================================================
+           MODALE DE MESSAGE OU RÉUSSITE
+        ===================================================== */
+
+        showModal(options = {}) {
+
+            const setText =
+                (id, value) => {
+
+                    const element =
+                        this.byId(id);
+
+                    if (
+                        element
+                    ) {
+
+                        element.textContent =
+                            String(
+                                value ?? ""
+                            );
+                    }
+                };
+
+            setText(
+                "modal-label",
+                options.label ||
+                    "PYT"
+            );
+
+            setText(
+                "modal-title",
+                options.title ||
+                    "Information"
+            );
+
+            setText(
+                "modal-message",
+                options.message ||
+                    ""
+            );
+
+            setText(
+                "modal-primary-button",
+                options.primaryText ||
+                    "Continuer"
+            );
+
+            const secondary =
+                this.byId(
+                    "modal-secondary-button"
+                );
+
+            this.setVisible(
+                secondary,
+                Boolean(
+                    options.secondaryText
+                )
+            );
+
+            if (
+                secondary &&
+                options.secondaryText
+            ) {
+
+                secondary.textContent =
+                    options.secondaryText;
+            }
+
+            this.modalActions = {
+
+                primary:
+                    typeof options.primaryAction ===
+                        "function"
+                        ? options.primaryAction
+                        : null,
+
+                secondary:
+                    typeof options.secondaryAction ===
+                        "function"
+                        ? options.secondaryAction
+                        : null
+            };
+
+            this.hideGuide();
+
+            this.setVisible(
+                this.modalBackground,
+                true
+            );
+        }
+
+        closeModal() {
+
+            this.setVisible(
+                this.modalBackground,
+                false
+            );
+
+            this.modalActions = {
+
+                primary: null,
+
+                secondary: null
+            };
+        }
+
+        chooseModal(which) {
+
+            const action =
+                this.modalActions[which];
+
+            this.closeModal();
+
+            if (
+                typeof action ===
+                    "function"
+            ) {
+
+                action();
+            }
         }
     }
 
-
-
     /* =========================================================
-       EXPORT
+       EXPORT ET INITIALISATION
     ========================================================= */
 
     window.PytApplication =
         PytApplication;
 
+    const start = () => {
 
+        if (
+            window.pytApp
+        ) {
 
-    const start =
-        () => {
+            return;
+        }
 
-            if (
-                window.pytApp
-            ) {
-
-                return;
-            }
-
-
-            window.pytApp =
-                new PytApplication();
-        };
-
+        window.pytApp =
+            new PytApplication();
+    };
 
     if (
         document.readyState ===
-        "loading"
+            "loading"
     ) {
 
         document.addEventListener(
