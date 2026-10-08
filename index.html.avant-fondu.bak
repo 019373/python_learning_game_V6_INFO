@@ -313,6 +313,5 @@
   <script src="game.js"></script>
   <script src="ui.js"></script>
   <script src="app.js"></script>
-  <script src="pyt-music-smooth.js"></script>
 </body>
 </html>
