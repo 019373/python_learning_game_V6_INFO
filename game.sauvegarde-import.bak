@@ -4560,7 +4560,7 @@ if (
                 success: false,
                 reason: "turtle_import_missing",
                 message:
-                    "Ajoute from turtle import * comme première instruction Python. Les commentaires (#) sont autorisés au-dessus.",
+                    "Commence par : from turtle import * (sans # devant).",
                 errorLine: Math.max(
                     1,
                     firstCodeLine + 1

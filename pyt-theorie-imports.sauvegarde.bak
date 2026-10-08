@@ -218,7 +218,7 @@
        * On reconnaît l'importation puis on
        * conserve les lignes du programme.
        */
-      processed[i] = "from turtle import *";
+      processed[i] = "";
     }
 
     if (!found) {
