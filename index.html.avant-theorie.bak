@@ -316,6 +316,5 @@
   <script src="pyt-music-smooth.js"></script>
   <script src="pyt-objets-solides.js"></script>
   <script src="pyt-visibilite-consignes.js?v=4"></script>
-  <script src="pyt-theorie-imports.js?v=1"></script>
 </body>
 </html>
