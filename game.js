@@ -4510,3 +4510,143 @@ if (
 } else {
     startPytGame();
 }
+
+/* ========================================================
+   PYT — IMPORT TURTLE OBLIGATOIRE
+   À ajouter tout à la fin de game.js.
+======================================================== */
+
+(() => {
+    if (
+        typeof PytGame === "undefined" ||
+        PytGame.prototype.__turtleImportInstalled
+    ) {
+        return;
+    }
+
+    const originalExecute =
+        PytGame.prototype.executeSource;
+
+    const importPattern =
+        /^\s*from[ \t]+turtle[ \t]+import[ \t]*\*[ \t]*(?:#.*)?$/;
+
+    PytGame.prototype.executeSource = function (source) {
+        if (this.executing || !this.levelData) {
+            return;
+        }
+
+        const lines = String(source ?? "")
+            .replace(/\r\n?/g, "\n")
+            .split("\n");
+
+        const firstCodeLine = lines.findIndex(line => {
+            const clean = line.trim();
+
+            return (
+                clean !== "" &&
+                !clean.startsWith("#")
+            );
+        });
+
+        const importPresent =
+            firstCodeLine >= 0 &&
+            importPattern.test(lines[firstCodeLine]);
+
+        if (!importPresent) {
+            this.resetLogicalWorld?.();
+            this.prepareVisualPlayback?.();
+
+            this.finishExecution({
+                success: false,
+                reason: "turtle_import_missing",
+                message:
+                    "Commence par : from turtle import * (sans # devant).",
+                errorLine: Math.max(
+                    1,
+                    firstCodeLine + 1
+                ),
+                output: []
+            });
+
+            return;
+        }
+
+        /*
+         * Le moteur PYT simule les commandes Turtle.
+         * On retire uniquement la ligne d'import
+         * avant de transmettre le programme
+         * à son interpréteur interne.
+         *
+         * Les numéros de lignes restent identiques.
+         */
+
+        lines[firstCodeLine] = "";
+
+        return originalExecute.call(
+            this,
+            lines.join("\n")
+        );
+    };
+
+    PytGame.prototype.__turtleImportInstalled = true;
+
+    /* Ajouter l'explication dans les théories. */
+
+    const data =
+        window.PYT_GAME_DATA ||
+        window.PYT_LEVELS;
+
+    if (!Array.isArray(data?.chapters)) {
+        return;
+    }
+
+    data.chapters.forEach((chapter, index) => {
+        if (!Array.isArray(chapter.theory)) {
+            return;
+        }
+
+        if (
+            chapter.theory.some(
+                section => section.__turtleImportLesson
+            )
+        ) {
+            return;
+        }
+
+        if (index === 0) {
+            chapter.theory.unshift({
+                __turtleImportLesson: true,
+                title: "Importer Turtle",
+                body:
+                    "Avant de déplacer Pyt, écris from turtle import * au début de ton programme. Cette instruction permet d'utiliser forward(), backward(), left() et right(). Tu devras la réécrire dans chaque exercice.",
+                code:
+                    "from turtle import *\n\nforward(2)\nright(90)\nforward(1)"
+            });
+        } else {
+            chapter.theory.unshift({
+                __turtleImportLesson: true,
+                title: "Rappel : importer Turtle",
+                body:
+                    "Pour déplacer Pyt, commence toujours ton programme par cette ligne :",
+                code: "from turtle import *"
+            });
+        }
+
+        /* Petit indice dans chaque nouvel exercice. */
+
+        (chapter.levels || []).forEach(level => {
+            if (
+                typeof level.starterCode !== "string" ||
+                level.__turtleImportHint
+            ) {
+                return;
+            }
+
+            level.starterCode =
+                "# Pense à importer Turtle sur la première ligne.\n" +
+                level.starterCode;
+
+            level.__turtleImportHint = true;
+        });
+    });
+})();

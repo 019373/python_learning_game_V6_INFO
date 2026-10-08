@@ -2513,3 +2513,167 @@
     };
     art.__directionMarker = true;
 })();
+
+/* =====================================================
+   PYT — CASES INTERDITES PLUS VISIBLES
+   Le marquage est dessiné après tous les objets.
+===================================================== */
+
+(() => {
+    function installer() {
+        const jeu = window.pytGame;
+
+        if (
+            !jeu ||
+            typeof jeu.render !== "function" ||
+            jeu.__casesRougesFortes
+        ) {
+            return;
+        }
+
+        const renduOriginal = jeu.render;
+
+        jeu.render = function (...argumentsRendu) {
+            const resultat = renduOriginal.apply(
+                this,
+                argumentsRendu
+            );
+
+            const ctx = this.ctx;
+
+            const cases =
+                typeof this.getBlockedCells === "function"
+                    ? this.getBlockedCells()
+                    : (
+                        this.levelData?.blocked ||
+                        this.levelData?.map?.blocked ||
+                        []
+                    );
+
+            if (
+                !ctx ||
+                !this.levelData ||
+                !Array.isArray(cases) ||
+                typeof this.cellRect !== "function"
+            ) {
+                return resultat;
+            }
+
+            for (const caseInterdite of cases) {
+                const colonne = Number(
+                    Array.isArray(caseInterdite)
+                        ? caseInterdite[0]
+                        : (
+                            caseInterdite?.x ??
+                            caseInterdite?.col
+                        )
+                );
+
+                const ligne = Number(
+                    Array.isArray(caseInterdite)
+                        ? caseInterdite[1]
+                        : (
+                            caseInterdite?.y ??
+                            caseInterdite?.row
+                        )
+                );
+
+                if (
+                    !Number.isInteger(colonne) ||
+                    !Number.isInteger(ligne) ||
+                    colonne < 0 ||
+                    ligne < 0 ||
+                    colonne >= this.mapWidth ||
+                    ligne >= this.mapHeight
+                ) {
+                    continue;
+                }
+
+                const { x, y, size } =
+                    this.cellRect(colonne, ligne);
+
+                const marge = size * 0.045;
+                const cote = size - 2 * marge;
+
+                ctx.save();
+
+                ctx.globalAlpha = 1;
+                ctx.globalCompositeOperation = "source-over";
+                ctx.setLineDash([]);
+
+                /* Fond bordeaux foncé. */
+                ctx.fillStyle = "rgba(68, 7, 21, 0.85)";
+
+                ctx.fillRect(
+                    x + marge,
+                    y + marge,
+                    cote,
+                    cote
+                );
+
+                /* Contour très sombre. */
+                ctx.lineWidth = Math.max(
+                    3,
+                    size * 0.07
+                );
+
+                ctx.strokeStyle = "#14060b";
+
+                ctx.strokeRect(
+                    x + marge,
+                    y + marge,
+                    cote,
+                    cote
+                );
+
+                /* Croix rouge bien visible. */
+                ctx.lineWidth = Math.max(
+                    3,
+                    size * 0.065
+                );
+
+                ctx.strokeStyle = "#ff5260";
+
+                ctx.beginPath();
+
+                ctx.moveTo(
+                    x + size * 0.22,
+                    y + size * 0.22
+                );
+
+                ctx.lineTo(
+                    x + size * 0.78,
+                    y + size * 0.78
+                );
+
+                ctx.moveTo(
+                    x + size * 0.78,
+                    y + size * 0.22
+                );
+
+                ctx.lineTo(
+                    x + size * 0.22,
+                    y + size * 0.78
+                );
+
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            return resultat;
+        };
+
+        jeu.__casesRougesFortes = true;
+        jeu.render();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            installer,
+            { once: true }
+        );
+    } else {
+        installer();
+    }
+})();
