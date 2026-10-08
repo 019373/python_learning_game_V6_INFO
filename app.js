@@ -98,6 +98,8 @@
             this.applyAudioSettings();
 
             this.setupIntro();
+            // AJOUT AUDIO.JS : synchronise le gestionnaire audio externe.
+this.setupPytAudio();
         }
 
         /* =====================================================
@@ -665,6 +667,9 @@
                         );
 
                         this.applyAudioSettings(true);
+
+// AJOUT AUDIO.JS
+this.syncPytAudioSettings();
                     }
                 );
 
@@ -690,6 +695,9 @@
                         );
 
                         this.applyAudioSettings(true);
+
+// AJOUT AUDIO.JS
+this.syncPytAudioSettings();
                     }
                 );
 
@@ -992,6 +1000,8 @@
             }
 
             this.applyAudioSettings(true);
+            // AJOUT AUDIO.JS : conserve la musique du chapitre sur la carte.
+this.syncPytAudioForScreen(this.activeSubscreen);
         }
 
         /* =====================================================
@@ -1057,6 +1067,8 @@
             this.hideGuide();
 
             this.applyAudioSettings(true);
+            // AJOUT AUDIO.JS : adapte la musique à la sous-page ouverte.
+this.syncPytAudioForScreen(id);
 
             /*
              * Important :
@@ -1128,6 +1140,8 @@
             this.hideGuide();
 
             this.applyAudioSettings();
+            // AJOUT AUDIO.JS : les paramètres conservent la musique en cours.
+this.syncPytAudioSettings();
         }
 
         closeSettings() {
@@ -1241,7 +1255,189 @@
                 }
             }
         }
+// =====================================================
+// AJOUTS AUDIO.JS
+// =====================================================
 
+setupPytAudio() {
+
+    this.syncPytAudioSettings();
+
+    try {
+
+        window.pytAudio
+            ?.playIntro?.();
+
+    } catch (error) {
+
+        console.warn(
+            "[PYT] audio.js indisponible.",
+            error
+        );
+    }
+}
+
+
+syncPytAudioSettings() {
+
+    const audio =
+        window.pytAudio;
+
+    if (!audio) {
+        return;
+    }
+
+    try {
+
+        audio.setVolume?.(
+            this.musicEnabled
+                ? this.volume
+                : 0
+        );
+
+
+        audio.setEnabled?.(
+            this.musicEnabled &&
+            this.volume > 0
+        );
+
+    } catch (error) {
+
+        console.warn(
+            "[PYT] Réglage audio indisponible.",
+            error
+        );
+    }
+}
+
+
+currentAudioChapter() {
+
+    const candidates = [
+
+        window.pytUI
+            ?.currentChapter,
+
+        window.pytUI
+            ?.currentLevel
+            ?.chapter,
+
+        window.pytGame
+            ?.levelData
+            ?.chapter,
+
+        window.pytGame
+            ?.levelData
+            ?.chapterNumber
+    ];
+
+
+    for (
+        const value
+        of candidates
+    ) {
+
+        const chapter =
+            Number(value);
+
+
+        if (
+            Number.isInteger(chapter) &&
+            chapter >= 1 &&
+            chapter <= 9
+        ) {
+
+            return chapter;
+        }
+    }
+
+
+    return 1;
+}
+
+
+syncPytAudioForScreen(
+    screenId = this.activeSubscreen
+) {
+
+    const audio =
+        window.pytAudio;
+
+
+    if (!audio) {
+        return;
+    }
+
+
+    this.syncPytAudioSettings();
+
+
+    try {
+
+        const chapter =
+            this.currentAudioChapter();
+
+
+        // ---------------------------------------------
+        // THÉORIE
+        // ---------------------------------------------
+
+        if (
+            screenId ===
+            "chapter-screen"
+        ) {
+
+            window.pytAudio
+                ?.playTheory?.();
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // CARTE
+        //
+        // audio.js conserve automatiquement
+        // la musique du chapitre actuel.
+        // ---------------------------------------------
+
+        if (
+            screenId ===
+            "map-screen"
+        ) {
+
+            window.pytAudio
+                ?.playMap?.(
+                    chapter
+                );
+
+            return;
+        }
+
+
+        // ---------------------------------------------
+        // EXERCICE
+        // ---------------------------------------------
+
+        if (
+            screenId ===
+            "game-screen"
+        ) {
+
+            window.pytAudio
+                ?.playChapter?.(
+                    chapter
+                );
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "[PYT] Changement de musique impossible.",
+            error
+        );
+    }
+}
         playSfx(name) {
 
             /*
@@ -1272,6 +1468,11 @@
             );
 
             this.startCredits();
+            // AJOUT AUDIO.JS : musique des crédits.
+this.syncPytAudioSettings();
+
+window.pytAudio
+    ?.playCredits?.();
         }
 
         /* =====================================================
@@ -1619,6 +1820,20 @@
                     this.activeSubscreen
                 );
             }
+            // AJOUT AUDIO.JS : restaure la musique précédente.
+if (
+    this.creditsReturn ===
+    "settings"
+) {
+
+    this.syncPytAudioSettings();
+
+} else {
+
+    this.syncPytAudioForScreen(
+        this.activeSubscreen
+    );
+}
         }
 
         /* =====================================================
