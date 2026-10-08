@@ -2677,3 +2677,195 @@
         installer();
     }
 })();
+
+/* PYT : affichage clair de toutes les cases interdites. */
+(() => {
+    function installer() {
+        const jeu = window.pytGame;
+
+        if (
+            !jeu ||
+            typeof jeu.render !== "function" ||
+            jeu.__obstaclesLisiblesV2
+        ) {
+            return;
+        }
+
+        const ancienRendu = jeu.render;
+
+        jeu.render = function (...args) {
+            const resultat = ancienRendu.apply(this, args);
+            const ctx = this.ctx;
+
+            if (
+                !ctx ||
+                !this.levelData ||
+                typeof this.cellRect !== "function"
+            ) {
+                return resultat;
+            }
+
+            const blocked =
+                typeof this.getBlockedCells === "function"
+                    ? this.getBlockedCells()
+                    : (
+                        this.levelData.blocked ??
+                        this.levelData.map?.blocked ??
+                        []
+                    );
+
+            const wallKeys = new Set();
+
+            for (const cell of Array.isArray(blocked) ? blocked : []) {
+                const x = Number(
+                    Array.isArray(cell)
+                        ? cell[0]
+                        : cell?.x ?? cell?.col
+                );
+
+                const y = Number(
+                    Array.isArray(cell)
+                        ? cell[1]
+                        : cell?.y ?? cell?.row
+                );
+
+                if (Number.isInteger(x) && Number.isInteger(y)) {
+                    wallKeys.add(`${x},${y}`);
+                }
+            }
+
+            const objects =
+                this.executing && Array.isArray(this.visualObjects)
+                    ? this.visualObjects
+                    : this.logicalObjects || [];
+
+            const width = Math.floor(Number(this.mapWidth) || 0);
+            const height = Math.floor(Number(this.mapHeight) || 0);
+
+            ctx.save();
+            ctx.globalAlpha = 1;
+            ctx.globalCompositeOperation = "source-over";
+            ctx.setLineDash([]);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const wall = wallKeys.has(`${x},${y}`);
+
+                    const occupants = objects.filter(obj =>
+                        !obj.hidden &&
+                        Math.round(Number(obj.x)) === x &&
+                        Math.round(Number(obj.y)) === y
+                    );
+
+                    const solid = occupants.some(obj =>
+                        obj.solid === true &&
+                        !(
+                            typeof this.isPushableObject === "function" &&
+                            this.isPushableObject(obj)
+                        )
+                    );
+
+                    const pushable = occupants.some(obj =>
+                        typeof this.isPushableObject === "function" &&
+                        this.isPushableObject(obj)
+                    );
+
+                    if (!wall && !solid && !pushable) {
+                        continue;
+                    }
+
+                    const cell = this.cellRect(x, y);
+
+                    const cx = cell.x;
+                    const cy = cell.y;
+                    const size = cell.size;
+
+                    if (
+                        ![cx, cy, size].every(Number.isFinite) ||
+                        size <= 0
+                    ) {
+                        continue;
+                    }
+
+                    const pad = Math.max(1, size * 0.025);
+                    const left = cx + pad;
+                    const top = cy + pad;
+                    const side = size - pad * 2;
+
+                    ctx.save();
+
+                    if (pushable && !wall && !solid) {
+                        /* Caisse mobile : contour jaune. */
+                        ctx.lineWidth = Math.max(3, size * 0.065);
+                        ctx.strokeStyle = "#ffce59";
+
+                        ctx.strokeRect(
+                            left + 1,
+                            top + 1,
+                            side - 2,
+                            side - 2
+                        );
+                    } else {
+                        /* Fond rouge foncé OPAQUE sur toute la case. */
+                        ctx.fillStyle = "#540e20";
+                        ctx.fillRect(left, top, side, side);
+
+                        /* Contour noir. */
+                        ctx.lineWidth = Math.max(2, size * 0.035);
+                        ctx.strokeStyle = "#14040b";
+                        ctx.strokeRect(left, top, side, side);
+
+                        /* Grande croix rouge. */
+                        ctx.strokeStyle = "#ff626f";
+                        ctx.lineWidth = Math.max(3, size * 0.07);
+                        ctx.lineCap = "round";
+
+                        ctx.beginPath();
+
+                        ctx.moveTo(
+                            cx + size * 0.22,
+                            cy + size * 0.22
+                        );
+
+                        ctx.lineTo(
+                            cx + size * 0.78,
+                            cy + size * 0.78
+                        );
+
+                        ctx.moveTo(
+                            cx + size * 0.78,
+                            cy + size * 0.22
+                        );
+
+                        ctx.lineTo(
+                            cx + size * 0.22,
+                            cy + size * 0.78
+                        );
+
+                        ctx.stroke();
+                    }
+
+                    ctx.restore();
+                }
+            }
+
+            ctx.restore();
+            return resultat;
+        };
+
+        jeu.__obstaclesLisiblesV2 = true;
+        jeu.render();
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener(
+            "DOMContentLoaded",
+            installer,
+            { once: true }
+        );
+    } else {
+        installer();
+    }
+
+    window.addEventListener("pyt:level-opened", installer);
+})();
