@@ -57,7 +57,7 @@
     );
 
     const instruction =
-      "Pour déplacer Pyt, commence par " +
+      "Pour dessiner et déplacer Pyt, commence par " +
       "« from turtle import * ». " +
       "Cette bibliothèque fournit les " +
       "commandes de déplacement.";
@@ -106,7 +106,7 @@
       }
 
       const from = statement.match(
-        /^from\s+([A-Za-z_]\w*)\s+import\s+(.+)$/
+        /^from\s+([A-Za-z_]\w*)\s+import\s*(.+)$/
       );
 
       const direct = statement.match(
