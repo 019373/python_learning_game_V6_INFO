@@ -1,0 +1,321 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#11111d">
+  <title>PYT — Apprentissage Python</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- INTRODUCTION : P + robot + T -->
+  <section id="intro-screen" class="screen intro-screen">
+    <button id="skip-intro-button" class="intro-skip pixel-button pixel-button-secondary hidden" type="button">Passer</button>
+    <div id="intro-scene" class="intro-scene" aria-label="PYT">
+      <div class="intro-letter intro-letter-p">P</div>
+      <div class="intro-robot-wrapper">
+        <div class="pyt-robot intro-pyt" aria-hidden="true">
+          <div class="pyt-antenna"><div class="pyt-antenna-light"></div></div>
+          <div class="pyt-head">
+            <div class="pyt-face">
+              <div class="pyt-eye pyt-eye-left"></div>
+              <div class="pyt-eye pyt-eye-right"></div>
+            </div>
+          </div>
+          <div class="pyt-neck"></div>
+          <div class="pyt-body"><div class="pyt-core"></div></div>
+          <div class="pyt-arm pyt-arm-left"></div>
+          <div class="pyt-arm pyt-arm-right"></div>
+          <div class="pyt-leg pyt-leg-left"></div>
+          <div class="pyt-leg pyt-leg-right"></div>
+        </div>
+      </div>
+      <div class="intro-letter intro-letter-t">T</div>
+    </div>
+    <div id="intro-subtitle" class="intro-subtitle">apprentissage Python</div>
+    <div id="intro-continue-message" class="intro-continue-message hidden">Appuyez sur une touche pour continuer</div>
+  </section>
+
+  <!-- Menu conservé pour compatibilité (non affiché normalement). -->
+  <section id="main-menu" class="screen hidden">
+    <button id="play-button" type="button">Jouer</button>
+    <button id="settings-button" type="button">Paramètres</button>
+  </section>
+
+  <!-- PARAMÈTRES -->
+  <section id="settings-screen" class="screen settings-screen hidden">
+    <div class="settings-background-decoration"></div>
+    <div class="settings-card pixel-panel">
+      <header class="settings-header">
+        <div><p class="screen-kicker">CONFIGURATION</p><h1>Paramètres</h1></div>
+        <button id="settings-back-button" class="pixel-icon-button" type="button" aria-label="Retour">×</button>
+      </header>
+      <div class="settings-section">
+        <div class="settings-row">
+          <div><h2>Musique</h2><p>Musique d'ambiance du jeu.</p></div>
+          <label class="pixel-switch" aria-label="Activer la musique">
+            <input id="music-enabled" type="checkbox" checked>
+            <span class="pixel-switch-track"><span class="pixel-switch-handle"></span></span>
+          </label>
+        </div>
+        <div class="settings-volume">
+          <div class="settings-volume-header"><span>Volume</span><strong id="volume-value">50%</strong></div>
+          <input id="volume-slider" class="pixel-range" type="range" min="0" max="100" step="1" value="50" aria-label="Volume de la musique">
+        </div>
+      </div>
+      <div class="settings-section settings-coming">
+        <div><h2>Bruitages</h2><p>Les bruitages de Pyt seront ajoutés plus tard.</p></div>
+        <span class="coming-badge">BIENTÔT</span>
+      </div>
+      <button id="credits-button" class="pixel-button pixel-button-secondary settings-credits-button" type="button">Voir les crédits</button>
+    </div>
+  </section>
+
+  <!-- CRÉDITS : le titre final appartient au défilement. -->
+  <section id="credits-screen" class="screen credits-screen hidden">
+    <div class="credits-stars"></div>
+    <button id="close-credits-button" class="credits-close-button" type="button" aria-label="Fermer les crédits">×</button>
+    <div class="credits-perspective">
+      <div id="credits-scroll" class="credits-scroll">
+        <div class="credits-block">
+          <div class="credits-role">SON</div>
+          <div class="credits-name">Jean Noah</div>
+          <div class="credits-name">Tom Kahle</div>
+        </div>
+        <div class="credits-block">
+          <div class="credits-role">GRAPHISME</div>
+          <div class="credits-name">Noah Jean</div>
+          <div class="credits-name">Tom Kahle</div>
+          <div class="credits-name">Zéphyr Thomas</div>
+          <div class="credits-name">Adrian Thiébaud</div>
+        </div>
+        <div class="credits-block">
+          <div class="credits-role">MOTEUR DU JEU</div>
+          <div class="credits-name">Adrian Thiébaud</div>
+          <div class="credits-name">Zéphyr Thomas</div>
+        </div>
+        <div class="credits-block credits-thanks">
+          <div class="credits-role">REMERCIEMENTS</div>
+          <p>Merci aux élèves ayant testé le jeu.</p>
+          <p>Merci aux enseignants et aux personnes qui ont rendu le projet possible.</p>
+          <p>Merci au Collège Voltaire.</p>
+        </div>
+        <div class="credits-spacer"></div>
+        <div class="credits-final-title">PYT</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- APPLICATION : barre du haut, théorie, carte, jeu. -->
+  <main id="game-interface" class="game-interface hidden">
+    <header class="game-topbar">
+      <div class="topbar-left">
+        <button id="menu-button" class="topbar-logo-button" type="button" aria-label="Retour à la maison">PYT</button>
+        <div class="topbar-status-group">
+          <span id="chapter-badge" class="topbar-badge topbar-badge-chapter">Chapitre 1</span>
+          <span id="difficulty-badge" class="topbar-badge">Exercice 1</span>
+          <span id="room-name" class="topbar-room">Entrée</span>
+        </div>
+      </div>
+      <nav class="topbar-actions" aria-label="Navigation du jeu">
+        <button id="course-button" class="topbar-button" type="button">Théorie</button>
+        <button id="map-button" class="topbar-button" type="button" aria-label="Carte de la maison">Carte</button>
+        <button id="game-settings-button" class="topbar-button topbar-button-icon" type="button" aria-label="Paramètres">⚙</button>
+      </nav>
+    </header>
+
+    <!-- THÉORIE -->
+    <section id="chapter-screen" class="game-subscreen theory-screen hidden">
+      <div class="theory-scene-background" aria-hidden="true">
+        <div class="theory-window-glow"></div>
+        <div class="theory-plant theory-plant-left"></div>
+        <div class="theory-plant theory-plant-right"></div>
+      </div>
+      <article class="theory-book pixel-panel">
+        <header class="theory-header">
+          <p id="course-chapter-number" class="theory-chapter-number">Chapitre 1</p>
+          <h1 id="course-title">Premiers pas</h1>
+          <p id="course-subtitle" class="theory-subtitle">Déplacer Pyt dans la maison</p>
+        </header>
+        <div class="theory-divider"></div>
+        <div id="course-content" class="theory-content"></div>
+        <footer class="theory-footer">
+          <div class="theory-tip">
+            <span class="theory-tip-icon">!</span>
+            <span>Lis la théorie avant de commencer l'exercice.</span>
+          </div>
+          <button id="course-map-button" class="pixel-button pixel-button-primary" type="button">Continuer vers les exercices</button>
+        </footer>
+      </article>
+    </section>
+
+    <!-- CARTE DE LA MAISON -->
+    <section id="map-screen" class="game-subscreen map-screen">
+      <div id="map-background" class="map-background">
+        <div id="map-decoration" class="map-decoration">
+          <canvas id="house-map-canvas" width="1280" height="760" aria-label="Carte interactive de la maison"></canvas>
+        </div>
+        <header class="map-header">
+          <div class="map-title-container">
+            <p class="map-kicker">CARTE</p>
+            <h1 id="map-title">Maison de Pyt</h1>
+            <p id="map-subtitle">Choisis un chapitre dans la maison.</p>
+          </div>
+          <button id="map-course-button" class="pixel-button map-course-button hidden" type="button">Revoir la théorie</button>
+        </header>
+        <div class="map-levels hidden" aria-label="Exercices du chapitre">
+          <button id="level-node-1" class="level-node" type="button">
+            <span class="level-node-glow"></span>
+            <span class="level-node-top">EXERCICE</span>
+            <span class="level-node-number">1</span>
+            <span class="level-node-state">Exercice 1</span>
+          </button>
+          <div class="level-path level-path-1" aria-hidden="true"></div>
+          <button id="level-node-2" class="level-node locked" type="button" disabled>
+            <span class="level-node-glow"></span>
+            <span class="level-node-top">EXERCICE</span>
+            <span class="level-node-number">2</span>
+            <span class="level-node-state">Verrouillé</span>
+          </button>
+          <div class="level-path level-path-2" aria-hidden="true"></div>
+          <button id="level-node-3" class="level-node locked" type="button" disabled>
+            <span class="level-node-glow"></span>
+            <span class="level-node-top">EXERCICE</span>
+            <span class="level-node-number">3</span>
+            <span class="level-node-state">Verrouillé</span>
+          </button>
+        </div>
+        <div class="map-navigation hidden">
+          <button id="previous-chapter-button" class="map-navigation-button" type="button">← Maison</button>
+          <span id="map-chapter-indicator" class="map-navigation-indicator">1 / 9</span>
+          <button id="next-chapter-button" class="map-navigation-button" type="button">Chapitre suivant →</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXERCICE -->
+    <section id="game-screen" class="game-subscreen game-screen hidden">
+      <div class="game-room-shell">
+        <div class="game-room-header">
+          <span class="game-room-label">MISSION</span>
+          <span id="game-status" class="game-status">Prêt</span>
+        </div>
+        <div class="game-canvas-wrapper">
+          <canvas id="game-canvas" width="960" height="640" aria-label="Zone de jeu de Pyt"></canvas>
+          <div id="robot-thought-bubble" class="robot-thought-bubble hidden">Ce n’est pas là que je voulais aller...</div>
+        </div>
+      </div>
+      <aside class="mission-panel pixel-panel">
+        <div class="mission-panel-top">
+          <p class="mission-kicker">OBJECTIF</p>
+          <h1 id="mission-title">Exercice</h1>
+          <
+<p class="mission-instruction" style="color:#ff9a9a; margin-top:8px;">
+  🚫 Cases rouges : obstacles interdits. Pyt doit les contourner !
+</p>
+
+        </div>
+        <div class="mission-divider"></div>
+        <div class="mission-grid-help">
+          <span class="mission-grid-icon" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+          <span>Une case = un déplacement.</span>
+        </div>
+        <div class="mission-actions">
+          <button id="open-code-button" class="pixel-button pixel-button-primary" type="button">Ouvrir le code</button>
+          <button id="restart-button" class="pixel-button pixel-button-secondary" type="button">Recommencer</button>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <!-- ÉDITEUR DE CODE PYTHON -->
+  <section id="code-window" class="code-window hidden" aria-label="Éditeur Python">
+    <header id="code-window-header" class="code-window-header">
+      <div class="code-window-title">
+        <span class="code-window-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>programme.py</span>
+      </div>
+      <div class="code-window-header-actions">
+        <button id="code-restart-button" class="code-header-button" type="button" title="Recommencer l'exercice">↻</button>
+        <button id="close-code-button" class="code-header-button" type="button" title="Fermer le code">×</button>
+      </div>
+    </header>
+    <div class="code-editor-shell">
+      <div class="code-gutter" aria-hidden="true">PY</div>
+      <div class="code-editor-stack">
+        <pre id="code-error-highlights" class="code-error-highlights hidden" aria-hidden="true"></pre>
+        <textarea id="code-editor" class="code-editor" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Code Python" placeholder="# Écris ton programme ici..."></textarea>
+      </div>
+    </div>
+    <div class="code-toolbar">
+      <button id="clear-code-button" class="code-toolbar-button" type="button">Effacer</button>
+      <span class="code-shortcut">Ctrl + Entrée</span>
+      <button id="run-code-button" class="code-run-button" type="button">▶ Exécuter</button>
+    </div>
+    <div class="console-panel">
+      <div class="console-header">CONSOLE</div>
+      <pre id="console-output" class="console-output" aria-live="polite"></pre>
+    </div>
+  </section>
+
+  <!-- GUIDE DE PYT -->
+  <aside id="pyt-guide" class="pyt-guide hidden">
+    <div class="guide-robot-zone">
+      <div class="pyt-robot guide-pyt" aria-hidden="true">
+        <div class="pyt-antenna"><div class="pyt-antenna-light"></div></div>
+        <div class="pyt-head">
+          <div class="pyt-face">
+            <div class="pyt-eye pyt-eye-left"></div>
+            <div class="pyt-eye pyt-eye-right"></div>
+          </div>
+        </div>
+        <div class="pyt-neck"></div>
+        <div class="pyt-body"><div class="pyt-core"></div></div>
+        <div class="pyt-arm pyt-arm-left"></div>
+        <div class="pyt-arm pyt-arm-right"></div>
+        <div class="pyt-leg pyt-leg-left"></div>
+        <div class="pyt-leg pyt-leg-right"></div>
+      </div>
+    </div>
+    <div class="guide-dialogue">
+      <button id="close-pyt-guide-button" class="guide-close-button" type="button" aria-label="Fermer le guide">×</button>
+      <div class="guide-name">PYT</div>
+      <p id="pyt-guide-message" class="guide-message">Bonjour !</p>
+      <div id="pyt-guide-actions" class="guide-actions"></div>
+    </div>
+  </aside>
+
+  <!-- FENÊTRE DE MESSAGE -->
+  <div id="modal-background" class="modal-background hidden">
+    <section id="message-modal" class="message-modal pixel-panel" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div id="modal-label" class="modal-label">PYT</div>
+      <h1 id="modal-title">Information</h1>
+      <p id="modal-message"></p>
+      <div class="modal-actions">
+        <button id="modal-secondary-button" class="pixel-button pixel-button-secondary hidden" type="button">Retour</button>
+        <button id="modal-primary-button" class="pixel-button pixel-button-primary" type="button">Continuer</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- AUDIO FACULTATIF -->
+
+<audio id="music-audio" src="audio/musique.mp3" preload="auto" loop></audio>
+<audio id="theory-audio" src="audio/theorie.mp3" preload="auto" loop></audio>
+
+
+  <!-- ORDRE DE CHARGEMENT OBLIGATOIRE -->
+  <script src="levels.js"></script>
+  <script src="robot.js"></script>
+  <script src="art.js"></script>
+  <script src="game.js?v=10"></script>
+  <script src="ui.js"></script>
+  <script src="app.js"></script>
+  <script src="pyt-music-smooth.js"></script>
+  <script src="pyt-objets-solides.js"></script>
+  <script src="pyt-visibilite-consignes.js?v=4"></script>
+  <script src="pyt-theorie-imports.js?v=10"></script>
+</body>
+</html>
